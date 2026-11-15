@@ -39,9 +39,14 @@ export async function middleware(request: NextRequest) {
   );
 
   // Refresh the session — MUST be called so the auth token stays valid.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch {}
+
+  const betaCookie = request.cookies.get("abanoub_beta_user");
+  const isAuthenticated = !!user || !!betaCookie?.value;
 
   // If there is no authenticated user and the path is protected, redirect.
   const { pathname } = request.nextUrl;
@@ -53,17 +58,24 @@ export async function middleware(request: NextRequest) {
     pathname === "/auth/confirm" ||
     pathname === "/sw.js" ||
     pathname === "/manifest.json" ||
+    pathname === "/icon.svg" ||
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/api/") ||
     pathname.startsWith("/static/") ||
     pathname === "/favicon.ico" ||
     /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?)$/.test(pathname);
 
-  if (!user && !isPublicRoute) {
+  if (!isAuthenticated && !isPublicRoute) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("redirectTo", pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  if (isAuthenticated && pathname === "/login") {
+    const homeUrl = request.nextUrl.clone();
+    homeUrl.pathname = "/";
+    return NextResponse.redirect(homeUrl);
   }
 
   return supabaseResponse;

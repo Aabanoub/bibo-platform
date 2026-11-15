@@ -164,14 +164,14 @@ export default function DashboardPage() {
 
         // Calculate spending totals
         const todaySpending =
-          todaySpendingRes.data?.reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
+          (todaySpendingRes.data as any[])?.reduce((sum: number, t: any) => sum + Math.abs(t.amount), 0) || 0;
         const monthlySpending =
-          monthlySpendingRes.data?.reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
+          (monthlySpendingRes.data as any[])?.reduce((sum: number, t: any) => sum + Math.abs(t.amount), 0) || 0;
 
         // Build activity feed
         const activities: ActivityItem[] = [];
 
-        recentTasksRes.data?.forEach((task) => {
+        (recentTasksRes.data as any[])?.forEach((task: any) => {
           activities.push({
             id: `task-${task.id}`,
             type: 'task',
@@ -181,7 +181,7 @@ export default function DashboardPage() {
           });
         });
 
-        recentTransactionsRes.data?.forEach((tx) => {
+        (recentTransactionsRes.data as any[])?.forEach((tx: any) => {
           activities.push({
             id: `tx-${tx.id}`,
             type: 'finance',

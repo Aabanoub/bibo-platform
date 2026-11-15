@@ -59,7 +59,7 @@ export default function NotificationBell({ collapsed = false }: NotificationBell
           schema: 'public',
           table: 'notifications',
         },
-        (payload) => {
+        (payload: any) => {
           const newNotification = payload.new as Notification;
           setNotifications((prev) => [newNotification, ...prev].slice(0, 20));
           setUnreadCount((prev) => prev + 1);
@@ -80,7 +80,7 @@ export default function NotificationBell({ collapsed = false }: NotificationBell
           schema: 'public',
           table: 'notifications',
         },
-        (payload) => {
+        (payload: any) => {
           const updated = payload.new as Notification;
           setNotifications((prev) =>
             prev.map((n) => (n.id === updated.id ? updated : n))

@@ -16,7 +16,7 @@ import {
   ChevronLeft,
   Sparkles,
 } from 'lucide-react';
-import { createClient } from '@/lib/supabase';
+import { createClient, clearStoredBetaUser } from '@/lib/supabase';
 import NotificationBell from '@/components/NotificationBell';
 
 interface NavItem {
@@ -64,7 +64,7 @@ export default function Sidebar() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
       if (session?.user) {
         setUser({
           email: session.user.email,
@@ -84,8 +84,9 @@ export default function Sidebar() {
   }, [supabase]);
 
   async function handleSignOut() {
+    clearStoredBetaUser();
     await supabase.auth.signOut();
-    router.push('/login');
+    window.location.href = '/login';
   }
 
   // Close mobile sidebar on route change
