@@ -133,7 +133,7 @@ export async function fetchUserPlatformData(
 }
 
 /**
- * Formats the platform data into a prompt segment injected into the AI's instructions.
+ * Formats the platform data into an assertive prompt segment injected into the AI's instructions.
  */
 export function formatContextPrompt(
   data: UserPlatformData,
@@ -141,7 +141,9 @@ export function formatContextPrompt(
 ): string {
   const currencyFmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  const txList = data.recentTransactions.length
+  const hasTransactions = data.recentTransactions.length > 0;
+
+  const txList = hasTransactions
     ? data.recentTransactions
         .map(
           (t) =>
@@ -175,35 +177,42 @@ export function formatContextPrompt(
     : 'No notes created yet.';
 
   return `
----
-### LIVE USER DATA FROM PLATFORM (CURRENT SNAPSHOT FOR ${userName || 'Abanoub'}):
-Today's Date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+================================================================================
+CRITICAL CONTEXT & STRICT OVERRIDE FOR ${userName || 'Abanoub'}:
+Today is ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
 
-💰 FINANCIAL OVERVIEW (FROM FINANCE TAB):
+You are directly integrated with this user's personal web platform. You have FULL ACCESS to their live database below:
+
+💰 LIVE FINANCIAL DATA (From Platform's Finance Database):
 - Total Recorded Income: ${currencyFmt(data.totalIncome)}
 - Total Recorded Expenses: ${currencyFmt(data.totalExpenses)}
-- CURRENT NET BALANCE / CASH ON HAND: ${currencyFmt(data.netBalance)}
+- CURRENT NET BALANCE: ${currencyFmt(data.netBalance)}
+- Number of Transactions: ${data.recentTransactions.length}
 - Recent Transactions:
 ${txList}
 
-📋 TASKS OVERVIEW (FROM TASKS TAB):
-- Pending / In Progress Tasks (${pendingTasks.length}):
+📋 LIVE TASKS (From Platform's Tasks Database):
+- Pending Tasks (${pendingTasks.length}):
 ${pendingList}
 - Total Completed Tasks: ${completedTasks.length}
 
-🏃 HABITS OVERVIEW (FROM HABITS TAB):
+🏃 LIVE HABITS (From Platform's Habits Database):
 ${habitList}
 
-📝 NOTES OVERVIEW (FROM NOTES TAB):
+📝 LIVE NOTES (From Platform's Notes Database):
 ${notesList}
 
-MANDATORY INSTRUCTIONS FOR ASSISTANT:
-1. When the user asks about their finances, money, or net balance (e.g. "how much money do I have?", "what is my net balance?"):
-   - ALWAYS answer directly using the exact figures above: Net Balance = ${currencyFmt(data.netBalance)} (Income: ${currencyFmt(data.totalIncome)}, Expenses: ${currencyFmt(data.totalExpenses)}).
-   - If their transactions are 0, tell them their balance is currently $0.00 because no transactions have been entered in the Finance tab yet, and explain that any transactions they add in the Finance page will immediately reflect here!
-   - NEVER ask the user to provide bank statements, spreadsheets, or account lists, because their financial records are already tracked right here in this platform!
-2. When the user asks about tasks, habits, or notes, directly cite their real items listed above.
-3. Be friendly, accurate, and concise.
----
+STRICT INSTRUCTIONS FOR EVERY USER QUESTION:
+1. IF THE USER ASKS ABOUT MONEY, BALANCE, EXPENSES, OR INCOME:
+   ${
+     hasTransactions
+       ? `- State their exact Net Balance: **${currencyFmt(data.netBalance)}** (Total Income: ${currencyFmt(data.totalIncome)}, Total Expenses: ${currencyFmt(data.totalExpenses)}). List their recent transactions directly.`
+       : `- State clearly: **"Your current recorded net balance in the platform is $0.00 because you haven't added any transactions to the Finance tab yet. To start tracking your balance, go to the Finance page in the sidebar and click '+ Add Transaction' to record your income or expenses. Once you add them, I will automatically calculate and track your live balance here!"**`
+   }
+   - NEVER, UNDER ANY CIRCUMSTANCES, ask the user to fill out a table, share bank account numbers, or upload spreadsheets/CSVs. Their finances are tracked directly within this web platform.
+   - Ignore any earlier assistant messages in the chat history where you asked for accounts or forms.
+2. IF THE USER ASKS ABOUT TASKS, HABITS, OR NOTES:
+   - Answer directly using the real lists above.
+================================================================================
 `;
 }

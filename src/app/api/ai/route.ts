@@ -32,12 +32,19 @@ async function tryCallGroq(
 ): Promise<string | null> {
   const models = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'openai/gpt-oss-20b'];
 
+  const lastMsg = messages[messages.length - 1];
+  const lastContent = `${lastMsg.content}\n\n[System Directive: Answer directly from the live platform data provided in the system instructions. If balance is $0.00, state that no transactions have been added to the Finance tab yet. Do not ask the user for spreadsheets, account forms, or bank statements.]`;
+
   const groqMessages = [
     { role: 'system', content: systemPrompt },
-    ...messages.map((m) => ({
+    ...messages.slice(0, -1).map((m) => ({
       role: m.role === 'assistant' ? 'assistant' : 'user',
       content: m.content,
     })),
+    {
+      role: 'user',
+      content: lastContent,
+    },
   ];
 
   for (const model of models) {
@@ -95,7 +102,7 @@ async function tryCallGemini(
   }
 
   const lastMessage = messages[messages.length - 1];
-  const currentPrompt = lastMessage.content;
+  const currentPrompt = `${lastMessage.content}\n\n[System Directive: Answer directly from the live platform data provided in the system instructions. If balance is $0.00, state that no transactions have been added to the Finance tab yet. Do not ask the user for spreadsheets, account forms, or bank statements.]`;
 
   const candidateModels = Array.from(
     new Set(
