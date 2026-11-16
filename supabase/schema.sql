@@ -416,6 +416,13 @@ END $$;
 -- ============================================================================
 -- 9. Idempotent Schema Migrations (Safe for existing databases)
 -- ============================================================================
+-- Ensure session role is reset to project admin and schema privileges are granted
+RESET ROLE;
+GRANT ALL ON SCHEMA public TO postgres;
+GRANT ALL ON SCHEMA public TO service_role;
+GRANT USAGE, CREATE ON SCHEMA public TO authenticated;
+GRANT USAGE ON SCHEMA public TO anon;
+
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS gender TEXT NOT NULL DEFAULT 'default';
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_locked BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS focus_duration INT NOT NULL DEFAULT 25;
@@ -432,7 +439,7 @@ ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS transactions_count INT NOT 
 ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS habits_completed INT NOT NULL DEFAULT 0;
 
 -- 9.1 Countdown Events Table & Realtime Migration
-CREATE TABLE IF NOT EXISTS countdown_events (
+CREATE TABLE IF NOT EXISTS public.countdown_events (
     id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id             UUID NOT NULL DEFAULT auth.uid() REFERENCES auth.users (id) ON DELETE CASCADE,
     title               TEXT NOT NULL,
@@ -448,30 +455,33 @@ CREATE TABLE IF NOT EXISTS countdown_events (
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_countdown_events_user_id ON countdown_events (user_id);
-CREATE INDEX IF NOT EXISTS idx_countdown_events_target ON countdown_events (user_id, target_date);
+CREATE INDEX IF NOT EXISTS idx_countdown_events_user_id ON public.countdown_events (user_id);
+CREATE INDEX IF NOT EXISTS idx_countdown_events_target ON public.countdown_events (user_id, target_date);
 
-ALTER TABLE countdown_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.countdown_events ENABLE ROW LEVEL SECURITY;
+
+GRANT ALL ON TABLE public.countdown_events TO postgres, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.countdown_events TO authenticated;
 
 DO $$ BEGIN
-    DROP POLICY IF EXISTS "Users can view their own countdown events" ON countdown_events;
-    DROP POLICY IF EXISTS "Users can create their own countdown events" ON countdown_events;
-    DROP POLICY IF EXISTS "Users can update their own countdown events" ON countdown_events;
-    DROP POLICY IF EXISTS "Users can delete their own countdown events" ON countdown_events;
+    DROP POLICY IF EXISTS "Users can view their own countdown events" ON public.countdown_events;
+    DROP POLICY IF EXISTS "Users can create their own countdown events" ON public.countdown_events;
+    DROP POLICY IF EXISTS "Users can update their own countdown events" ON public.countdown_events;
+    DROP POLICY IF EXISTS "Users can delete their own countdown events" ON public.countdown_events;
 EXCEPTION WHEN OTHERS THEN null;
 END $$;
 
-CREATE POLICY "Users can view their own countdown events"   ON countdown_events FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can create their own countdown events" ON countdown_events FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update their own countdown events" ON countdown_events FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can delete their own countdown events" ON countdown_events FOR DELETE USING (auth.uid() = user_id);
+CREATE POLICY "Users can view their own countdown events"   ON public.countdown_events FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can create their own countdown events" ON public.countdown_events FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own countdown events" ON public.countdown_events FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own countdown events" ON public.countdown_events FOR DELETE USING (auth.uid() = user_id);
 
-DROP TRIGGER IF EXISTS set_updated_at_countdown ON countdown_events;
+DROP TRIGGER IF EXISTS set_updated_at_countdown ON public.countdown_events;
 CREATE TRIGGER set_updated_at_countdown
-    BEFORE UPDATE ON countdown_events
+    BEFORE UPDATE ON public.countdown_events
     FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
 
 DO $$ BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE countdown_events;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.countdown_events;
 EXCEPTION WHEN OTHERS THEN null;
 END $$;
