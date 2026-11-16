@@ -17,11 +17,23 @@ import {
   Sparkles,
   Flame,
   Award,
+  Settings2,
+  Minus,
+  Plus,
+  X,
+  Check,
+  RotateCcw as ResetIcon,
 } from 'lucide-react';
 
 type Mode = 'focus' | 'shortBreak' | 'longBreak';
 
-const MODE_DURATIONS: Record<Mode, number> = {
+interface Durations {
+  focus: number;      // seconds
+  shortBreak: number; // seconds
+  longBreak: number;  // seconds
+}
+
+const DEFAULT_DURATIONS: Durations = {
   focus: 25 * 60,
   shortBreak: 5 * 60,
   longBreak: 15 * 60,
@@ -144,16 +156,48 @@ export default function FocusPage() {
   const supabase = createClient();
   const soundEngineRef = useRef<SoundEngine | null>(null);
 
+  // Custom durations state
+  const [durations, setDurations] = useState<Durations>(DEFAULT_DURATIONS);
   const [mode, setMode] = useState<Mode>('focus');
-  const [timeLeft, setTimeLeft] = useState(MODE_DURATIONS.focus);
+  const [timeLeft, setTimeLeft] = useState(DEFAULT_DURATIONS.focus);
   const [isRunning, setIsRunning] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [completedSessions, setCompletedSessions] = useState(0);
 
+  // Settings modal state
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [tempFocusMins, setTempFocusMins] = useState(25);
+  const [tempShortBreakMins, setTempShortBreakMins] = useState(5);
+  const [tempLongBreakMins, setTempLongBreakMins] = useState(15);
+
   // Tasks integration
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');
+
+  // Load custom durations from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('bibo_focus_durations');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.focus && parsed.shortBreak && parsed.longBreak) {
+          const loaded: Durations = {
+            focus: Math.max(60, Number(parsed.focus) || 25 * 60),
+            shortBreak: Math.max(60, Number(parsed.shortBreak) || 5 * 60),
+            longBreak: Math.max(60, Number(parsed.longBreak) || 15 * 60),
+          };
+          setDurations(loaded);
+          setTimeLeft(loaded.focus);
+          setTempFocusMins(Math.round(loaded.focus / 60));
+          setTempShortBreakMins(Math.round(loaded.shortBreak / 60));
+          setTempLongBreakMins(Math.round(loaded.longBreak / 60));
+        }
+      }
+    } catch (e) {
+      console.warn('Could not load custom focus durations:', e);
+    }
+  }, []);
 
   useEffect(() => {
     soundEngineRef.current = new SoundEngine();
@@ -222,17 +266,17 @@ export default function FocusPage() {
       setCompletedSessions((c) => c + 1);
       const nextMode = (completedSessions + 1) % 4 === 0 ? 'longBreak' : 'shortBreak';
       setMode(nextMode);
-      setTimeLeft(MODE_DURATIONS[nextMode]);
+      setTimeLeft(durations[nextMode]);
     } else {
       setMode('focus');
-      setTimeLeft(MODE_DURATIONS.focus);
+      setTimeLeft(durations.focus);
     }
   };
 
   const switchMode = (newMode: Mode) => {
     setMode(newMode);
     setIsRunning(false);
-    setTimeLeft(MODE_DURATIONS[newMode]);
+    setTimeLeft(durations[newMode]);
   };
 
   const toggleTimer = () => {
@@ -241,12 +285,47 @@ export default function FocusPage() {
 
   const resetTimer = () => {
     setIsRunning(false);
-    setTimeLeft(MODE_DURATIONS[mode]);
+    setTimeLeft(durations[mode]);
   };
 
   const skipTimer = () => {
     resetTimer();
     handleSessionComplete();
+  };
+
+  const openSettings = () => {
+    setTempFocusMins(Math.round(durations.focus / 60));
+    setTempShortBreakMins(Math.round(durations.shortBreak / 60));
+    setTempLongBreakMins(Math.round(durations.longBreak / 60));
+    setSettingsOpen(true);
+  };
+
+  const saveSettings = () => {
+    const focusSec = Math.max(1, Math.min(180, Number(tempFocusMins) || 25)) * 60;
+    const shortSec = Math.max(1, Math.min(60, Number(tempShortBreakMins) || 5)) * 60;
+    const longSec = Math.max(1, Math.min(90, Number(tempLongBreakMins) || 15)) * 60;
+
+    const newDurations: Durations = {
+      focus: focusSec,
+      shortBreak: shortSec,
+      longBreak: longSec,
+    };
+
+    setDurations(newDurations);
+    try {
+      localStorage.setItem('bibo_focus_durations', JSON.stringify(newDurations));
+    } catch {}
+
+    if (!isRunning) {
+      setTimeLeft(newDurations[mode]);
+    }
+    setSettingsOpen(false);
+  };
+
+  const resetToDefaultDurations = () => {
+    setTempFocusMins(25);
+    setTempShortBreakMins(5);
+    setTempLongBreakMins(15);
   };
 
   const markTaskDone = async () => {
@@ -277,7 +356,7 @@ export default function FocusPage() {
   const timeFormatted = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 
   // Progress percentage
-  const totalDuration = MODE_DURATIONS[mode];
+  const totalDuration = durations[mode];
   const progressPercent = ((totalDuration - timeLeft) / totalDuration) * 100;
 
   const currentTask = tasks.find((t) => t.id === selectedTaskId);
@@ -303,6 +382,16 @@ export default function FocusPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Custom Durations Button */}
+          <button
+            onClick={openSettings}
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition active:scale-95"
+            title="Adjust focus and break durations"
+          >
+            <Settings2 size={15} className="text-amber-400" />
+            <span>Customize Time</span>
+          </button>
+
           {/* Ambient Sound Toggle */}
           <button
             onClick={() => setSoundEnabled((v) => !v)}
@@ -335,9 +424,9 @@ export default function FocusPage() {
           <div className="flex rounded-2xl border border-zinc-800 bg-zinc-900/80 p-1 backdrop-blur-sm">
             {(
               [
-                { id: 'focus', label: 'Deep Focus' },
-                { id: 'shortBreak', label: 'Short Break' },
-                { id: 'longBreak', label: 'Long Break' },
+                { id: 'focus', label: `Deep Focus (${Math.round(durations.focus / 60)}m)` },
+                { id: 'shortBreak', label: `Short Break (${Math.round(durations.shortBreak / 60)}m)` },
+                { id: 'longBreak', label: `Long Break (${Math.round(durations.longBreak / 60)}m)` },
               ] as const
             ).map((tab) => (
               <button
@@ -402,7 +491,7 @@ export default function FocusPage() {
               className="flex h-12 w-12 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-white transition"
               title="Reset Timer"
             >
-              <RotateCcw size={18} />
+              <ResetIcon size={18} />
             </button>
 
             <button
@@ -477,11 +566,210 @@ export default function FocusPage() {
           <div className="flex items-center justify-center gap-2 text-xs text-zinc-400">
             <Award size={16} className="text-amber-400" />
             <span>
-              <strong>{completedSessions}</strong> Pomodoros completed today ({completedSessions * 25} mins of focus)
+              <strong>{completedSessions}</strong> Pomodoros completed today ({completedSessions * Math.round(durations.focus / 60)} mins of focus)
             </span>
           </div>
         </div>
       </main>
+
+      {/* Customize Timer Modal */}
+      {settingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-2xl space-y-5 text-left animate-scale-in">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400">
+                  <Settings2 size={18} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Timer Durations</h3>
+                  <p className="text-xs text-zinc-400">Adjust focus and break lengths in minutes</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(false)}
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* 1. Focus Time */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-zinc-200">Deep Focus Duration:</span>
+                <span className="font-bold text-blue-400 text-sm">{tempFocusMins} min</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTempFocusMins((v) => Math.max(1, v - 5))}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition active:scale-95"
+                >
+                  <Minus size={14} />
+                </button>
+                <input
+                  type="number"
+                  min="1"
+                  max="180"
+                  value={tempFocusMins}
+                  onChange={(e) => setTempFocusMins(Math.max(1, Math.min(180, parseInt(e.target.value) || 1)))}
+                  className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-center text-sm font-bold text-white outline-none focus:border-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setTempFocusMins((v) => Math.min(180, v + 5))}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition active:scale-95"
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[15, 20, 25, 45, 50, 60, 90].map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setTempFocusMins(m)}
+                    className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
+                      tempFocusMins === m
+                        ? 'bg-blue-600 text-white font-bold'
+                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
+                    }`}
+                  >
+                    {m}m
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 2. Short Break */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-zinc-200">Short Break Duration:</span>
+                <span className="font-bold text-emerald-400 text-sm">{tempShortBreakMins} min</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTempShortBreakMins((v) => Math.max(1, v - 1))}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition active:scale-95"
+                >
+                  <Minus size={14} />
+                </button>
+                <input
+                  type="number"
+                  min="1"
+                  max="60"
+                  value={tempShortBreakMins}
+                  onChange={(e) => setTempShortBreakMins(Math.max(1, Math.min(60, parseInt(e.target.value) || 1)))}
+                  className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-center text-sm font-bold text-white outline-none focus:border-emerald-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setTempShortBreakMins((v) => Math.min(60, v + 1))}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition active:scale-95"
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[3, 5, 7, 10, 15].map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setTempShortBreakMins(m)}
+                    className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
+                      tempShortBreakMins === m
+                        ? 'bg-emerald-600 text-white font-bold'
+                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
+                    }`}
+                  >
+                    {m}m
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 3. Long Break */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-zinc-200">Long Break Duration (every 4 sessions):</span>
+                <span className="font-bold text-teal-400 text-sm">{tempLongBreakMins} min</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTempLongBreakMins((v) => Math.max(1, v - 5))}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition active:scale-95"
+                >
+                  <Minus size={14} />
+                </button>
+                <input
+                  type="number"
+                  min="1"
+                  max="90"
+                  value={tempLongBreakMins}
+                  onChange={(e) => setTempLongBreakMins(Math.max(1, Math.min(90, parseInt(e.target.value) || 1)))}
+                  className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-center text-sm font-bold text-white outline-none focus:border-teal-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setTempLongBreakMins((v) => Math.min(90, v + 5))}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition active:scale-95"
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[10, 15, 20, 25, 30].map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setTempLongBreakMins(m)}
+                    className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
+                      tempLongBreakMins === m
+                        ? 'bg-teal-600 text-white font-bold'
+                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
+                    }`}
+                  >
+                    {m}m
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={resetToDefaultDurations}
+                className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition"
+              >
+                <ResetIcon size={13} />
+                <span>Defaults (25/5/15)</span>
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(false)}
+                  className="rounded-xl border border-zinc-700 bg-zinc-800 px-3.5 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-700 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={saveSettings}
+                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-blue-500/20 hover:bg-blue-500 transition active:scale-95"
+                >
+                  <Check size={14} />
+                  <span>Save & Apply</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
