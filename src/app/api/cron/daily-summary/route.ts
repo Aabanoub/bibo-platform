@@ -62,8 +62,9 @@ export async function GET(req: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin();
+    const modelName = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
     const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: modelName });
     const { startISO, endISO, dateLabel } = todayRange();
 
     // ---- Fetch all users ----
