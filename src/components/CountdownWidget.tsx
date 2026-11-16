@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Clock,
   Plus,
@@ -14,6 +14,9 @@ import {
   List,
   AlertCircle,
   Flame,
+  Cloud,
+  CloudOff,
+  RefreshCw,
 } from 'lucide-react';
 import CountdownModal, { REMINDER_OPTIONS } from '@/components/CountdownModal';
 import { sendLocalNotification, createInAppNotification } from '@/lib/notifications';
@@ -105,6 +108,8 @@ export default function CountdownWidget() {
   const [editingEvent, setEditingEvent] = useState<CountdownEvent | null>(null);
   const [showEventList, setShowEventList] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
 
   // Live countdown state for active event
   const [time, setTime] = useState<TimeRemaining>({
@@ -116,56 +121,117 @@ export default function CountdownWidget() {
     progress: 0,
   });
 
-  // 1. Initial Load & Auth Check
-  useEffect(() => {
-    async function loadData() {
-      let localEvents: CountdownEvent[] = [];
-      try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          localEvents = JSON.parse(stored);
-        }
-      } catch (e) {
-        console.warn('Could not read local countdowns:', e);
+  // 1. Initial Load & Bidirectional Sync with Supabase
+  const loadData = useCallback(async () => {
+    setIsSyncing(true);
+    setDbError(null);
+    let localEvents: CountdownEvent[] = [];
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        localEvents = JSON.parse(stored);
       }
+    } catch (e) {
+      console.warn('[CountdownWidget] Could not read local countdowns:', e);
+    }
 
-      // Check current user
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        setCurrentUser(user);
-        // Try fetching from Supabase table if it exists
-        try {
-          const { data: dbEvents, error } = await supabase
-            .from('countdown_events')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('target_date', { ascending: true });
-
-          if (!error && dbEvents && dbEvents.length > 0) {
-            localEvents = dbEvents as CountdownEvent[];
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(localEvents));
-          }
-        } catch {
-          // Graceful fallback to localStorage
-        }
-      }
-
+    // Set local state immediately for instant rendering
+    if (localEvents.length > 0) {
       setEvents(localEvents);
+    }
 
-      // Determine active event
-      const storedActiveId = localStorage.getItem(ACTIVE_ID_KEY);
-      if (storedActiveId && localEvents.some((e) => e.id === storedActiveId)) {
-        setActiveEventId(storedActiveId);
-      } else {
-        const pinned = localEvents.find((e) => e.is_pinned);
-        setActiveEventId(pinned ? pinned.id : localEvents[0]?.id || null);
+    // Check current authenticated user
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    let finalEvents = localEvents;
+
+    if (user) {
+      setCurrentUser(user);
+      try {
+        const { data: dbEvents, error } = await supabase
+          .from('countdown_events')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('target_date', { ascending: true });
+
+        if (error) {
+          console.warn('[CountdownWidget] Supabase countdown_events error:', error.message);
+          setDbError(error.message);
+        } else if (dbEvents) {
+          let merged = [...(dbEvents as CountdownEvent[])];
+
+          // Check if local cache has any events not yet pushed to Supabase (created offline or before migration)
+          const unsynced = localEvents.filter(
+            (le) => !merged.some((de) => de.id === le.id)
+          );
+
+          if (unsynced.length > 0) {
+            console.log(`[CountdownWidget] Auto-syncing ${unsynced.length} unsynced local countdown(s) to cloud database...`);
+            for (const item of unsynced) {
+              await supabase.from('countdown_events').upsert({
+                id: item.id,
+                user_id: user.id,
+                title: item.title,
+                description: item.description || null,
+                target_date: item.target_date,
+                category: item.category || 'event',
+                emoji: item.emoji || '⏳',
+                color: item.color || 'blue',
+                is_pinned: !!item.is_pinned,
+                reminder_intervals: item.reminder_intervals || ['at_time', '1h', '1d'],
+                triggered_reminders: item.triggered_reminders || [],
+              });
+              merged.push(item);
+            }
+          }
+
+          finalEvents = merged;
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(finalEvents));
+          } catch {}
+          setDbError(null);
+        }
+      } catch (err: any) {
+        console.warn('[CountdownWidget] Database sync failed:', err);
       }
     }
 
+    setEvents(finalEvents);
+
+    // Determine active event
+    const storedActiveId = localStorage.getItem(ACTIVE_ID_KEY);
+    if (storedActiveId && finalEvents.some((e) => e.id === storedActiveId)) {
+      setActiveEventId(storedActiveId);
+    } else {
+      const pinned = finalEvents.find((e) => e.is_pinned);
+      setActiveEventId(pinned ? pinned.id : finalEvents[0]?.id || null);
+    }
+    setIsSyncing(false);
+  }, [supabase]);
+
+  useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
+
+  // Realtime subscription for live sync across devices and browser tabs
+  useEffect(() => {
+    const channel = supabase
+      .channel('countdown_events_realtime_sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'countdown_events' },
+        () => {
+          loadData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, loadData]);
 
   const activeEvent = events.find((e) => e.id === activeEventId) || events[0] || null;
 
@@ -324,6 +390,14 @@ export default function CountdownWidget() {
     data: Omit<CountdownEvent, 'id' | 'created_at'>,
     existingId?: string
   ) => {
+    // Ensure we have current authenticated user
+    let user = currentUser;
+    if (!user) {
+      const { data: authData } = await supabase.auth.getUser();
+      user = authData?.user || null;
+      if (user) setCurrentUser(user);
+    }
+
     let updatedList: CountdownEvent[] = [];
 
     if (existingId) {
@@ -340,35 +414,61 @@ export default function CountdownWidget() {
           : e
       );
 
-      // Supabase update
-      if (currentUser?.id) {
+      if (data.is_pinned) {
+        setActiveEventId(existingId);
         try {
-          await supabase
+          localStorage.setItem(ACTIVE_ID_KEY, existingId);
+        } catch {}
+      }
+
+      // Supabase update
+      if (user?.id) {
+        try {
+          if (data.is_pinned) {
+            await supabase
+              .from('countdown_events')
+              .update({ is_pinned: false })
+              .eq('user_id', user.id);
+          }
+
+          const { error: updateErr } = await supabase
             .from('countdown_events')
             .update({
               title: data.title,
-              description: data.description,
+              description: data.description || null,
               target_date: data.target_date,
               category: data.category,
               emoji: data.emoji,
               color: data.color,
-              is_pinned: data.is_pinned,
+              is_pinned: !!data.is_pinned,
               reminder_intervals: data.reminder_intervals,
+              updated_at: new Date().toISOString(),
             })
-            .eq('id', existingId);
-        } catch {}
-      }
+            .eq('id', existingId)
+            .eq('user_id', user.id);
 
-      if (data.is_pinned) {
-        setActiveEventId(existingId);
-        localStorage.setItem(ACTIVE_ID_KEY, existingId);
+          if (updateErr) {
+            console.error('[CountdownWidget] Error updating countdown in Supabase:', updateErr.message);
+            setDbError(updateErr.message);
+          } else {
+            console.log('[CountdownWidget] Updated countdown event in Supabase successfully.');
+            setDbError(null);
+          }
+        } catch (err: any) {
+          console.error('[CountdownWidget] Supabase update failed:', err);
+        }
       }
     } else {
       // Create new event
+      const newId =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `cd_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
       const newEvent: CountdownEvent = {
         ...data,
-        id: crypto.randomUUID(),
-        user_id: currentUser?.id,
+        id: newId,
+        user_id: user?.id,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -378,25 +478,55 @@ export default function CountdownWidget() {
         : [newEvent, ...events];
 
       setActiveEventId(newEvent.id);
-      localStorage.setItem(ACTIVE_ID_KEY, newEvent.id);
+      try {
+        localStorage.setItem(ACTIVE_ID_KEY, newEvent.id);
+      } catch {}
 
       // Supabase insert
-      if (currentUser?.id) {
+      if (user?.id) {
         try {
-          await supabase.from('countdown_events').insert({
+          // Ensure profile row exists for foreign key constraint
+          try {
+            await supabase.from('profiles').upsert(
+              {
+                id: user.id,
+                full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+              },
+              { onConflict: 'id' }
+            );
+          } catch {}
+
+          if (data.is_pinned) {
+            await supabase
+              .from('countdown_events')
+              .update({ is_pinned: false })
+              .eq('user_id', user.id);
+          }
+
+          const { error: insertErr } = await supabase.from('countdown_events').insert({
             id: newEvent.id,
-            user_id: currentUser.id,
+            user_id: user.id,
             title: newEvent.title,
-            description: newEvent.description,
+            description: newEvent.description || null,
             target_date: newEvent.target_date,
             category: newEvent.category,
             emoji: newEvent.emoji,
             color: newEvent.color,
-            is_pinned: newEvent.is_pinned,
+            is_pinned: !!newEvent.is_pinned,
             reminder_intervals: newEvent.reminder_intervals,
             triggered_reminders: [],
           });
-        } catch {}
+
+          if (insertErr) {
+            console.error('[CountdownWidget] Error inserting countdown to Supabase:', insertErr.message);
+            setDbError(insertErr.message);
+          } else {
+            console.log('[CountdownWidget] Inserted countdown event to Supabase successfully:', newEvent.id);
+            setDbError(null);
+          }
+        } catch (err: any) {
+          console.error('[CountdownWidget] Supabase insert failed:', err);
+        }
       }
     }
 
@@ -404,20 +534,41 @@ export default function CountdownWidget() {
   };
 
   const handleDeleteEvent = async (id: string) => {
+    let user = currentUser;
+    if (!user) {
+      const { data: authData } = await supabase.auth.getUser();
+      user = authData?.user || null;
+      if (user) setCurrentUser(user);
+    }
+
     const updated = events.filter((e) => e.id !== id);
     saveEvents(updated);
 
     if (activeEventId === id) {
       const nextActive = updated[0]?.id || null;
       setActiveEventId(nextActive);
-      if (nextActive) localStorage.setItem(ACTIVE_ID_KEY, nextActive);
-      else localStorage.removeItem(ACTIVE_ID_KEY);
+      try {
+        if (nextActive) localStorage.setItem(ACTIVE_ID_KEY, nextActive);
+        else localStorage.removeItem(ACTIVE_ID_KEY);
+      } catch {}
     }
 
-    if (currentUser?.id) {
+    if (user?.id) {
       try {
-        await supabase.from('countdown_events').delete().eq('id', id);
-      } catch {}
+        const { error: delErr } = await supabase
+          .from('countdown_events')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', user.id);
+
+        if (delErr) {
+          console.error('[CountdownWidget] Error deleting countdown from Supabase:', delErr.message);
+        } else {
+          console.log('[CountdownWidget] Deleted countdown event from Supabase successfully:', id);
+        }
+      } catch (err: any) {
+        console.error('[CountdownWidget] Supabase delete failed:', err);
+      }
     }
   };
 
@@ -476,6 +627,25 @@ export default function CountdownWidget() {
               <span>Create Countdown</span>
             </button>
           </div>
+
+          {/* Database sync note if error */}
+          {dbError && (
+            <div className="mt-4 flex items-center justify-between gap-2 p-2.5 rounded-xl border border-amber-500/30 bg-amber-950/20 text-amber-300 text-xs">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={15} className="shrink-0 text-amber-400" />
+                <span>
+                  Supabase database sync: <strong>countdown_events</strong> table not found. Countdowns are stored in local storage until Section 9 of <code>supabase/schema.sql</code> is executed in your Supabase SQL Editor.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDbError(null)}
+                className="text-amber-400 hover:text-white px-2 py-0.5 rounded text-[10px]"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
         </section>
 
         <CountdownModal
@@ -551,6 +721,31 @@ export default function CountdownWidget() {
 
           {/* Right: Controls & Actions */}
           <div className="flex items-center gap-2 self-end sm:self-auto">
+            {/* Cloud Sync Status / Refresh button */}
+            <button
+              type="button"
+              onClick={() => loadData()}
+              disabled={isSyncing}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-medium transition ${
+                dbError
+                  ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+                  : currentUser
+                  ? 'border-slate-700/80 bg-slate-800/70 hover:bg-slate-700 text-slate-300'
+                  : 'border-slate-800 bg-slate-900/50 text-slate-500'
+              }`}
+              title={
+                dbError
+                  ? `Supabase sync error: ${dbError}. Run section 9 in schema.sql.`
+                  : currentUser
+                  ? 'Click to sync with Supabase cloud database'
+                  : 'Sign in to sync countdowns to cloud database'
+              }
+            >
+              <RefreshCw size={12} className={isSyncing ? 'animate-spin text-blue-400' : 'text-slate-400'} />
+              <span className="hidden sm:inline">
+                {isSyncing ? 'Syncing...' : dbError ? 'DB Pending' : currentUser ? 'Cloud Synced' : 'Local Cache'}
+              </span>
+            </button>
             {/* Multiple events selector */}
             {events.length > 1 && (
               <div className="relative">
@@ -633,6 +828,25 @@ export default function CountdownWidget() {
             </button>
           </div>
         </div>
+
+        {/* Database sync note if error */}
+        {dbError && (
+          <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-amber-500/30 bg-amber-950/30 text-amber-300 text-xs mb-3 animate-fade-in">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={15} className="shrink-0 text-amber-400" />
+              <span>
+                Database sync note: <strong>countdown_events</strong> ({dbError}). Countdowns are cached in local storage. Execute Section 9 of <code>supabase/schema.sql</code> in your Supabase SQL editor to enable cloud syncing.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDbError(null)}
+              className="text-amber-400 hover:text-white px-2 py-0.5 rounded text-[10px]"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {/* ── DIGITAL COUNTDOWN FLIPPER CARDS ───────────────────────────── */}
         <div className="grid grid-cols-4 gap-2 sm:gap-4 my-2">

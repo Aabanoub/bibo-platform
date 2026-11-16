@@ -430,3 +430,48 @@ ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS summary TEXT;
 ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS tasks_completed INT NOT NULL DEFAULT 0;
 ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS transactions_count INT NOT NULL DEFAULT 0;
 ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS habits_completed INT NOT NULL DEFAULT 0;
+
+-- 9.1 Countdown Events Table & Realtime Migration
+CREATE TABLE IF NOT EXISTS countdown_events (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id             UUID NOT NULL DEFAULT auth.uid() REFERENCES auth.users (id) ON DELETE CASCADE,
+    title               TEXT NOT NULL,
+    description         TEXT,
+    target_date         TIMESTAMPTZ NOT NULL,
+    category            TEXT NOT NULL DEFAULT 'event',
+    emoji               TEXT NOT NULL DEFAULT '⏳',
+    color               TEXT NOT NULL DEFAULT 'blue',
+    is_pinned           BOOLEAN NOT NULL DEFAULT false,
+    reminder_intervals  TEXT[] NOT NULL DEFAULT '{"at_time", "1h", "1d"}',
+    triggered_reminders TEXT[] NOT NULL DEFAULT '{}',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_countdown_events_user_id ON countdown_events (user_id);
+CREATE INDEX IF NOT EXISTS idx_countdown_events_target ON countdown_events (user_id, target_date);
+
+ALTER TABLE countdown_events ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+    DROP POLICY IF EXISTS "Users can view their own countdown events" ON countdown_events;
+    DROP POLICY IF EXISTS "Users can create their own countdown events" ON countdown_events;
+    DROP POLICY IF EXISTS "Users can update their own countdown events" ON countdown_events;
+    DROP POLICY IF EXISTS "Users can delete their own countdown events" ON countdown_events;
+EXCEPTION WHEN OTHERS THEN null;
+END $$;
+
+CREATE POLICY "Users can view their own countdown events"   ON countdown_events FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can create their own countdown events" ON countdown_events FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own countdown events" ON countdown_events FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own countdown events" ON countdown_events FOR DELETE USING (auth.uid() = user_id);
+
+DROP TRIGGER IF EXISTS set_updated_at_countdown ON countdown_events;
+CREATE TRIGGER set_updated_at_countdown
+    BEFORE UPDATE ON countdown_events
+    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
+
+DO $$ BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE countdown_events;
+EXCEPTION WHEN OTHERS THEN null;
+END $$;
