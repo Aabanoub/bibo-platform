@@ -226,14 +226,37 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile toggle button */}
-      <button
-        onClick={() => setMobileOpen(true)}
-        className="fixed left-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-lg bg-slate-800 text-slate-300 shadow-lg transition-colors hover:bg-slate-700 lg:hidden"
-        aria-label="Open menu"
-      >
-        <Menu size={20} />
-      </button>
+      {/* Mobile top header bar */}
+      <header className="lg:hidden h-14 bg-slate-900/95 border-b border-slate-800 backdrop-blur-md px-3 sm:px-4 flex items-center justify-between shrink-0 z-30 sticky top-0 w-full">
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition shadow-sm active:scale-95"
+            aria-label="Open menu"
+          >
+            <Menu size={20} />
+          </button>
+          <Link href="/" className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 text-white shadow-sm">
+              <Sparkles size={14} />
+            </div>
+            <span className="font-bold text-sm bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+              AbanoubApp
+            </span>
+          </Link>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <NotificationBell collapsed={true} />
+          <Link
+            href="/settings"
+            className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800/80 text-slate-400 hover:bg-slate-800 hover:text-white transition active:scale-95"
+            aria-label="Settings"
+          >
+            <Settings size={16} />
+          </Link>
+        </div>
+      </header>
 
       {/* Mobile overlay */}
       {mobileOpen && (
@@ -243,9 +266,9 @@ export default function Sidebar() {
         />
       )}
 
-      {/* Mobile sidebar */}
+      {/* Mobile sidebar drawer */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-300 ease-in-out lg:hidden ${
+        className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[80vw] transform transition-transform duration-300 ease-in-out lg:hidden shadow-2xl ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >

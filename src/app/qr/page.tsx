@@ -320,16 +320,16 @@ export default function QrGeneratorPage() {
   ];
 
   return (
-    <div className="flex h-full min-h-screen flex-col bg-zinc-950 text-zinc-100">
+    <div className="text-zinc-100">
       {/* Header */}
-      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-zinc-800 bg-zinc-950/80 px-4 py-3 backdrop-blur-md sm:px-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20">
-            <QrCode size={20} />
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-4 mb-4">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20">
+            <QrCode size={18} />
           </div>
           <div>
-            <h1 className="text-base font-bold tracking-tight">QR Code Studio</h1>
-            <p className="text-xs text-zinc-400">Generate custom QR codes for anything</p>
+            <h1 className="text-lg sm:text-xl font-bold tracking-tight">QR Code Studio</h1>
+            <p className="text-[11px] sm:text-xs text-zinc-400">Generate custom QR codes for anything</p>
           </div>
         </div>
 
@@ -337,7 +337,7 @@ export default function QrGeneratorPage() {
           <button
             onClick={saveToNotes}
             disabled={savingNote}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-zinc-600 hover:bg-zinc-800 hover:text-white transition"
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-zinc-600 hover:bg-zinc-800 hover:text-white transition active:scale-95"
             title="Save payload to Notes"
           >
             {noteSaved ? (
@@ -345,7 +345,7 @@ export default function QrGeneratorPage() {
             ) : (
               <Save size={14} />
             )}
-            <span className="hidden sm:inline">
+            <span>
               {noteSaved ? 'Saved to Notes!' : 'Save to Notes'}
             </span>
           </button>
@@ -353,7 +353,7 @@ export default function QrGeneratorPage() {
       </header>
 
       {/* Main Content Layout */}
-      <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+      <main className="p-0 sm:p-2">
         <div className="mx-auto max-w-6xl grid grid-cols-1 gap-6 lg:grid-cols-12">
           {/* Left Column: Generator Inputs & Customization */}
           <div className="space-y-6 lg:col-span-7">

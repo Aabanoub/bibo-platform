@@ -410,14 +410,14 @@ export default function ChatPage() {
   // ------ render ------
 
   return (
-    <div className="flex h-full min-h-screen flex-col bg-zinc-950 text-zinc-100">
+    <div className="h-[calc(100dvh-8rem)] sm:h-[calc(100vh-6.5rem)] flex flex-col rounded-2xl border border-zinc-800 bg-zinc-950/70 overflow-hidden shadow-xl text-zinc-100">
       {/* ---- Header ---- */}
-      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-zinc-800 bg-zinc-950/80 px-4 py-3 backdrop-blur-md sm:px-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-600">
-            <Bot size={18} className="text-white" />
+      <header className="shrink-0 flex items-center justify-between border-b border-zinc-800 bg-zinc-950/80 px-3 py-2.5 backdrop-blur-md sm:px-6">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-sm">
+            <Bot size={18} />
           </div>
-          <h1 className="text-lg font-semibold tracking-tight">AI Chat</h1>
+          <h1 className="text-base sm:text-lg font-semibold tracking-tight">AI Chat</h1>
         </div>
 
         <div className="flex items-center gap-2">
@@ -425,10 +425,10 @@ export default function ChatPage() {
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setPersonaOpen((v) => !v)}
-              className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-sm transition hover:border-zinc-600 hover:bg-zinc-800"
+              className="flex items-center gap-1.5 sm:gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs sm:text-sm transition hover:border-zinc-600 hover:bg-zinc-800"
             >
               <ActiveIcon size={14} className="text-blue-400" />
-              <span className="hidden sm:inline">{activePersona.label}</span>
+              <span className="inline">{activePersona.label}</span>
               <ChevronDown
                 size={14}
                 className={`text-zinc-400 transition-transform ${personaOpen ? 'rotate-180' : ''}`}
@@ -436,7 +436,7 @@ export default function ChatPage() {
             </button>
 
             {personaOpen && (
-              <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl">
+              <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl z-30">
                 {PERSONAS.map((p) => {
                   const Icon = p.icon;
                   return (
@@ -465,7 +465,7 @@ export default function ChatPage() {
             title="Clear chat"
             className="rounded-lg p-2 text-zinc-400 transition hover:bg-zinc-800 hover:text-red-400"
           >
-            <Trash2 size={18} />
+            <Trash2 size={16} />
           </button>
         </div>
       </header>
@@ -499,11 +499,10 @@ export default function ChatPage() {
                 >
                   {/* Avatar */}
                   <div
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-                      isUser
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${isUser
                         ? 'bg-gradient-to-br from-blue-600 to-blue-500'
                         : 'bg-zinc-700'
-                    }`}
+                      }`}
                   >
                     {isUser ? (
                       <User size={16} className="text-white" />
@@ -514,11 +513,10 @@ export default function ChatPage() {
 
                   {/* Bubble */}
                   <div
-                    className={`group relative max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed sm:max-w-[70%] ${
-                      isUser
+                    className={`group relative max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed sm:max-w-[70%] ${isUser
                         ? 'rounded-br-md bg-blue-600 text-white'
                         : 'rounded-bl-md bg-zinc-800 text-zinc-100'
-                    }`}
+                      }`}
                   >
                     {isUser ? (
                       <p className="whitespace-pre-wrap">{msg.content}</p>
@@ -539,9 +537,8 @@ export default function ChatPage() {
                     {/* Timestamp */}
                     {msg.created_at && (
                       <span
-                        className={`mt-1 block text-[10px] ${
-                          isUser ? 'text-blue-200' : 'text-zinc-500'
-                        }`}
+                        className={`mt-1 block text-[10px] ${isUser ? 'text-blue-200' : 'text-zinc-500'
+                          }`}
                       >
                         {formatTime(msg.created_at)}
                       </span>
@@ -558,7 +555,7 @@ export default function ChatPage() {
       </main>
 
       {/* ---- Input ---- */}
-      <footer className="sticky bottom-0 border-t border-zinc-800 bg-zinc-950/90 px-2 py-3 backdrop-blur-md sm:px-4">
+      <footer className="shrink-0 border-t border-zinc-800 bg-zinc-950/95 px-2.5 py-2.5 backdrop-blur-md sm:px-4">
         <form
           onSubmit={handleSend}
           className="mx-auto flex max-w-3xl items-end gap-2"
@@ -574,21 +571,21 @@ export default function ChatPage() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type or speak a message (e.g. 'Spent $25 on lunch' or 'Add task')..."
+            placeholder="Type or speak a message (e.g. 'Add task to review finances')..."
             rows={1}
-            className="max-h-36 min-h-[44px] flex-1 resize-none rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-500 outline-none transition focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+            className="max-h-32 min-h-[44px] flex-1 resize-none rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 outline-none transition focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
             disabled={loading}
           />
           <button
             type="submit"
             disabled={loading || !input.trim()}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white transition hover:bg-blue-500 disabled:opacity-40 disabled:hover:bg-blue-600"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white transition hover:bg-blue-500 disabled:opacity-40 disabled:hover:bg-blue-600 active:scale-95"
           >
             <Send size={18} />
           </button>
         </form>
-        <p className="mx-auto mt-1.5 max-w-3xl text-center text-[11px] text-zinc-600">
-          AI can make mistakes. Verify important information.
+        <p className="mx-auto mt-1 max-w-3xl text-center text-[10px] text-zinc-600">
+          AI Actions can create tasks, log expenses, and update notes directly.
         </p>
       </footer>
     </div>

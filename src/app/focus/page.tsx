@@ -284,14 +284,14 @@ export default function FocusPage() {
 
   return (
     <div
-      className={`flex min-h-screen flex-col bg-zinc-950 text-zinc-100 transition-colors ${
+      className={`flex flex-col text-zinc-100 transition-colors ${
         mode === 'focus'
           ? 'selection:bg-blue-600'
           : 'selection:bg-emerald-600'
       }`}
     >
       {/* Top Header */}
-      <header className="flex items-center justify-between border-b border-zinc-800/80 px-6 py-4">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-4 mb-4">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-rose-500 text-white shadow-lg shadow-amber-500/20">
             <Flame size={20} />

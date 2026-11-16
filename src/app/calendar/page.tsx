@@ -321,22 +321,22 @@ export default function CalendarPage() {
   };
 
   return (
-    <div className="flex h-full min-h-screen flex-col bg-zinc-950 text-zinc-100">
+    <div className="text-zinc-100">
       {/* Header */}
-      <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 bg-zinc-950/80 px-4 py-3 backdrop-blur-md sm:px-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-500/20">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-4 mb-4">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-500/20">
             <CalendarIcon size={18} />
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-tight">Smart Calendar</h1>
-            <p className="text-xs text-zinc-400">
-              Tasks, Habits & Google/Samsung Calendar Sync
+            <h1 className="text-lg sm:text-xl font-bold tracking-tight">Smart Calendar</h1>
+            <p className="text-[11px] sm:text-xs text-zinc-400">
+              Tasks, Habits & Calendar Sync
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Navigation Controls */}
           <div className="flex items-center rounded-lg border border-zinc-800 bg-zinc-900 p-0.5">
             <button
@@ -361,7 +361,7 @@ export default function CalendarPage() {
             </button>
           </div>
 
-          <span className="hidden font-semibold sm:inline text-sm px-2">
+          <span className="font-semibold text-xs sm:text-sm px-1.5 text-zinc-200">
             {monthNames[month]} {year}
           </span>
 
@@ -394,10 +394,10 @@ export default function CalendarPage() {
           {/* Sync iCal Button */}
           <button
             onClick={() => setSyncModalOpen(true)}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-zinc-600 hover:bg-zinc-800 transition"
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 sm:px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-zinc-600 hover:bg-zinc-800 transition"
           >
             <RefreshCw size={13} className={syncing ? 'animate-spin text-purple-400' : ''} />
-            <span className="hidden md:inline">Sync Calendar</span>
+            <span className="hidden sm:inline">Sync</span>
           </button>
 
           {/* Quick Add */}
@@ -406,16 +406,16 @@ export default function CalendarPage() {
               setSelectedDateStr(new Date().toISOString().split('T')[0]);
               setCreateModalOpen(true);
             }}
-            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 transition shadow-sm"
+            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-2.5 sm:px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 transition shadow-sm active:scale-95"
           >
             <Plus size={14} />
-            <span className="hidden sm:inline">Add Task</span>
+            <span>Add Task</span>
           </button>
         </div>
       </header>
 
       {/* Filter Tabs & Month Info */}
-      <div className="flex items-center justify-between border-b border-zinc-800/80 px-4 py-2.5 sm:px-6 bg-zinc-950/40">
+      <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3 mb-4">
         <div className="flex items-center gap-1.5">
           {(['all', 'tasks', 'events'] as const).map((mode) => (
             <button
@@ -432,7 +432,7 @@ export default function CalendarPage() {
           ))}
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-zinc-400">
+        <div className="hidden sm:flex items-center gap-3 text-xs text-zinc-400">
           <div className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-blue-500" />
             <span>Tasks</span>
@@ -449,7 +449,7 @@ export default function CalendarPage() {
       </div>
 
       {/* Main Calendar Area */}
-      <main className="flex-1 overflow-y-auto p-3 sm:p-6">
+      <main className="p-0 sm:p-2">
         {viewMode === 'month' ? (
           <div className="mx-auto max-w-7xl">
             {/* Days of week header */}

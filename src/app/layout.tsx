@@ -42,10 +42,10 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} dark`}>
       <body className="min-h-screen bg-[#0f172a] font-sans text-slate-200 antialiased">
         <PwaRegister />
-        <div className="flex h-screen overflow-hidden">
+        <div className="flex h-screen overflow-hidden flex-col lg:flex-row">
           <Sidebar />
           <main className="flex-1 overflow-y-auto pb-20 lg:pb-0">
-            <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
               {children}
             </div>
           </main>

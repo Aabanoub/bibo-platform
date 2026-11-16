@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Calendar, Flame, QrCode, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, StickyNote, CheckSquare, Calendar, MessageSquare } from 'lucide-react';
 
 export default function MobileBottomNav() {
   const pathname = usePathname();
@@ -11,9 +11,9 @@ export default function MobileBottomNav() {
 
   const items = [
     { label: 'Home', href: '/', icon: LayoutDashboard },
+    { label: 'Notes', href: '/notes', icon: StickyNote },
+    { label: 'Tasks', href: '/tasks', icon: CheckSquare },
     { label: 'Calendar', href: '/calendar', icon: Calendar },
-    { label: 'Focus', href: '/focus', icon: Flame },
-    { label: 'QR Studio', href: '/qr', icon: QrCode },
     { label: 'AI Chat', href: '/chat', icon: MessageSquare },
   ];
 

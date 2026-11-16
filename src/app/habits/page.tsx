@@ -302,34 +302,34 @@ export default function HabitsPage() {
 
   // ---- render -------------------------------------------------------------
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6">
+    <div className="text-slate-100">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-purple-400" />
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
+            <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-purple-400" />
             Habits
           </h1>
           <div className="flex items-center gap-2">
             <div className="flex rounded-lg overflow-hidden border border-slate-700">
               <button
                 onClick={() => setView('today')}
-                className={`px-3 py-1.5 text-sm transition-colors ${view === 'today' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+                className={`px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors ${view === 'today' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
               >
                 Today
               </button>
               <button
                 onClick={() => setView('week')}
-                className={`px-3 py-1.5 text-sm transition-colors ${view === 'week' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+                className={`px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors ${view === 'week' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
               >
                 Week
               </button>
             </div>
             <button
               onClick={() => setShowForm(!showForm)}
-              className="px-3 py-2 rounded-lg text-sm bg-purple-600 hover:bg-purple-500 transition-colors flex items-center gap-1.5"
+              className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm bg-purple-600 hover:bg-purple-500 text-white transition-colors flex items-center gap-1.5 font-medium shadow-sm active:scale-95"
             >
-              <Plus className="w-4 h-4" /> Add Habit
+              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Add Habit
             </button>
           </div>
         </div>
@@ -538,9 +538,10 @@ export default function HabitsPage() {
           </div>
         ) : (
           /* ---- Weekly View ------------------------------------------------- */
-          <div className="rounded-xl bg-slate-900 border border-slate-800 overflow-hidden">
-            {/* Week header */}
-            <div className="grid grid-cols-[1fr_repeat(7,48px)_80px] gap-1 p-3 border-b border-slate-800 text-center">
+          <div className="rounded-xl bg-slate-900 border border-slate-800 overflow-x-auto">
+            <div className="min-w-[540px]">
+              {/* Week header */}
+              <div className="grid grid-cols-[1fr_repeat(7,48px)_80px] gap-1 p-3 border-b border-slate-800 text-center">
               <div className="text-left text-xs text-slate-500 font-medium pl-2">Habit</div>
               {weekDays.map((d) => (
                 <div key={d.date} className="text-[10px] text-slate-500">
@@ -588,6 +589,7 @@ export default function HabitsPage() {
                 </div>
               );
             })}
+            </div>
           </div>
         )}
       </div>

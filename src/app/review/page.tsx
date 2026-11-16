@@ -322,42 +322,42 @@ IMPORTANT: You MUST format your review with structured markdown tables and secti
   };
 
   return (
-    <div className="flex h-full min-h-screen flex-col bg-zinc-950 text-zinc-100">
+    <div className="text-zinc-100">
       {/* Header */}
-      <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 bg-zinc-950/80 px-4 py-3 backdrop-blur-md sm:px-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-500/20">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-4 mb-4">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-500/20">
             <Award size={18} />
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-tight">Sunday Life Review</h1>
-            <p className="text-xs text-zinc-400">Weekly Performance, Habits & Financial Synthesis</p>
+            <h1 className="text-lg sm:text-xl font-bold tracking-tight">Sunday Life Review</h1>
+            <p className="text-[11px] sm:text-xs text-zinc-400">Weekly Performance, Habits & Financial Synthesis</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Download PDF Button */}
           <button
             onClick={handleDownloadPdf}
-            className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 py-2 text-xs font-semibold text-zinc-200 hover:border-zinc-600 hover:bg-zinc-800 hover:text-white transition shadow-sm"
+            className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs font-semibold text-zinc-200 hover:border-zinc-600 hover:bg-zinc-800 hover:text-white transition shadow-sm active:scale-95"
             title="Download executive review as PDF"
           >
             <Download size={14} className="text-blue-400" />
-            <span>Download PDF Report</span>
+            <span>PDF Report</span>
           </button>
 
           {/* AI Generator Button */}
           <button
             onClick={generateAiSynthesis}
             disabled={generatingAi}
-            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-3.5 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 active:scale-95"
           >
             {generatingAi ? (
               <RefreshCw size={14} className="animate-spin" />
             ) : (
               <Sparkles size={14} />
             )}
-            <span>{generatingAi ? 'Analyzing Week...' : 'Generate AI Weekly Review'}</span>
+            <span>{generatingAi ? 'Analyzing...' : 'Generate AI Review'}</span>
           </button>
         </div>
       </header>

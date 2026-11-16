@@ -127,3 +127,19 @@
     transform: scale(1);
   }
 }
+
+/* Prevent iOS Safari auto-zoom on inputs & enhance touch targets */
+@media screen and (max-width: 768px) {
+  input[type="text"],
+  input[type="password"],
+  input[type="email"],
+  input[type="number"],
+  input[type="date"],
+  input[type="url"],
+  input[type="tel"],
+  input[type="search"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
