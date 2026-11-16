@@ -9,7 +9,7 @@ export default function MobileBottomNav() {
   const pathname = usePathname();
   const { isGirly } = useTheme();
 
-  if (pathname === '/login') return null;
+  if (pathname === '/login' || pathname === '/maintenance') return null;
 
   const items = [
     { label: 'Notes', href: '/notes', icon: StickyNote, isCenter: false },

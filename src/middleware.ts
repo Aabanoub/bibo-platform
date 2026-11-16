@@ -46,9 +46,59 @@ export async function middleware(request: NextRequest) {
   } catch {}
 
   const isAuthenticated = !!user;
+  const userEmail = (user?.email || '').toLowerCase().trim();
 
   // Route protection
   const { pathname } = request.nextUrl;
+
+  // Check if this specific user is locked for updates / maintenance
+  // Locked either via LOCKED_EMAILS env variable (comma-separated: e.g. "user@example.com")
+  // OR via Supabase user_metadata / app_metadata: { is_locked: true }
+  const lockedEmailsRaw = process.env.LOCKED_EMAILS || '';
+  const lockedEmails = lockedEmailsRaw
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+
+  const isUserLocked =
+    isAuthenticated &&
+    userEmail &&
+    (lockedEmails.includes(userEmail) ||
+      (user?.user_metadata as any)?.is_locked === true ||
+      (user?.app_metadata as any)?.is_locked === true);
+
+  // If this user is locked for updates
+  if (isUserLocked) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { error: 'Sorry, we are working on it. Your account is currently undergoing updates.' },
+        { status: 503 }
+      );
+    }
+
+    const isAllowedForLocked =
+      pathname === '/maintenance' ||
+      pathname === '/auth/callback' ||
+      pathname === '/auth/confirm' ||
+      pathname.startsWith('/_next/') ||
+      pathname === '/favicon.ico' ||
+      /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?)$/.test(pathname);
+
+    if (!isAllowedForLocked) {
+      const maintenanceUrl = request.nextUrl.clone();
+      maintenanceUrl.pathname = '/maintenance';
+      return NextResponse.redirect(maintenanceUrl);
+    }
+
+    return supabaseResponse;
+  }
+
+  // If a non-locked user manually visits /maintenance, send them to home
+  if (!isUserLocked && pathname === '/maintenance') {
+    const homeUrl = request.nextUrl.clone();
+    homeUrl.pathname = '/';
+    return NextResponse.redirect(homeUrl);
+  }
 
   const isPublicRoute =
     pathname === "/login" ||

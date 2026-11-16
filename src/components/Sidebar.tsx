@@ -105,8 +105,8 @@ export default function Sidebar() {
     setMobileOpen(false);
   }, [pathname]);
 
-  const isLoginPage = pathname === '/login';
-  if (isLoginPage) return null;
+  const isAuthOrMaintenance = pathname === '/login' || pathname === '/maintenance';
+  if (isAuthOrMaintenance) return null;
 
   const sidebarContent = (
     <div className="flex h-full flex-col bg-slate-900 border-r border-slate-800">
