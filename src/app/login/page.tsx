@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { Mail, Lock, Eye, EyeOff, Sparkles, ArrowRight, UserPlus, LogIn, Zap, CheckCircle2 } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Sparkles, ArrowRight, UserPlus, LogIn, Zap, CheckCircle2, AlertCircle } from 'lucide-react';
 import { createClient, setStoredBetaUser } from '@/lib/supabase';
 
 export default function LoginPage() {
@@ -15,6 +15,47 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
+
+  // Check URL parameters on mount (?confirmed=true or ?error=...)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const confirmed = params.get('confirmed');
+      const err = params.get('error');
+      const errDesc = params.get('error_description');
+
+      if (confirmed) {
+        setMessage({
+          type: 'success',
+          text: '✅ Email verified successfully! You are now authenticated.',
+        });
+        supabase.auth.getSession().then(({ data }: any) => {
+          if (data?.session) {
+            setTimeout(() => router.push('/'), 700);
+          }
+        });
+      } else if (err || errDesc) {
+        setMessage({
+          type: 'error',
+          text: decodeURIComponent(errDesc || err || 'Email verification link was invalid or expired.'),
+        });
+      }
+    }
+
+    // Listen to Supabase auth state changes (e.g. hash token exchange)
+    const { data: authListener } = supabase.auth.onAuthStateChange((event: any, session: any) => {
+      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user) {
+        setMessage({ type: 'success', text: 'Authentication successful! Redirecting to dashboard...' });
+        setTimeout(() => {
+          router.push('/');
+        }, 500);
+      }
+    });
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
+  }, [router, supabase]);
 
   function signInAsBeta(targetEmail?: string) {
     const finalEmail = (targetEmail || email).trim() || 'abanoub@app.local';
@@ -48,20 +89,41 @@ export default function LoginPage() {
     }
 
     try {
-      // 1. Try real Supabase auth if connected
       const isPlaceholder =
         !process.env.NEXT_PUBLIC_SUPABASE_URL ||
         process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
 
       if (!isPlaceholder) {
+        const origin = typeof window !== 'undefined' ? window.location.origin : '';
+        const emailRedirectTo = `${origin}/auth/callback`;
+
         if (isSignUp) {
           const { data, error } = await supabase.auth.signUp({
             email: cleanEmail,
             password: password || 'beta-pass-123',
+            options: {
+              emailRedirectTo,
+            },
           });
 
-          if (!error && data?.session) {
+          if (error) {
+            setMessage({ type: 'error', text: error.message });
+            setLoading(false);
+            return;
+          }
+
+          if (data?.session) {
+            setMessage({ type: 'success', text: 'Account created! Signing you in...' });
             router.push('/');
+            return;
+          }
+
+          if (data?.user && !data?.session) {
+            setMessage({
+              type: 'success',
+              text: `📩 Confirmation link sent to ${cleanEmail}! Please check your email inbox (and spam folder) and click the link to confirm your account.`,
+            });
+            setLoading(false);
             return;
           }
         } else {
@@ -74,13 +136,28 @@ export default function LoginPage() {
             router.push('/');
             return;
           }
+
+          // If real Supabase returned unconfirmed email error
+          if (error.message.toLowerCase().includes('email not confirmed')) {
+            setMessage({
+              type: 'error',
+              text: '⚠️ Email is not confirmed yet. Please check your inbox for the confirmation link, or click "Enter Without Sign In" below for instant beta access.',
+            });
+            setLoading(false);
+            return;
+          }
+
+          // If password was wrong or user not found on real Supabase, display it
+          setMessage({ type: 'error', text: error.message });
+          setLoading(false);
+          return;
         }
       }
 
-      // 2. Beta mode: Allow signing in with ANY email and password!
+      // Beta mode fallback: If using placeholder or requested
       signInAsBeta(cleanEmail);
-    } catch {
-      // Fallback for beta mode on any error
+    } catch (err: any) {
+      // Fallback for beta mode on any client error
       signInAsBeta(cleanEmail);
     } finally {
       setLoading(false);
@@ -114,29 +191,34 @@ export default function LoginPage() {
           </h1>
           <p className="mt-1 text-sm text-slate-400">
             {isSignUp
-              ? 'Create your account to get started'
+              ? 'Create a new account to get started'
               : 'Sign in to your personal AI platform'}
           </p>
 
           {/* Beta badge */}
           <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-400">
             <CheckCircle2 size={13} />
-            <span>Beta Mode Active: Any email & password works</span>
+            <span>Beta Mode Active: Instant Access Enabled</span>
           </div>
         </div>
 
         {/* Card */}
         <div className="rounded-2xl border border-slate-700/50 bg-slate-800/50 p-6 shadow-2xl shadow-black/20 backdrop-blur-sm sm:p-8">
-          {/* Toast message */}
+          {/* Toast / Status message */}
           {message && (
             <div
-              className={`mb-6 animate-slide-in rounded-lg px-4 py-3 text-sm ${
+              className={`mb-6 animate-slide-in rounded-xl p-4 text-sm flex items-start gap-3 ${
                 message.type === 'error'
-                  ? 'border border-red-500/20 bg-red-500/10 text-red-400'
-                  : 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                  ? 'border border-red-500/30 bg-red-500/10 text-red-300'
+                  : 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
               }`}
             >
-              {message.text}
+              {message.type === 'error' ? (
+                <AlertCircle size={20} className="shrink-0 text-red-400 mt-0.5" />
+              ) : (
+                <CheckCircle2 size={20} className="shrink-0 text-emerald-400 mt-0.5" />
+              )}
+              <div className="leading-relaxed">{message.text}</div>
             </div>
           )}
 
@@ -172,6 +254,38 @@ export default function LoginPage() {
             </span>
           </div>
 
+          {/* Tabs: Sign In vs Sign Up */}
+          <div className="mb-5 flex rounded-lg bg-slate-900/60 p-1 border border-slate-700/50">
+            <button
+              type="button"
+              onClick={() => {
+                setIsSignUp(false);
+                setMessage(null);
+              }}
+              className={`flex-1 rounded-md py-2 text-xs font-semibold transition-all ${
+                !isSignUp
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsSignUp(true);
+                setMessage(null);
+              }}
+              className={`flex-1 rounded-md py-2 text-xs font-semibold transition-all ${
+                isSignUp
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Create Account
+            </button>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email field */}
             <div>
@@ -188,7 +302,7 @@ export default function LoginPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="any-email@domain.com"
+                  placeholder="your-email@example.com"
                   required
                   autoComplete="email"
                   className="input pl-10"
@@ -214,7 +328,7 @@ export default function LoginPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="any password"
+                  placeholder={isSignUp ? 'Choose a password (min 6 chars)' : 'Enter password'}
                   autoComplete={isSignUp ? 'new-password' : 'current-password'}
                   className="input pl-10 pr-10"
                 />
@@ -240,12 +354,12 @@ export default function LoginPage() {
               ) : isSignUp ? (
                 <>
                   <UserPlus size={18} />
-                  Sign In with this Email
+                  Create Account
                 </>
               ) : (
                 <>
                   <LogIn size={18} />
-                  Sign In with this Email
+                  Sign In
                 </>
               )}
             </button>
@@ -254,7 +368,7 @@ export default function LoginPage() {
           {/* Toggle hint */}
           <div className="mt-5 border-t border-slate-700/50 pt-4 text-center">
             <p className="text-xs text-slate-400">
-              💡 Tip: Since this is the beta version, you don&apos;t need to verify your email. Any email & password works!
+              💡 Tip: Since this is the beta version, you don&apos;t need to wait for email verification. Click &quot;Enter Without Sign In&quot; to test everything immediately!
             </p>
           </div>
         </div>
