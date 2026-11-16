@@ -455,7 +455,7 @@ export default function DashboardPage() {
               <h3 className="font-semibold text-white text-sm">Sunday Life Review</h3>
             </div>
             <p className="text-xs text-slate-400">
-              Weekly savings rate, task performance & AI executive coaching report.
+              Weekly savings rate, task performance & downloadable AI PDF report with tables.
             </p>
           </Link>
         </div>

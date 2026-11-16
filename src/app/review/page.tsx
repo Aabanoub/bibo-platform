@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
+import { generateWeeklyReportPdf } from '@/lib/pdf-report';
 import {
   Sparkles,
   TrendingUp,
@@ -14,8 +15,126 @@ import {
   Award,
   RefreshCw,
   ArrowRight,
-  ShieldAlert,
+  Download,
+  FileText,
+  Table as TableIcon,
 } from 'lucide-react';
+
+// ---------------------------------------------------------------------------
+// Markdown Renderer with Table support
+// ---------------------------------------------------------------------------
+function renderMarkdownWithTables(text: string) {
+  const lines = text.split('\n');
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+  let key = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Markdown Table detection: starts and ends with |
+    if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+      const tableLines: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith('|') && lines[i].trim().endsWith('|')) {
+        tableLines.push(lines[i].trim());
+        i++;
+      }
+
+      if (tableLines.length >= 2) {
+        const headerCells = tableLines[0]
+          .split('|')
+          .slice(1, -1)
+          .map((c) => c.trim());
+
+        const bodyLines = tableLines.filter((l, idx) => idx !== 0 && !/^\|[-:| ]+\|$/.test(l));
+
+        elements.push(
+          <div
+            key={key++}
+            className="my-3 overflow-x-auto rounded-xl border border-zinc-700 bg-zinc-950/80 shadow-md"
+          >
+            <table className="w-full text-left text-xs text-zinc-200">
+              <thead className="bg-zinc-800 text-zinc-300 uppercase text-[10px] font-semibold border-b border-zinc-700">
+                <tr>
+                  {headerCells.map((h, hIdx) => (
+                    <th key={hIdx} className="px-3.5 py-2.5 font-bold tracking-wider">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800">
+                {bodyLines.map((rowLine, rIdx) => {
+                  const cells = rowLine
+                    .split('|')
+                    .slice(1, -1)
+                    .map((c) => c.trim());
+                  return (
+                    <tr key={rIdx} className="hover:bg-zinc-800/40 transition">
+                      {cells.map((cell, cIdx) => (
+                        <td key={cIdx} className="px-3.5 py-2 text-zinc-300">
+                          {cell}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+        continue;
+      }
+    }
+
+    // Markdown Headers (###, ##, #)
+    if (line.startsWith('### ')) {
+      elements.push(
+        <h3 key={key++} className="mt-4 mb-2 text-sm font-bold text-indigo-400">
+          {line.replace('### ', '')}
+        </h3>
+      );
+      i++;
+      continue;
+    }
+    if (line.startsWith('## ')) {
+      elements.push(
+        <h2 key={key++} className="mt-5 mb-2 text-base font-bold text-white border-b border-zinc-800 pb-1">
+          {line.replace('## ', '')}
+        </h2>
+      );
+      i++;
+      continue;
+    }
+
+    // Markdown bullet points
+    if (/^[-*]\s/.test(line.trim())) {
+      elements.push(
+        <li key={key++} className="ml-4 list-disc text-xs text-zinc-300 py-0.5">
+          {line.trim().replace(/^[-*]\s/, '')}
+        </li>
+      );
+      i++;
+      continue;
+    }
+
+    // Empty lines
+    if (line.trim() === '') {
+      i++;
+      continue;
+    }
+
+    // Regular paragraph
+    elements.push(
+      <p key={key++} className="my-1.5 text-xs text-zinc-200 leading-relaxed">
+        {line}
+      </p>
+    );
+    i++;
+  }
+
+  return <>{elements}</>;
+}
 
 export default function WeeklyReviewPage() {
   const supabase = createClient();
@@ -23,6 +142,8 @@ export default function WeeklyReviewPage() {
   const [loading, setLoading] = useState(true);
   const [generatingAi, setGeneratingAi] = useState(false);
   const [aiReview, setAiReview] = useState<string | null>(null);
+  const [userName, setUserName] = useState('Abanoub');
+  const [weeklyTransactions, setWeeklyTransactions] = useState<any[]>([]);
 
   // Stats
   const [stats, setStats] = useState({
@@ -46,6 +167,13 @@ export default function WeeklyReviewPage() {
       } = await supabase.auth.getUser();
       if (!user) return;
 
+      setUserName(
+        user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          user.email?.split('@')[0] ||
+          'Abanoub'
+      );
+
       // 7 days ago timestamp
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -57,7 +185,10 @@ export default function WeeklyReviewPage() {
         .from('transactions')
         .select('*')
         .eq('user_id', user.id)
-        .gte('date', sevenDaysAgoDate);
+        .gte('date', sevenDaysAgoDate)
+        .order('date', { ascending: false });
+
+      setWeeklyTransactions(transactions || []);
 
       let income = 0;
       let expense = 0;
@@ -129,19 +260,24 @@ export default function WeeklyReviewPage() {
     setGeneratingAi(true);
     try {
       const prompt = `
-Generate a comprehensive, motivational Sunday Life OS Review for this week based on these numbers:
+Generate an executive, professional Sunday Life OS Review for ${userName} for this week based on these exact numbers:
 - Total Income: $${stats.income.toFixed(2)}
 - Total Expenses: $${stats.expense.toFixed(2)}
 - Net Savings: $${stats.netSavings.toFixed(2)} (${stats.savingsRate}% savings rate)
 - Tasks: ${stats.completedTasks} completed out of ${stats.totalTasks} total (${stats.taskCompletionRate}% completion rate)
 - Habits: ${stats.habitLogsCount} habit sessions completed across ${stats.activeHabitsCount} active habits
-- Notes: ${stats.notesCreated} new thoughts/notes captured
+- Notes: ${stats.notesCreated} new ideas captured
 
-Format your review with clear markdown sections:
-1. 🏆 **Weekly Wins & Highlights** (Praise strong areas)
-2. 💡 **Financial & Habit Diagnosis** (Actionable advice based on numbers)
-3. 🎯 **Strategic Priorities For Next Week** (3 concrete goals)
-4. ⚡ **Productivity Rating** (Score out of 10 with brief justification)
+IMPORTANT: You MUST format your review with structured markdown tables and sections:
+1. 🏆 **Weekly Wins & Key Accomplishments**
+2. 📊 **Financial & Productivity Health Tables**:
+   Provide a clean markdown table summarizing the week's key metrics:
+   | Performance Metric | Recorded Value | Status | Assessment |
+3. 🎯 **Strategic Priorities For Next Week**:
+   Provide an actionable table outlining top focus areas:
+   | Priority Area | Concrete Action Item | Target Impact |
+4. 💡 **Executive Diagnosis & Coaching Advice** (Clear, direct, actionable advice)
+5. ⚡ **Productivity Rating**: Score out of 10 with brief justification.
 `;
 
       const res = await fetch('/api/ai', {
@@ -164,10 +300,31 @@ Format your review with clear markdown sections:
     }
   };
 
+  const handleDownloadPdf = () => {
+    const today = new Date();
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(today.getDate() - 7);
+
+    generateWeeklyReportPdf({
+      userName,
+      startDate: sevenDaysAgo.toISOString().split('T')[0],
+      endDate: today.toISOString().split('T')[0],
+      stats,
+      transactions: weeklyTransactions.map((t) => ({
+        date: t.date,
+        description: t.description || t.category,
+        category: t.category || 'Other',
+        type: t.type,
+        amount: Number(t.amount),
+      })),
+      aiSynthesis: aiReview || undefined,
+    });
+  };
+
   return (
     <div className="flex h-full min-h-screen flex-col bg-zinc-950 text-zinc-100">
       {/* Header */}
-      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-zinc-800 bg-zinc-950/80 px-4 py-3 backdrop-blur-md sm:px-6">
+      <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 bg-zinc-950/80 px-4 py-3 backdrop-blur-md sm:px-6">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-500/20">
             <Award size={18} />
@@ -178,18 +335,31 @@ Format your review with clear markdown sections:
           </div>
         </div>
 
-        <button
-          onClick={generateAiSynthesis}
-          disabled={generatingAi}
-          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50"
-        >
-          {generatingAi ? (
-            <RefreshCw size={14} className="animate-spin" />
-          ) : (
-            <Sparkles size={14} />
-          )}
-          <span>{generatingAi ? 'Analyzing Week...' : 'Generate AI Weekly Review'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Download PDF Button */}
+          <button
+            onClick={handleDownloadPdf}
+            className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 py-2 text-xs font-semibold text-zinc-200 hover:border-zinc-600 hover:bg-zinc-800 hover:text-white transition shadow-sm"
+            title="Download executive review as PDF"
+          >
+            <Download size={14} className="text-blue-400" />
+            <span>Download PDF Report</span>
+          </button>
+
+          {/* AI Generator Button */}
+          <button
+            onClick={generateAiSynthesis}
+            disabled={generatingAi}
+            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50"
+          >
+            {generatingAi ? (
+              <RefreshCw size={14} className="animate-spin" />
+            ) : (
+              <Sparkles size={14} />
+            )}
+            <span>{generatingAi ? 'Analyzing Week...' : 'Generate AI Weekly Review'}</span>
+          </button>
+        </div>
       </header>
 
       {/* Main Content */}
@@ -258,20 +428,31 @@ Format your review with clear markdown sections:
             </div>
           </div>
 
-          {/* AI Review Output */}
+          {/* AI Review Output with Tables */}
           {aiReview && (
-            <div className="rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-950/30 via-zinc-900 to-purple-950/20 p-6 shadow-xl">
-              <div className="flex items-center gap-2 mb-4 text-indigo-400 font-semibold text-sm">
-                <Sparkles size={18} />
-                <span>AI Executive Coach Synthesis</span>
+            <div className="rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-950/30 via-zinc-900 to-purple-950/20 p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <div className="flex items-center gap-2 text-indigo-400 font-semibold text-sm">
+                  <Sparkles size={18} />
+                  <span>AI Executive Coach Synthesis</span>
+                </div>
+                <button
+                  onClick={handleDownloadPdf}
+                  className="flex items-center gap-1.5 rounded-lg border border-indigo-500/40 bg-indigo-600/20 px-3 py-1.5 text-xs font-medium text-indigo-300 hover:bg-indigo-600/30 transition"
+                >
+                  <Download size={14} />
+                  <span>Export Synthesis to PDF</span>
+                </button>
               </div>
-              <div className="prose prose-invert max-w-none text-sm leading-relaxed text-zinc-200 whitespace-pre-wrap">
-                {aiReview}
+
+              {/* Rendered Markdown with HTML Table styling */}
+              <div className="prose prose-invert max-w-none text-sm leading-relaxed text-zinc-200">
+                {renderMarkdownWithTables(aiReview)}
               </div>
             </div>
           )}
 
-          {/* Weekly Habits & Focus breakdown */}
+          {/* Weekly Ledger and Tables */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Financial Health Summary */}
             <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5">

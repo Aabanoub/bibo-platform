@@ -166,13 +166,14 @@ ${txList}
 ## Habits Completed
 ${habitList}
 
-Write a short motivational daily briefing (3-5 paragraphs). Include:
+Write a professional and motivational daily briefing (3-5 paragraphs). Include:
 1. A greeting
 2. Summary of accomplishments (tasks + habits)
 3. Financial overview if there were transactions
-4. An encouraging or actionable closing remark
+4. When relevant, include a structured Markdown summary table (e.g. | Activity / Item | Category / Time | Status |)
+5. An encouraging or actionable closing remark
 
-Keep it warm but concise.
+Keep it warm, structured, and concise.
 `.trim();
 
         let summary = '';
