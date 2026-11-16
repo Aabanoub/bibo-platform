@@ -75,11 +75,14 @@ Return ONLY a valid JSON object matching this schema without any markdown backti
   "amount": 25.50,
   "currency": "$",
   "date": "YYYY-MM-DD",
-  "category": "Food" | "Groceries" | "Transport" | "Utilities" | "Shopping" | "Health" | "Entertainment" | "Other",
+  "category": "Food" | "Transport" | "Shopping" | "Entertainment" | "Bills" | "Health" | "Education" | "Salary" | "Freelance" | "Other",
   "description": "Short description of items purchased",
   "tax": null or number
 }
-If any field cannot be found, make a reasonable estimate or leave it null (or today's date for date).
+CRITICAL RULES:
+- "amount" MUST be a pure positive number (float, e.g. 25.50, NEVER a string or including currency symbols like "$").
+- "date" MUST be in strict YYYY-MM-DD format. If no date is found or unclear, use today's date.
+If any field cannot be found, make a reasonable estimate or leave it null.
 `;
     } else {
       systemPrompt = `

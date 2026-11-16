@@ -81,6 +81,9 @@ export default function FinancePage() {
   // scanner
   const [scannerOpen, setScannerOpen] = useState(false);
 
+  // summary scope: 'all' (All-Time total balance) or 'month' (This Month's cash flow)
+  const [summaryScope, setSummaryScope] = useState<'all' | 'month'>('all');
+
   const handleSaveScannedTransaction = async (data: {
     amount: number;
     type: 'expense';
@@ -102,22 +105,32 @@ export default function FinancePage() {
       { onConflict: 'id' }
     );
 
+    const safeAmount = Math.abs(Number(data.amount)) || 0;
+    const safeDate =
+      data.date && /^\d{4}-\d{2}-\d{2}$/.test(data.date)
+        ? data.date
+        : new Date().toISOString().split('T')[0];
+
     const { data: newRow, error: insertErr } = await supabase
       .from('transactions')
       .insert({
         user_id: user.id,
-        amount: data.amount,
-        type: data.type,
-        category: data.category,
-        description: data.description,
-        date: data.date,
+        amount: safeAmount,
+        type: 'expense',
+        category: data.category || 'Other',
+        description: data.description || 'Receipt Expense',
+        date: safeDate,
       })
       .select()
       .single();
 
     if (insertErr) throw insertErr;
     if (newRow) {
-      setTransactions((prev) => [newRow as Transaction, ...prev]);
+      const parsed: Transaction = {
+        ...(newRow as Transaction),
+        amount: Number(newRow.amount) || safeAmount,
+      };
+      setTransactions((prev) => [parsed, ...prev]);
     }
   };
 
@@ -130,13 +143,17 @@ export default function FinancePage() {
         .select('*')
         .order('date', { ascending: false });
       if (err) throw err;
-      setTransactions((data as Transaction[]) ?? []);
+      const parsed = ((data as any[]) ?? []).map((t) => ({
+        ...t,
+        amount: Number(t.amount) || 0,
+      }));
+      setTransactions(parsed);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load transactions');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     fetchTransactions();
@@ -182,7 +199,11 @@ export default function FinancePage() {
         .select()
         .single();
       if (err) throw err;
-      setTransactions((prev) => [data as Transaction, ...prev]);
+      const parsed: Transaction = {
+        ...(data as Transaction),
+        amount: Number(data.amount) || amount,
+      };
+      setTransactions((prev) => [parsed, ...prev]);
       setFormAmount('');
       setFormDesc('');
       setFormDate(new Date().toISOString().split('T')[0]);
@@ -217,18 +238,35 @@ export default function FinancePage() {
     return true;
   });
 
-  // ---- monthly summary ----------------------------------------------------
+  // ---- summary calculations -----------------------------------------------
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const currentMonthName = now.toLocaleString('default', { month: 'long', year: 'numeric' });
 
-  const monthlyTransactions = transactions.filter((t) => t.date.startsWith(currentMonth));
-  const totalIncome = monthlyTransactions
+  // All-time totals (any transaction ever recorded)
+  const allTimeIncome = transactions
     .filter((t) => t.type === 'income')
-    .reduce((sum, t) => sum + t.amount, 0);
-  const totalExpenses = monthlyTransactions
+    .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const allTimeExpenses = transactions
     .filter((t) => t.type === 'expense')
-    .reduce((sum, t) => sum + t.amount, 0);
-  const netBalance = totalIncome - totalExpenses;
+    .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const allTimeNetBalance = allTimeIncome - allTimeExpenses;
+
+  // Monthly totals (current calendar month)
+  const monthlyTransactions = transactions.filter((t) => t.date && t.date.startsWith(currentMonth));
+  const monthlyIncome = monthlyTransactions
+    .filter((t) => t.type === 'income')
+    .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const monthlyExpenses = monthlyTransactions
+    .filter((t) => t.type === 'expense')
+    .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const monthlyNet = monthlyIncome - monthlyExpenses;
+
+  // Active view totals
+  const isAllTime = summaryScope === 'all';
+  const displayIncome = isAllTime ? allTimeIncome : monthlyIncome;
+  const displayExpenses = isAllTime ? allTimeExpenses : monthlyExpenses;
+  const displayNet = isAllTime ? allTimeNetBalance : monthlyNet;
 
   // ---- daily spending chart (current month) -------------------------------
   const dailySpending = useMemo(() => {
@@ -239,7 +277,7 @@ export default function FinancePage() {
       const dateStr = `${currentMonth}-${String(d).padStart(2, '0')}`;
       const dayTotal = monthlyTransactions
         .filter((t) => t.type === 'expense' && t.date === dateStr)
-        .reduce((sum, t) => sum + t.amount, 0);
+        .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
       spending.push({ day: d, amount: dayTotal });
     }
     return spending;
@@ -292,26 +330,92 @@ export default function FinancePage() {
           </div>
         )}
 
-        {/* Monthly Summary */}
+        {/* Financial Summary & Scope Toggle */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <div className="text-xs font-medium text-slate-400">
+            {isAllTime ? (
+              <span>Showing <strong>All-Time</strong> financial summary across all records</span>
+            ) : (
+              <span>Showing <strong>{currentMonthName}</strong> monthly cash flow</span>
+            )}
+          </div>
+          <div className="inline-flex self-start sm:self-auto items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
+            <button
+              type="button"
+              onClick={() => setSummaryScope('all')}
+              className={`px-3 py-1 rounded-lg font-medium transition ${
+                isAllTime
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              All Time
+            </button>
+            <button
+              type="button"
+              onClick={() => setSummaryScope('month')}
+              className={`px-3 py-1 rounded-lg font-medium transition ${
+                !isAllTime
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              This Month
+            </button>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-            <div className="flex items-center gap-2 text-sm text-slate-400 mb-1">
-              <TrendingUp className="w-4 h-4 text-emerald-400" /> Income
+            <div className="flex items-center justify-between mb-1">
+              <span className="flex items-center gap-2 text-sm text-slate-400">
+                <TrendingUp className="w-4 h-4 text-emerald-400" /> Income
+              </span>
+              <span className="text-[10px] uppercase font-semibold tracking-wider text-slate-500">
+                {isAllTime ? 'All-Time' : 'This Month'}
+              </span>
             </div>
-            <p className="text-2xl font-bold text-emerald-400">${totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+            <p className="text-2xl font-bold text-emerald-400">
+              ${displayIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <p className="text-[11px] text-slate-500 mt-1">
+              {isAllTime ? `Earned across all records` : `Earned in ${currentMonthName}`}
+            </p>
           </div>
+
           <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-            <div className="flex items-center gap-2 text-sm text-slate-400 mb-1">
-              <TrendingDown className="w-4 h-4 text-red-400" /> Expenses
+            <div className="flex items-center justify-between mb-1">
+              <span className="flex items-center gap-2 text-sm text-slate-400">
+                <TrendingDown className="w-4 h-4 text-red-400" /> Expenses
+              </span>
+              <span className="text-[10px] uppercase font-semibold tracking-wider text-slate-500">
+                {isAllTime ? 'All-Time' : 'This Month'}
+              </span>
             </div>
-            <p className="text-2xl font-bold text-red-400">${totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+            <p className="text-2xl font-bold text-red-400">
+              ${displayExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <p className="text-[11px] text-slate-500 mt-1">
+              {isAllTime ? `Spent across all records` : `Spent in ${currentMonthName}`}
+            </p>
           </div>
+
           <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-            <div className="flex items-center gap-2 text-sm text-slate-400 mb-1">
-              <DollarSign className="w-4 h-4 text-blue-400" /> Net Balance
+            <div className="flex items-center justify-between mb-1">
+              <span className="flex items-center gap-2 text-sm text-slate-400">
+                <DollarSign className="w-4 h-4 text-blue-400" /> Net Balance
+              </span>
+              <span className="text-[10px] uppercase font-semibold tracking-wider text-slate-500">
+                {isAllTime ? 'Total Balance' : 'Net Cash Flow'}
+              </span>
             </div>
-            <p className={`text-2xl font-bold ${netBalance >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {netBalance >= 0 ? '+' : '-'}${Math.abs(netBalance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            <p className={`text-2xl font-bold ${displayNet >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {displayNet >= 0 ? '+' : '-'}${Math.abs(displayNet).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <p className="text-[11px] text-slate-500 mt-1">
+              {isAllTime
+                ? `This month: ${monthlyNet >= 0 ? '+' : '-'}$${Math.abs(monthlyNet).toFixed(2)}`
+                : `All-time balance: ${allTimeNetBalance >= 0 ? '+' : '-'}$${Math.abs(allTimeNetBalance).toFixed(2)}`}
             </p>
           </div>
         </div>

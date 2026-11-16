@@ -8,8 +8,58 @@ interface ReceiptData {
   amount: number;
   currency: string;
   date: string;
+  originalReceiptDate?: string;
   category: string;
   description: string;
+}
+
+function parseCleanAmount(val: any): number {
+  if (typeof val === 'number') return isNaN(val) ? 0 : Math.abs(val);
+  if (!val) return 0;
+  let str = String(val).trim();
+  // Handle European comma decimals like "25,50"
+  if (/^\D*\d+,\d{2}\D*$/.test(str)) {
+    str = str.replace(',', '.');
+  }
+  const cleaned = str.replace(/[^0-9.-]/g, '');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : Math.abs(num);
+}
+
+function parseCleanDate(rawDate?: string): { finalDate: string; originalReceiptDate?: string } {
+  const todayStr = new Date().toISOString().split('T')[0];
+  if (!rawDate || typeof rawDate !== 'string') {
+    return { finalDate: todayStr };
+  }
+
+  const trimmed = rawDate.trim();
+  let candidate = '';
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    candidate = trimmed;
+  } else if (/^\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{4}$/.test(trimmed)) {
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      candidate = d.toISOString().split('T')[0];
+    }
+  } else {
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      candidate = d.toISOString().split('T')[0];
+    }
+  }
+
+  if (!candidate) {
+    return { finalDate: todayStr };
+  }
+
+  const currentMonthPrefix = todayStr.slice(0, 7);
+  const isDifferentMonth = !candidate.startsWith(currentMonthPrefix);
+
+  return {
+    finalDate: isDifferentMonth ? todayStr : candidate,
+    originalReceiptDate: isDifferentMonth ? candidate : undefined,
+  };
 }
 
 interface ReceiptScannerModalProps {
@@ -77,13 +127,17 @@ export default function ReceiptScannerModal({
       }
 
       const resJson = await res.json();
-      const extracted = resJson.data;
+      const extracted = resJson.data || {};
+
+      const dateInfo = parseCleanDate(extracted.date);
+      const parsedAmount = parseCleanAmount(extracted.amount);
 
       setScannedData({
         vendor: extracted.vendor || 'Unknown Merchant',
-        amount: Math.abs(parseFloat(extracted.amount) || 0),
+        amount: parsedAmount,
         currency: extracted.currency || '$',
-        date: extracted.date || new Date().toISOString().split('T')[0],
+        date: dateInfo.finalDate,
+        originalReceiptDate: dateInfo.originalReceiptDate,
         category: extracted.category || 'Food',
         description: extracted.description || extracted.vendor || 'Receipt Expense',
       });
@@ -97,14 +151,19 @@ export default function ReceiptScannerModal({
 
   const handleSave = async () => {
     if (!scannedData) return;
+    const finalAmount = Math.abs(Number(scannedData.amount)) || 0;
+    if (finalAmount <= 0) {
+      setError('Please specify a valid expense amount greater than 0.');
+      return;
+    }
     setIsSaving(true);
     try {
       await onSaveTransaction({
-        amount: scannedData.amount,
+        amount: finalAmount,
         type: 'expense',
-        category: scannedData.category,
+        category: scannedData.category || 'Other',
         description: `${scannedData.vendor} - ${scannedData.description}`,
-        date: scannedData.date,
+        date: scannedData.date || new Date().toISOString().split('T')[0],
       });
       onClose();
     } catch (err: any) {
@@ -253,7 +312,27 @@ export default function ReceiptScannerModal({
                   />
                 </div>
                 <div>
-                  <span className="text-zinc-500 block">Date:</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-500 block">Date:</span>
+                    {scannedData.originalReceiptDate && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const isUsingOriginal = scannedData.date === scannedData.originalReceiptDate;
+                          const today = new Date().toISOString().split('T')[0];
+                          setScannedData({
+                            ...scannedData,
+                            date: isUsingOriginal ? today : scannedData.originalReceiptDate!,
+                          });
+                        }}
+                        className="text-[10px] text-emerald-400 hover:text-emerald-300 underline"
+                      >
+                        {scannedData.date === scannedData.originalReceiptDate
+                          ? 'Set to Today'
+                          : `Use Receipt Date`}
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="date"
                     value={scannedData.date}
@@ -262,6 +341,11 @@ export default function ReceiptScannerModal({
                     }
                     className="w-full mt-0.5 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-100"
                   />
+                  {scannedData.originalReceiptDate && (
+                    <span className="text-[10px] text-zinc-500 block mt-0.5">
+                      Receipt date: {scannedData.originalReceiptDate}
+                    </span>
+                  )}
                 </div>
                 <div>
                   <span className="text-zinc-500 block">Amount:</span>
