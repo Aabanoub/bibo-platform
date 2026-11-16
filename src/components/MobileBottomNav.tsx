@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, StickyNote, CheckSquare, Calendar, MessageSquare } from 'lucide-react';
+import { Home, StickyNote, CheckSquare, Wallet, MessageSquare } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 
 export default function MobileBottomNav() {
@@ -15,7 +15,7 @@ export default function MobileBottomNav() {
     { label: 'Notes', href: '/notes', icon: StickyNote, isCenter: false },
     { label: 'Tasks', href: '/tasks', icon: CheckSquare, isCenter: false },
     { label: 'Home', href: '/', icon: Home, isCenter: true },
-    { label: 'Calendar', href: '/calendar', icon: Calendar, isCenter: false },
+    { label: 'Finance', href: '/finance', icon: Wallet, isCenter: false },
     { label: 'AI Chat', href: '/chat', icon: MessageSquare, isCenter: false },
   ];
 
@@ -61,7 +61,7 @@ export default function MobileBottomNav() {
           );
         }
 
-        // Side items (Notes, Tasks, Calendar, AI Chat)
+        // Side items (Notes, Tasks, Finance, AI Chat)
         return (
           <Link
             key={item.href}

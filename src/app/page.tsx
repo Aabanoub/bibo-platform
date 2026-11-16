@@ -13,7 +13,6 @@ import {
   Clock,
   Zap,
   ArrowRight,
-  Calendar,
   Flame,
   Award,
   QrCode,
@@ -326,7 +325,6 @@ export default function DashboardPage() {
   const quickActions = [
     { label: 'New Note', icon: <StickyNote size={18} />, href: '/notes?new=true', color: 'text-amber-400' },
     { label: 'Add Task', icon: <Plus size={18} />, href: '/tasks?new=true', color: 'text-blue-400' },
-    { label: 'Calendar', icon: <Calendar size={18} />, href: '/calendar', color: 'text-indigo-400' },
     { label: 'Focus Mode', icon: <Flame size={18} />, href: '/focus', color: 'text-rose-400' },
     { label: 'QR Studio', icon: <QrCode size={18} />, href: '/qr', color: 'text-cyan-400' },
     { label: 'Log Expense', icon: <Wallet size={18} />, href: '/finance?new=true', color: 'text-emerald-400' },
@@ -400,17 +398,17 @@ export default function DashboardPage() {
         </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Link
-            href="/calendar"
+            href="/chat"
             className="group relative overflow-hidden rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-950/40 to-slate-900 p-4 transition hover:border-indigo-500/40 hover:scale-[1.01]"
           >
             <div className="flex items-center gap-3 mb-2">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/20 text-indigo-400">
-                <Calendar size={18} />
+                <MessageSquare size={18} />
               </div>
-              <h3 className="font-semibold text-white text-sm">Smart Calendar</h3>
+              <h3 className="font-semibold text-white text-sm">AI Assistant</h3>
             </div>
             <p className="text-xs text-slate-400">
-              Tasks by due date, habit logs & Google / Samsung Calendar iCal sync.
+              Chat with your personal assistant powered by Gemini for insights & organization.
             </p>
           </Link>
 
