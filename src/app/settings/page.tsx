@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase';
 import ResetDataModal from '@/components/ResetDataModal';
+import { useTheme } from '@/context/ThemeContext';
 import {
   Settings,
   User,
@@ -16,10 +17,12 @@ import {
   Calendar,
   Lock,
   Sparkles,
+  Palette,
 } from 'lucide-react';
 
 export default function SettingsPage() {
   const supabase = createClient();
+  const { gender, setGender, isGirly } = useTheme();
 
   const [user, setUser] = useState<{
     id: string;
@@ -154,6 +157,69 @@ export default function SettingsPage() {
                 </button>
               </div>
             </form>
+          </div>
+
+          {/* Theme & Gender Preference Card */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 space-y-4">
+            <div className="flex items-center gap-2.5 pb-2 border-b border-zinc-800">
+              <Palette size={18} className={isGirly ? 'text-pink-400' : 'text-blue-400'} />
+              <h2 className="text-sm font-semibold text-white">Platform Theme & Gender Design</h2>
+            </div>
+            <p className="text-xs text-zinc-400">
+              Personalize your platform&apos;s colors and visual aesthetic based on your preference.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setGender('female')}
+                className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-all ${
+                  gender === 'female'
+                    ? 'border-pink-500 bg-pink-500/20 text-pink-200 shadow-lg shadow-pink-500/20 ring-2 ring-pink-500/40'
+                    : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-pink-500/50 hover:text-pink-300'
+                }`}
+              >
+                <span className="text-3xl">🌸</span>
+                <div>
+                  <div className="text-sm font-bold text-white flex items-center gap-2">
+                    Girl / Female
+                    {gender === 'female' && (
+                      <span className="rounded-full bg-pink-500/30 px-2 py-0.5 text-[10px] font-semibold text-pink-300">
+                        ACTIVE
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-pink-300/80 mt-0.5">
+                    Girly state: Soft rose, pink gradients, plum night & aesthetic accents
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setGender('male')}
+                className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-all ${
+                  gender === 'male' || gender === 'default'
+                    ? 'border-blue-500 bg-blue-500/20 text-blue-200 shadow-lg shadow-blue-500/20 ring-2 ring-blue-500/40'
+                    : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-blue-500/50 hover:text-blue-300'
+                }`}
+              >
+                <span className="text-3xl">⚡</span>
+                <div>
+                  <div className="text-sm font-bold text-white flex items-center gap-2">
+                    Boy / Male
+                    {(gender === 'male' || gender === 'default') && (
+                      <span className="rounded-full bg-blue-500/30 px-2 py-0.5 text-[10px] font-semibold text-blue-300">
+                        ACTIVE
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-blue-300/80 mt-0.5">
+                    Tech state: Electric blue, cyan gradients & deep slate aesthetic
+                  </div>
+                </div>
+              </button>
+            </div>
           </div>
 
           {/* AI Engines & System Status */}

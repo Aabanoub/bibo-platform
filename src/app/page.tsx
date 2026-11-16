@@ -350,7 +350,7 @@ export default function DashboardPage() {
       <header className="pt-2">
         <h1 className="text-2xl font-bold text-white sm:text-3xl">
           {getGreeting()},{' '}
-          <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+          <span className="gradient-text">
             {userName}
           </span>
         </h1>

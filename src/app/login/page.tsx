@@ -26,6 +26,7 @@ export default function LoginPage() {
 
   const [mode, setMode] = useState<AuthMode>('signin');
   const [fullName, setFullName] = useState('');
+  const [gender, setGender] = useState<'female' | 'male'>('male');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -36,6 +37,18 @@ export default function LoginPage() {
     text: string;
     canResend?: boolean;
   } | null>(null);
+
+  const handleGenderSelect = (val: 'female' | 'male') => {
+    setGender(val);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bibo_user_gender', val);
+      if (val === 'female') {
+        document.documentElement.classList.add('theme-female');
+      } else {
+        document.documentElement.classList.remove('theme-female');
+      }
+    }
+  };
 
   // Check URL parameters and auth state on mount
   useEffect(() => {
@@ -135,9 +148,16 @@ export default function LoginPage() {
             data: {
               full_name: fullName.trim() || cleanEmail.split('@')[0],
               name: fullName.trim() || cleanEmail.split('@')[0],
+              gender,
             },
           },
         });
+
+        if (!error) {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('bibo_user_gender', gender);
+          }
+        }
 
         if (error) {
           if (error.message.toLowerCase().includes('rate limit')) {
@@ -258,25 +278,45 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-[#0f172a] px-4 py-8">
       {/* Background ambient lighting */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-blue-500/10 blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-indigo-500/10 blur-3xl" />
+        <div
+          className={`absolute -top-40 -right-40 h-80 w-80 rounded-full blur-3xl transition-colors duration-500 ${
+            gender === 'female' ? 'bg-pink-500/20' : 'bg-blue-500/10'
+          }`}
+        />
+        <div
+          className={`absolute -bottom-40 -left-40 h-80 w-80 rounded-full blur-3xl transition-colors duration-500 ${
+            gender === 'female' ? 'bg-rose-500/20' : 'bg-indigo-500/10'
+          }`}
+        />
       </div>
 
       <div className="relative w-full max-w-md animate-fade-in">
         {/* Logo & Title */}
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 shadow-lg shadow-blue-500/25">
+          <div
+            className={`mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl shadow-lg transition-all duration-300 ${
+              gender === 'female'
+                ? 'bg-gradient-to-br from-pink-500 to-rose-500 shadow-pink-500/30'
+                : 'bg-gradient-to-br from-blue-500 to-cyan-500 shadow-blue-500/25'
+            }`}
+          >
             <Sparkles size={28} className="text-white" />
           </div>
           <h1 className="text-2xl font-bold text-white">
             Welcome to{' '}
-            <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+            <span
+              className={`bg-clip-text text-transparent bg-gradient-to-r transition-all duration-300 ${
+                gender === 'female'
+                  ? 'from-pink-400 via-rose-300 to-purple-400'
+                  : 'from-blue-400 to-cyan-400'
+              }`}
+            >
               AbanoubApp
             </span>
           </h1>
           <p className="mt-1 text-sm text-slate-400">
             {mode === 'signup'
-              ? 'Create a new account to get started'
+              ? 'Create a new account with your preferred styling'
               : mode === 'forgot_password'
               ? 'Reset your account password'
               : 'Sign in to your personal AI platform'}
@@ -361,26 +401,71 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Full Name field (Only in Sign Up) */}
             {mode === 'signup' && (
-              <div>
-                <label htmlFor="fullName" className="mb-1.5 block text-sm font-medium text-slate-300">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <User
-                    size={16}
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500"
-                  />
-                  <input
-                    id="fullName"
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Abanoub"
-                    autoComplete="name"
-                    className="input pl-10"
-                  />
+              <>
+                <div>
+                  <label htmlFor="fullName" className="mb-1.5 block text-sm font-medium text-slate-300">
+                    Full Name
+                  </label>
+                  <div className="relative">
+                    <User
+                      size={16}
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500"
+                    />
+                    <input
+                      id="fullName"
+                      type="text"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="Abanoub"
+                      autoComplete="name"
+                      className="input pl-10"
+                    />
+                  </div>
                 </div>
-              </div>
+
+                {/* Gender / Theme Selection */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                    Your Gender / Theme{' '}
+                    <span className="text-xs text-slate-400 font-normal">
+                      (Sets colors & design)
+                    </span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleGenderSelect('female')}
+                      className={`flex items-center gap-2.5 rounded-xl border p-3 text-left transition-all ${
+                        gender === 'female'
+                          ? 'border-pink-500 bg-pink-500/20 text-pink-200 shadow-lg shadow-pink-500/25 ring-2 ring-pink-500/40'
+                          : 'border-slate-700 bg-slate-900/60 text-slate-400 hover:border-pink-500/50 hover:text-pink-300'
+                      }`}
+                    >
+                      <span className="text-2xl">🌸</span>
+                      <div>
+                        <div className="text-xs font-bold text-white">Girl / Female</div>
+                        <div className="text-[10px] text-pink-300/80">Soft Pink & Rose state</div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleGenderSelect('male')}
+                      className={`flex items-center gap-2.5 rounded-xl border p-3 text-left transition-all ${
+                        gender === 'male'
+                          ? 'border-blue-500 bg-blue-500/20 text-blue-200 shadow-lg shadow-blue-500/25 ring-2 ring-blue-500/40'
+                          : 'border-slate-700 bg-slate-900/60 text-slate-400 hover:border-blue-500/50 hover:text-blue-300'
+                      }`}
+                    >
+                      <span className="text-2xl">⚡</span>
+                      <div>
+                        <div className="text-xs font-bold text-white">Boy / Male</div>
+                        <div className="text-[10px] text-blue-300/80">Electric Blue & Slate</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
 
             {/* Email field */}

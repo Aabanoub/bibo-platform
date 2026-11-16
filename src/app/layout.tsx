@@ -4,6 +4,7 @@ import './globals.css';
 import Sidebar from '@/components/Sidebar';
 import MobileBottomNav from '@/components/MobileBottomNav';
 import PwaRegister from '@/components/PwaRegister';
+import { ThemeProvider } from '@/context/ThemeContext';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -39,18 +40,27 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} dark`}>
+    <html lang="en" className={`${inter.variable} dark`} suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var g=localStorage.getItem('bibo_user_gender');if(g==='female'){document.documentElement.classList.add('theme-female');document.documentElement.setAttribute('data-theme','female');}}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body className="min-h-screen bg-[#0f172a] font-sans text-slate-200 antialiased">
         <PwaRegister />
-        <div className="flex h-screen overflow-hidden flex-col lg:flex-row">
-          <Sidebar />
-          <main className="flex-1 overflow-y-auto pb-20 lg:pb-0">
-            <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-              {children}
-            </div>
-          </main>
-        </div>
-        <MobileBottomNav />
+        <ThemeProvider>
+          <div className="flex h-screen overflow-hidden flex-col lg:flex-row">
+            <Sidebar />
+            <main className="flex-1 overflow-y-auto pb-20 lg:pb-0">
+              <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
+                {children}
+              </div>
+            </main>
+          </div>
+          <MobileBottomNav />
+        </ThemeProvider>
       </body>
     </html>
   );

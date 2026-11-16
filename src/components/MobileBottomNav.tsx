@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LayoutDashboard, StickyNote, CheckSquare, Calendar, MessageSquare } from 'lucide-react';
+import { useTheme } from '@/context/ThemeContext';
 
 export default function MobileBottomNav() {
   const pathname = usePathname();
+  const { isGirly } = useTheme();
 
   if (pathname === '/login') return null;
 
@@ -28,11 +30,22 @@ export default function MobileBottomNav() {
             href={item.href}
             className={`flex flex-col items-center justify-center gap-1 py-1 px-3 text-[11px] font-medium transition ${
               isActive
-                ? 'text-blue-400 font-semibold scale-105'
+                ? isGirly
+                  ? 'text-pink-400 font-semibold scale-105'
+                  : 'text-blue-400 font-semibold scale-105'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Icon size={19} className={isActive ? 'text-blue-400' : 'text-slate-400'} />
+            <Icon
+              size={19}
+              className={
+                isActive
+                  ? isGirly
+                    ? 'text-pink-400'
+                    : 'text-blue-400'
+                  : 'text-slate-400'
+              }
+            />
             <span>{item.label}</span>
           </Link>
         );

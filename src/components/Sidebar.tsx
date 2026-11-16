@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import NotificationBell from '@/components/NotificationBell';
+import { useTheme } from '@/context/ThemeContext';
 
 interface NavItem {
   label: string;
@@ -48,6 +49,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
+  const { isGirly } = useTheme();
 
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -114,16 +116,34 @@ export default function Sidebar() {
       <div className="flex h-16 items-center justify-between px-4 border-b border-slate-800">
         {!collapsed && (
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500">
+            <div
+              className={`flex h-8 w-8 items-center justify-center rounded-lg shadow-md transition-all ${
+                isGirly
+                  ? 'bg-gradient-to-br from-pink-500 to-rose-500 shadow-pink-500/20'
+                  : 'bg-gradient-to-br from-blue-500 to-cyan-500 shadow-blue-500/20'
+              }`}
+            >
               <Sparkles size={18} className="text-white" />
             </div>
-            <span className="text-lg font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+            <span
+              className={`text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r transition-all ${
+                isGirly
+                  ? 'from-pink-400 via-rose-300 to-purple-400'
+                  : 'from-blue-400 to-cyan-400'
+              }`}
+            >
               AbanoubApp
             </span>
           </Link>
         )}
         {collapsed && (
-          <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500">
+          <div
+            className={`mx-auto flex h-8 w-8 items-center justify-center rounded-lg shadow-md transition-all ${
+              isGirly
+                ? 'bg-gradient-to-br from-pink-500 to-rose-500 shadow-pink-500/20'
+                : 'bg-gradient-to-br from-blue-500 to-cyan-500 shadow-blue-500/20'
+            }`}
+          >
             <Sparkles size={18} className="text-white" />
           </div>
         )}
@@ -149,14 +169,20 @@ export default function Sidebar() {
               href={item.href}
               className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 ${
                 isActive
-                  ? 'bg-blue-600/15 text-blue-400 shadow-sm shadow-blue-500/5'
+                  ? isGirly
+                    ? 'bg-pink-500/15 text-pink-400 shadow-sm shadow-pink-500/5 font-semibold'
+                    : 'bg-blue-600/15 text-blue-400 shadow-sm shadow-blue-500/5'
                   : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
               }`}
               title={collapsed ? item.label : undefined}
             >
               <span
                 className={`flex-shrink-0 ${
-                  isActive ? 'text-blue-400' : 'text-slate-500 group-hover:text-slate-300'
+                  isActive
+                    ? isGirly
+                      ? 'text-pink-400'
+                      : 'text-blue-400'
+                    : 'text-slate-500 group-hover:text-slate-300'
                 }`}
               >
                 {item.icon}
@@ -237,10 +263,22 @@ export default function Sidebar() {
             <Menu size={20} />
           </button>
           <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 text-white shadow-sm">
+            <div
+              className={`flex h-7 w-7 items-center justify-center rounded-lg text-white shadow-sm transition-all ${
+                isGirly
+                  ? 'bg-gradient-to-br from-pink-500 to-rose-500 shadow-pink-500/20'
+                  : 'bg-gradient-to-br from-blue-500 to-cyan-500 shadow-blue-500/20'
+              }`}
+            >
               <Sparkles size={14} />
             </div>
-            <span className="font-bold text-sm bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+            <span
+              className={`font-bold text-sm bg-clip-text text-transparent bg-gradient-to-r transition-all ${
+                isGirly
+                  ? 'from-pink-400 via-rose-300 to-purple-400'
+                  : 'from-blue-400 to-cyan-400'
+              }`}
+            >
               AbanoubApp
             </span>
           </Link>
