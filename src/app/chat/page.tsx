@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, FormEvent } from 'react';
 import { createClient } from '@/lib/supabase';
+import { fetchUserPlatformData } from '@/lib/user-context';
 import { ChatMessage } from '@/types';
 import {
   Send,
@@ -298,11 +299,32 @@ export default function ChatPage() {
           content: m.content,
         }));
 
+        // 2.5 Fetch real-time user platform context (finances, tasks, notes, habits)
+        let userContext = undefined;
+        let userName = undefined;
+        try {
+          const { data: userData } = await supabase.auth.getUser();
+          if (userData?.user) {
+            userContext = await fetchUserPlatformData(supabase, userData.user.id);
+            userName =
+              userData.user.user_metadata?.full_name ||
+              userData.user.user_metadata?.name ||
+              userData.user.email?.split('@')[0];
+          }
+        } catch (ctxErr) {
+          console.warn('Could not fetch userContext client-side:', ctxErr);
+        }
+
         // 3. Call AI API
         const res = await fetch('/api/ai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: recentMessages, persona }),
+          body: JSON.stringify({
+            messages: recentMessages,
+            persona,
+            userContext,
+            userName,
+          }),
         });
 
         if (!res.ok) {

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI, Content } from '@google/generative-ai';
+import { createServerClient } from '@/lib/supabase-server';
+import { fetchUserPlatformData, formatContextPrompt, UserPlatformData } from '@/lib/user-context';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -9,7 +11,7 @@ export const maxDuration = 60;
 // ---------------------------------------------------------------------------
 const PERSONA_PROMPTS: Record<string, string> = {
   'executive-assistant':
-    "You are Abanoub's personal executive AI assistant. You help manage his day, prioritize tasks, draft messages, and think strategically. Be concise and action-oriented.",
+    "You are Abanoub's personal executive AI assistant. You help manage his day, prioritize tasks, draft messages, and think strategically. Be concise, intelligent, and action-oriented.",
   'code-reviewer':
     'You are a senior software engineer helping Abanoub review code. Be thorough, point out bugs, suggest improvements, and explain your reasoning.',
   'creative-brainstormer':
@@ -153,14 +155,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let body: { messages?: { role: string; content: string }[]; persona?: string };
+    let body: {
+      messages?: { role: string; content: string }[];
+      persona?: string;
+      userContext?: UserPlatformData;
+      userName?: string;
+    };
+
     try {
       body = await req.json();
     } catch {
       return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 });
     }
 
-    const { messages, persona } = body;
+    const { messages, persona, userContext, userName } = body;
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
@@ -182,19 +190,48 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const systemPrompt =
+    const basePrompt =
       PERSONA_PROMPTS[persona ?? DEFAULT_PERSONA] ?? PERSONA_PROMPTS[DEFAULT_PERSONA];
+
+    // ---- Assemble Live User Context from Database ----
+    let liveContextPrompt = '';
+
+    if (userContext) {
+      liveContextPrompt = formatContextPrompt(userContext, userName);
+    } else {
+      try {
+        const supabase = await createServerClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (user) {
+          const platformData = await fetchUserPlatformData(supabase as any, user.id);
+          const resolvedName =
+            userName ||
+            user.user_metadata?.full_name ||
+            user.user_metadata?.name ||
+            user.email?.split('@')[0] ||
+            'User';
+          liveContextPrompt = formatContextPrompt(platformData, resolvedName);
+        }
+      } catch (err) {
+        console.warn('Could not load user platform context from cookies:', err);
+      }
+    }
+
+    const fullSystemPrompt = `${basePrompt}\n\n${liveContextPrompt}`.trim();
 
     let reply: string | null = null;
 
-    // 1. Try Groq first (Ultra-Fast 500ms responses)
+    // 1. Try Groq first (Ultra-Fast ~500ms response)
     if (groqKey) {
-      reply = await tryCallGroq(groqKey, systemPrompt, messages);
+      reply = await tryCallGroq(groqKey, fullSystemPrompt, messages);
     }
 
-    // 2. Fall back to Gemini if Groq was unavailable or not set
+    // 2. Fall back to Gemini if Groq was unavailable
     if (!reply && geminiKey) {
-      reply = await tryCallGemini(geminiKey, systemPrompt, messages);
+      reply = await tryCallGemini(geminiKey, fullSystemPrompt, messages);
     }
 
     if (!reply) {
