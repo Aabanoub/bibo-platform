@@ -20,6 +20,12 @@ export interface Profile {
   id: string;
   full_name: string | null;
   avatar_url: string | null;
+  gender?: 'female' | 'male' | 'default';
+  is_locked?: boolean;
+  focus_duration?: number;
+  short_break_duration?: number;
+  long_break_duration?: number;
+  nav_slots?: string[];
   created_at: string;
   updated_at: string;
 }
@@ -54,6 +60,7 @@ export interface Transaction {
   type: TransactionType;
   category: string | null;
   description: string | null;
+  receipt_url?: string | null;
   date: string;
   created_at: string;
 }
@@ -115,8 +122,13 @@ export interface PushSubscription {
 export interface DailySummary {
   id: string;
   user_id: string;
-  summary_date: string;
-  content: string | null;
+  date?: string;
+  summary_date?: string;
+  summary?: string | null;
+  content?: string | null;
+  tasks_completed?: number;
+  transactions_count?: number;
+  habits_completed?: number;
   created_at: string;
 }
 

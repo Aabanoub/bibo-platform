@@ -67,9 +67,10 @@ export async function POST(req: NextRequest) {
     // 5. Chat messages
     await supabase.from('chat_messages').delete().eq('user_id', user.id);
 
-    // 6. Notifications & Summaries
+    // 6. Notifications, Summaries & Countdowns
     await supabase.from('daily_summaries').delete().eq('user_id', user.id);
     await supabase.from('notifications').delete().eq('user_id', user.id);
+    await supabase.from('countdown_events').delete().eq('user_id', user.id);
 
     return NextResponse.json({
       success: true,

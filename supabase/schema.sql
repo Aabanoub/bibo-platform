@@ -43,11 +43,17 @@ END $$;
 
 -- 3.1  profiles
 CREATE TABLE IF NOT EXISTS profiles (
-    id         UUID PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
-    full_name  TEXT,
-    avatar_url TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                    UUID PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
+    full_name             TEXT,
+    avatar_url            TEXT,
+    gender                TEXT NOT NULL DEFAULT 'default',
+    is_locked             BOOLEAN NOT NULL DEFAULT false,
+    focus_duration        INT NOT NULL DEFAULT 25,
+    short_break_duration  INT NOT NULL DEFAULT 5,
+    long_break_duration   INT NOT NULL DEFAULT 15,
+    nav_slots             TEXT[] NOT NULL DEFAULT '{"notes", "tasks", "finance", "chat"}',
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- 3.2  notes
@@ -83,6 +89,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     type        transaction_type NOT NULL,
     category    TEXT,
     description TEXT,
+    receipt_url TEXT,
     date        DATE NOT NULL DEFAULT CURRENT_DATE,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -141,12 +148,17 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 
 -- 3.10 daily_summaries
 CREATE TABLE IF NOT EXISTS daily_summaries (
-    id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id      UUID NOT NULL DEFAULT auth.uid() REFERENCES auth.users (id) ON DELETE CASCADE,
-    summary_date DATE NOT NULL,
-    content      TEXT,
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (user_id, summary_date)
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id             UUID NOT NULL DEFAULT auth.uid() REFERENCES auth.users (id) ON DELETE CASCADE,
+    date                DATE NOT NULL DEFAULT CURRENT_DATE,
+    summary_date        DATE,
+    summary             TEXT,
+    content             TEXT,
+    tasks_completed     INT NOT NULL DEFAULT 0,
+    transactions_count  INT NOT NULL DEFAULT 0,
+    habits_completed    INT NOT NULL DEFAULT 0,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (user_id, date)
 );
 
 -- 3.11 countdown_events
@@ -322,14 +334,23 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-    INSERT INTO public.profiles (id, full_name, avatar_url)
+    INSERT INTO public.profiles (
+        id,
+        full_name,
+        avatar_url,
+        gender,
+        is_locked
+    )
     VALUES (
         NEW.id,
         COALESCE(NEW.raw_user_meta_data ->> 'full_name', NEW.email),
-        COALESCE(NEW.raw_user_meta_data ->> 'avatar_url', '')
+        COALESCE(NEW.raw_user_meta_data ->> 'avatar_url', ''),
+        COALESCE(NEW.raw_user_meta_data ->> 'gender', 'default'),
+        COALESCE((NEW.raw_user_meta_data ->> 'is_locked')::boolean, false)
     )
     ON CONFLICT (id) DO UPDATE SET
-        full_name = EXCLUDED.full_name;
+        full_name = EXCLUDED.full_name,
+        gender = COALESCE(NULLIF(EXCLUDED.gender, 'default'), profiles.gender);
     RETURN NEW;
 END;
 $$;
@@ -391,3 +412,21 @@ DO $$ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE countdown_events;
 EXCEPTION WHEN OTHERS THEN null;
 END $$;
+
+-- ============================================================================
+-- 9. Idempotent Schema Migrations (Safe for existing databases)
+-- ============================================================================
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS gender TEXT NOT NULL DEFAULT 'default';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_locked BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS focus_duration INT NOT NULL DEFAULT 25;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS short_break_duration INT NOT NULL DEFAULT 5;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS long_break_duration INT NOT NULL DEFAULT 15;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS nav_slots TEXT[] NOT NULL DEFAULT '{"notes", "tasks", "finance", "chat"}';
+
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS receipt_url TEXT;
+
+ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS date DATE NOT NULL DEFAULT CURRENT_DATE;
+ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS summary TEXT;
+ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS tasks_completed INT NOT NULL DEFAULT 0;
+ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS transactions_count INT NOT NULL DEFAULT 0;
+ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS habits_completed INT NOT NULL DEFAULT 0;
