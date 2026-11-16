@@ -2,21 +2,28 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, StickyNote, CheckSquare, Wallet, MessageSquare } from 'lucide-react';
+import { Home } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
+import { useNavigation, NAV_OPTIONS_MAP } from '@/context/NavigationContext';
 
 export default function MobileBottomNav() {
   const pathname = usePathname();
   const { isGirly } = useTheme();
+  const { slots } = useNavigation();
 
   if (pathname === '/login' || pathname === '/maintenance') return null;
 
+  const opt1 = NAV_OPTIONS_MAP[slots[0]] || NAV_OPTIONS_MAP.notes;
+  const opt2 = NAV_OPTIONS_MAP[slots[1]] || NAV_OPTIONS_MAP.tasks;
+  const opt3 = NAV_OPTIONS_MAP[slots[2]] || NAV_OPTIONS_MAP.finance;
+  const opt4 = NAV_OPTIONS_MAP[slots[3]] || NAV_OPTIONS_MAP.chat;
+
   const items = [
-    { label: 'Notes', href: '/notes', icon: StickyNote, isCenter: false },
-    { label: 'Tasks', href: '/tasks', icon: CheckSquare, isCenter: false },
+    { label: opt1.label, href: opt1.href, icon: opt1.icon, isCenter: false },
+    { label: opt2.label, href: opt2.href, icon: opt2.icon, isCenter: false },
     { label: 'Home', href: '/', icon: Home, isCenter: true },
-    { label: 'Finance', href: '/finance', icon: Wallet, isCenter: false },
-    { label: 'AI Chat', href: '/chat', icon: MessageSquare, isCenter: false },
+    { label: opt3.label, href: opt3.href, icon: opt3.icon, isCenter: false },
+    { label: opt4.label, href: opt4.href, icon: opt4.icon, isCenter: false },
   ];
 
   return (

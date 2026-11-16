@@ -18,11 +18,16 @@ import {
   Lock,
   Sparkles,
   Palette,
+  Smartphone,
+  RotateCcw,
+  Home,
 } from 'lucide-react';
+import { useNavigation, AVAILABLE_NAV_OPTIONS, NAV_OPTIONS_MAP } from '@/context/NavigationContext';
 
 export default function SettingsPage() {
   const supabase = createClient();
   const { gender, setGender, isGirly } = useTheme();
+  const { slots, updateSlot, resetSlots } = useNavigation();
 
   const [user, setUser] = useState<{
     id: string;
@@ -219,6 +224,180 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </button>
+            </div>
+          </div>
+
+          {/* Mobile Bottom Navigation Bar Customization */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-zinc-800">
+              <div className="flex items-center gap-2.5">
+                <Smartphone size={18} className="text-emerald-400" />
+                <h2 className="text-sm font-semibold text-white">Mobile Bottom Navigation Bar</h2>
+              </div>
+              <button
+                type="button"
+                onClick={resetSlots}
+                className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition"
+              >
+                <RotateCcw size={13} />
+                <span>Reset to Defaults</span>
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Personalize the 4 shortcuts on your mobile navigation bar. The <strong>Home</strong> button is elevated and permanently anchored in the center for quick one-thumb reachability.
+            </p>
+
+            {/* Interactive Preview of Bottom Bar Layout */}
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-3 text-center">
+                Live Bottom Bar Preview
+              </div>
+              <div className="grid grid-cols-5 gap-2 items-end max-w-md mx-auto">
+                {/* Slot 1 */}
+                <div className="flex flex-col items-center gap-1 p-2 rounded-xl border border-slate-800 bg-slate-900 text-center">
+                  {(() => {
+                    const OptIcon = NAV_OPTIONS_MAP[slots[0]]?.icon;
+                    return OptIcon ? <OptIcon size={18} className="text-blue-400" /> : null;
+                  })()}
+                  <span className="text-[10px] font-medium text-slate-300 truncate max-w-full">
+                    {NAV_OPTIONS_MAP[slots[0]]?.label}
+                  </span>
+                  <span className="text-[8px] text-slate-500 uppercase">Slot 1</span>
+                </div>
+
+                {/* Slot 2 */}
+                <div className="flex flex-col items-center gap-1 p-2 rounded-xl border border-slate-800 bg-slate-900 text-center">
+                  {(() => {
+                    const OptIcon = NAV_OPTIONS_MAP[slots[1]]?.icon;
+                    return OptIcon ? <OptIcon size={18} className="text-blue-400" /> : null;
+                  })()}
+                  <span className="text-[10px] font-medium text-slate-300 truncate max-w-full">
+                    {NAV_OPTIONS_MAP[slots[1]]?.label}
+                  </span>
+                  <span className="text-[8px] text-slate-500 uppercase">Slot 2</span>
+                </div>
+
+                {/* Center Home - Permanently Locked */}
+                <div className="flex flex-col items-center gap-1 p-2 -mt-3 rounded-2xl border-2 border-emerald-500/40 bg-gradient-to-tr from-emerald-600/30 to-blue-600/20 text-center shadow-lg shadow-emerald-500/10">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-slate-950 font-bold shadow-md">
+                    <Home size={18} />
+                  </div>
+                  <span className="text-[10px] font-bold text-emerald-400">Home</span>
+                  <span className="text-[8px] font-semibold text-emerald-300/70 uppercase">LOCKED</span>
+                </div>
+
+                {/* Slot 3 */}
+                <div className="flex flex-col items-center gap-1 p-2 rounded-xl border border-slate-800 bg-slate-900 text-center">
+                  {(() => {
+                    const OptIcon = NAV_OPTIONS_MAP[slots[2]]?.icon;
+                    return OptIcon ? <OptIcon size={18} className="text-blue-400" /> : null;
+                  })()}
+                  <span className="text-[10px] font-medium text-slate-300 truncate max-w-full">
+                    {NAV_OPTIONS_MAP[slots[2]]?.label}
+                  </span>
+                  <span className="text-[8px] text-slate-500 uppercase">Slot 3</span>
+                </div>
+
+                {/* Slot 4 */}
+                <div className="flex flex-col items-center gap-1 p-2 rounded-xl border border-slate-800 bg-slate-900 text-center">
+                  {(() => {
+                    const OptIcon = NAV_OPTIONS_MAP[slots[3]]?.icon;
+                    return OptIcon ? <OptIcon size={18} className="text-blue-400" /> : null;
+                  })()}
+                  <span className="text-[10px] font-medium text-slate-300 truncate max-w-full">
+                    {NAV_OPTIONS_MAP[slots[3]]?.label}
+                  </span>
+                  <span className="text-[8px] text-slate-500 uppercase">Slot 4</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Slot Selectors */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+              {/* Slot 1 Selection */}
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-zinc-300">
+                    Slot 1 (Far Left):
+                  </label>
+                  <span className="text-[10px] text-zinc-500">Left Position 1</span>
+                </div>
+                <select
+                  value={slots[0]}
+                  onChange={(e) => updateSlot(0, e.target.value)}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-emerald-500"
+                >
+                  {AVAILABLE_NAV_OPTIONS.map((opt) => (
+                    <option key={`slot0-${opt.id}`} value={opt.id}>
+                      {opt.label} ({opt.description})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Slot 2 Selection */}
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-zinc-300">
+                    Slot 2 (Near Left):
+                  </label>
+                  <span className="text-[10px] text-zinc-500">Left Position 2</span>
+                </div>
+                <select
+                  value={slots[1]}
+                  onChange={(e) => updateSlot(1, e.target.value)}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-emerald-500"
+                >
+                  {AVAILABLE_NAV_OPTIONS.map((opt) => (
+                    <option key={`slot1-${opt.id}`} value={opt.id}>
+                      {opt.label} ({opt.description})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Slot 3 Selection */}
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-zinc-300">
+                    Slot 3 (Near Right):
+                  </label>
+                  <span className="text-[10px] text-zinc-500">Right Position 1</span>
+                </div>
+                <select
+                  value={slots[2]}
+                  onChange={(e) => updateSlot(2, e.target.value)}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-emerald-500"
+                >
+                  {AVAILABLE_NAV_OPTIONS.map((opt) => (
+                    <option key={`slot2-${opt.id}`} value={opt.id}>
+                      {opt.label} ({opt.description})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Slot 4 Selection */}
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-zinc-300">
+                    Slot 4 (Far Right):
+                  </label>
+                  <span className="text-[10px] text-zinc-500">Right Position 2</span>
+                </div>
+                <select
+                  value={slots[3]}
+                  onChange={(e) => updateSlot(3, e.target.value)}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-emerald-500"
+                >
+                  {AVAILABLE_NAV_OPTIONS.map((opt) => (
+                    <option key={`slot3-${opt.id}`} value={opt.id}>
+                      {opt.label} ({opt.description})
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
