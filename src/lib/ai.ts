@@ -71,28 +71,15 @@ export async function generateAIResponse(
  * @returns     A Markdown-formatted daily summary string.
  */
 export async function generateDailySummary(data: DailySummaryData): Promise<string> {
-  const apiKey =
+  const groqKey = process.env.GROQ_API_KEY;
+  const geminiKey =
     process.env.GEMINI_API_KEY ||
     process.env.GOOGLE_AI_API_KEY ||
     process.env.GOOGLE_GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('Gemini API key environment variable is not set.');
+
+  if (!groqKey && !geminiKey) {
+    throw new Error('Neither GROQ_API_KEY nor GEMINI_API_KEY is configured.');
   }
-
-  const candidateModels = Array.from(
-    new Set(
-      [
-        process.env.GEMINI_MODEL,
-        'gemini-flash-lite-latest',
-        'gemini-3.1-flash-lite',
-        'gemini-3.5-flash-lite',
-        'gemini-3.8-flash',
-        'gemini-flash-latest',
-      ].filter(Boolean) as string[]
-    )
-  );
-
-  const genAI = new GoogleGenerativeAI(apiKey);
 
   const dateStr = data.date ?? new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -151,18 +138,55 @@ Keep the tone warm, supportive, and actionable.
 ${sections.join('\n\n')}
 --- End ---`;
 
-  let lastError: any = null;
-  for (const modelToTry of candidateModels) {
+  // 1. Try Groq
+  if (groqKey) {
     try {
-      const model = genAI.getGenerativeModel({ model: modelToTry });
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
-      if (text) return text;
-    } catch (err: any) {
-      lastError = err;
-      await new Promise((resolve) => setTimeout(resolve, 400));
-    }
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${groqKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'openai/gpt-oss-120b',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.7,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.choices?.[0]?.message?.content?.trim();
+        if (text) return text;
+      }
+    } catch {}
   }
 
-  throw lastError || new Error('Failed to generate daily summary from all candidate models.');
+  // 2. Try Gemini
+  if (geminiKey) {
+    const candidateModels = [
+      'gemini-flash-lite-latest',
+      'gemini-3.1-flash-lite',
+      'gemini-3.5-flash-lite',
+      'gemini-3.8-flash',
+      'gemini-flash-latest',
+    ];
+    const genAI = new GoogleGenerativeAI(geminiKey);
+    let lastError: any = null;
+
+    for (const modelToTry of candidateModels) {
+      try {
+        const model = genAI.getGenerativeModel({ model: modelToTry });
+        const result = await model.generateContent(prompt);
+        const text = result.response.text();
+        if (text) return text;
+      } catch (err: any) {
+        lastError = err;
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+    }
+    if (lastError) throw lastError;
+  }
+
+  throw new Error('Failed to generate daily summary from all candidate providers.');
 }

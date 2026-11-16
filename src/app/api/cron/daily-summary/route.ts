@@ -52,29 +52,25 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // ---- Validate Gemini key ----
+    // ---- Validate AI keys ----
+    const groqKey = process.env.GROQ_API_KEY;
     const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY;
-    if (!geminiKey) {
+    if (!groqKey && !geminiKey) {
       return NextResponse.json(
-        { error: 'GEMINI_API_KEY or GOOGLE_AI_API_KEY is not configured.' },
+        { error: 'Neither GROQ_API_KEY nor GEMINI_API_KEY is configured.' },
         { status: 500 },
       );
     }
 
     const supabase = getSupabaseAdmin();
-    const candidateModels = Array.from(
-      new Set(
-        [
-          process.env.GEMINI_MODEL,
-          'gemini-flash-lite-latest',
-          'gemini-3.1-flash-lite',
-          'gemini-3.5-flash-lite',
-          'gemini-3.8-flash',
-          'gemini-flash-latest',
-        ].filter(Boolean) as string[]
-      )
-    );
-    const genAI = new GoogleGenerativeAI(geminiKey);
+    const candidateModels = [
+      'gemini-flash-lite-latest',
+      'gemini-3.1-flash-lite',
+      'gemini-3.5-flash-lite',
+      'gemini-3.8-flash',
+      'gemini-flash-latest',
+    ];
+    const genAI = geminiKey ? new GoogleGenerativeAI(geminiKey) : null;
     const { startISO, endISO, dateLabel } = todayRange();
 
     // ---- Fetch all users ----
@@ -180,14 +176,40 @@ Keep it warm but concise.
 `.trim();
 
         let summary = '';
-        for (const modelToTry of candidateModels) {
+
+        // 1. Try Groq
+        if (groqKey) {
           try {
-            const model = genAI.getGenerativeModel({ model: modelToTry });
-            const result = await model.generateContent(prompt);
-            summary = result.response.text();
-            if (summary) break;
-          } catch {
-            await new Promise((r) => setTimeout(r, 400));
+            const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${groqKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: 'openai/gpt-oss-120b',
+                messages: [{ role: 'user', content: prompt }],
+                temperature: 0.7,
+              }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              summary = data.choices?.[0]?.message?.content?.trim() || '';
+            }
+          } catch {}
+        }
+
+        // 2. Fall back to Gemini
+        if (!summary && genAI) {
+          for (const modelToTry of candidateModels) {
+            try {
+              const model = genAI.getGenerativeModel({ model: modelToTry });
+              const result = await model.generateContent(prompt);
+              summary = result.response.text();
+              if (summary) break;
+            } catch {
+              await new Promise((r) => setTimeout(r, 300));
+            }
           }
         }
 
