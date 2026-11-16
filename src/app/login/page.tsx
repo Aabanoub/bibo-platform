@@ -140,15 +140,27 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Quick Demo Button */}
+          {/* Direct Enter Without Sign-In Button */}
           <button
             type="button"
             onClick={handleInstantDemo}
             disabled={loading}
-            className="mb-5 flex w-full items-center justify-center gap-2 rounded-xl border border-blue-500/40 bg-gradient-to-r from-blue-600/30 to-cyan-600/30 px-4 py-3 text-sm font-semibold text-blue-200 transition-all hover:border-blue-400 hover:from-blue-600/40 hover:to-cyan-600/40 focus:outline-none focus:ring-2 focus:ring-blue-500/40 active:scale-[0.99]"
+            className="group mb-5 flex w-full items-center justify-between rounded-xl border border-emerald-500/40 bg-gradient-to-r from-emerald-600/25 via-teal-600/25 to-blue-600/25 p-4 text-left shadow-lg shadow-emerald-950/40 transition-all hover:border-emerald-400 hover:from-emerald-600/35 hover:via-teal-600/35 hover:to-blue-600/35 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 active:scale-[0.99]"
           >
-            <Zap size={16} className="text-yellow-400 fill-yellow-400" />
-            <span>⚡ Instant 1-Click Beta Sign In</span>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
+                <Zap size={22} className="fill-emerald-400" />
+              </div>
+              <div>
+                <div className="text-base font-semibold text-white group-hover:text-emerald-300">
+                  Enter Without Sign In
+                </div>
+                <div className="text-xs text-slate-400">
+                  Instant access • No email or password needed
+                </div>
+              </div>
+            </div>
+            <ArrowRight size={18} className="text-emerald-400 transition-transform group-hover:translate-x-1" />
           </button>
 
           <div className="relative mb-5 flex items-center justify-center">
@@ -156,7 +168,7 @@ export default function LoginPage() {
               <div className="w-full border-t border-slate-700/60" />
             </div>
             <span className="relative bg-slate-800/80 px-3 text-xs uppercase tracking-wider text-slate-500">
-              or enter any credentials
+              or enter with custom email
             </span>
           </div>
 

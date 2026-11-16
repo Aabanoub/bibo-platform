@@ -123,25 +123,25 @@ export async function GET(req: NextRequest) {
         const txList =
           transactions && transactions.length > 0
             ? transactions
-                .map(
-                  (t) =>
-                    `- ${t.description ?? 'Transaction'}: ${t.type === 'expense' ? '-' : '+'}$${Math.abs(t.amount).toFixed(2)} (${t.category ?? 'uncategorized'})`,
-                )
-                .join('\n')
+              .map(
+                (t) =>
+                  `- ${t.description ?? 'Transaction'}: ${t.type === 'expense' ? '-' : '+'}$${Math.abs(t.amount).toFixed(2)} (${t.category ?? 'uncategorized'})`,
+              )
+              .join('\n')
             : 'No transactions recorded today.';
 
         const habitList =
           habits && habits.length > 0
             ? habits
-                .map((h) => {
-                  const habitName =
-                    (h as Record<string, unknown>).habits &&
+              .map((h) => {
+                const habitName =
+                  (h as Record<string, unknown>).habits &&
                     typeof (h as Record<string, unknown>).habits === 'object'
-                      ? ((h as Record<string, unknown>).habits as { name: string }).name
-                      : `Habit ${h.habit_id}`;
-                  return `- ${habitName}`;
-                })
-                .join('\n')
+                    ? ((h as Record<string, unknown>).habits as { name: string }).name
+                    : `Habit ${h.habit_id}`;
+                return `- ${habitName}`;
+              })
+              .join('\n')
             : 'No habits completed today.';
 
         const prompt = `
