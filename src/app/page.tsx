@@ -16,6 +16,7 @@ import {
   Calendar,
   Flame,
   Award,
+  QrCode,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import type { Task, Transaction, Habit, HabitLog, Note } from '@/types';
@@ -326,6 +327,7 @@ export default function DashboardPage() {
     { label: 'Add Task', icon: <Plus size={18} />, href: '/tasks?new=true', color: 'text-blue-400' },
     { label: 'Calendar', icon: <Calendar size={18} />, href: '/calendar', color: 'text-indigo-400' },
     { label: 'Focus Mode', icon: <Flame size={18} />, href: '/focus', color: 'text-rose-400' },
+    { label: 'QR Studio', icon: <QrCode size={18} />, href: '/qr', color: 'text-cyan-400' },
     { label: 'Log Expense', icon: <Wallet size={18} />, href: '/finance?new=true', color: 'text-emerald-400' },
     { label: 'Life Review', icon: <Award size={18} />, href: '/review', color: 'text-purple-400' },
   ];

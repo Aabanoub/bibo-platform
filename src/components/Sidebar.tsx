@@ -18,6 +18,7 @@ import {
   Calendar,
   Flame,
   Award,
+  QrCode,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import NotificationBell from '@/components/NotificationBell';
@@ -36,6 +37,7 @@ const navItems: NavItem[] = [
   { label: 'Focus Mode', href: '/focus', icon: <Flame size={20} /> },
   { label: 'Finance', href: '/finance', icon: <Wallet size={20} /> },
   { label: 'Habits', href: '/habits', icon: <Activity size={20} /> },
+  { label: 'QR Studio', href: '/qr', icon: <QrCode size={20} /> },
   { label: 'Weekly Review', href: '/review', icon: <Award size={20} /> },
   { label: 'AI Chat', href: '/chat', icon: <MessageSquare size={20} /> },
 ];
