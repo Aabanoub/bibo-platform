@@ -13,6 +13,9 @@ import {
   Clock,
   Zap,
   ArrowRight,
+  Calendar,
+  Flame,
+  Award,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import type { Task, Transaction, Habit, HabitLog, Note } from '@/types';
@@ -321,8 +324,10 @@ export default function DashboardPage() {
   const quickActions = [
     { label: 'New Note', icon: <StickyNote size={18} />, href: '/notes?new=true', color: 'text-amber-400' },
     { label: 'Add Task', icon: <Plus size={18} />, href: '/tasks?new=true', color: 'text-blue-400' },
+    { label: 'Calendar', icon: <Calendar size={18} />, href: '/calendar', color: 'text-indigo-400' },
+    { label: 'Focus Mode', icon: <Flame size={18} />, href: '/focus', color: 'text-rose-400' },
     { label: 'Log Expense', icon: <Wallet size={18} />, href: '/finance?new=true', color: 'text-emerald-400' },
-    { label: 'Chat with AI', icon: <MessageSquare size={18} />, href: '/chat', color: 'text-purple-400' },
+    { label: 'Life Review', icon: <Award size={18} />, href: '/review', color: 'text-purple-400' },
   ];
 
   if (loading) {
@@ -388,7 +393,7 @@ export default function DashboardPage() {
           <Zap size={14} className="text-yellow-400" />
           Quick Actions
         </h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {quickActions.map((action) => (
             <Link
               key={action.label}

@@ -14,7 +14,9 @@ import {
   Code2,
   Lightbulb,
   Target,
+  CheckCircle2,
 } from 'lucide-react';
+import VoiceRecorderButton from '@/components/VoiceRecorderButton';
 
 const PERSONAS = [
   { id: 'executive-assistant', label: 'Executive Assistant', icon: Sparkles },
@@ -332,17 +334,20 @@ export default function ChatPage() {
           throw new Error(errBody.error || `API error ${res.status}`);
         }
 
-        const { reply } = await res.json();
+        const { reply, action } = await res.json();
 
         // 4. Save assistant response
         const savedAssistant = await saveMessage('assistant', reply);
-        const assistantMsg: ChatMessage = savedAssistant ?? ({
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: reply,
-          created_at: new Date().toISOString(),
-          persona,
-        } as ChatMessage);
+        const assistantMsg: ChatMessage = {
+          ...(savedAssistant ?? {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: reply,
+            created_at: new Date().toISOString(),
+            persona,
+          }),
+          action: action || null,
+        } as ChatMessage;
 
         setMessages((prev) => [...prev, assistantMsg]);
       } catch (err: unknown) {
@@ -518,7 +523,17 @@ export default function ChatPage() {
                     {isUser ? (
                       <p className="whitespace-pre-wrap">{msg.content}</p>
                     ) : (
-                      <div className="prose-invert">{renderMarkdown(msg.content)}</div>
+                      <>
+                        <div className="prose-invert">{renderMarkdown(msg.content)}</div>
+                        {msg.action && msg.action.success && (
+                          <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-950/40 px-3 py-2 text-xs text-emerald-300">
+                            <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
+                            <span>
+                              <strong>Action Executed:</strong> {msg.action.message}
+                            </span>
+                          </div>
+                        )}
+                      </>
                     )}
 
                     {/* Timestamp */}
@@ -548,12 +563,18 @@ export default function ChatPage() {
           onSubmit={handleSend}
           className="mx-auto flex max-w-3xl items-end gap-2"
         >
+          <VoiceRecorderButton
+            onTranscribed={(text) => {
+              setInput((prev) => (prev ? `${prev} ${text}` : text));
+            }}
+            disabled={loading}
+          />
           <textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type a message…"
+            placeholder="Type or speak a message (e.g. 'Spent $25 on lunch' or 'Add task')..."
             rows={1}
             className="max-h-36 min-h-[44px] flex-1 resize-none rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-500 outline-none transition focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
             disabled={loading}

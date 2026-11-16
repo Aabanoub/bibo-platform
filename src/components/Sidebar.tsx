@@ -15,6 +15,9 @@ import {
   LogOut,
   ChevronLeft,
   Sparkles,
+  Calendar,
+  Flame,
+  Award,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import NotificationBell from '@/components/NotificationBell';
@@ -29,8 +32,11 @@ const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/', icon: <LayoutDashboard size={20} /> },
   { label: 'Notes', href: '/notes', icon: <StickyNote size={20} /> },
   { label: 'Tasks', href: '/tasks', icon: <CheckSquare size={20} /> },
+  { label: 'Calendar', href: '/calendar', icon: <Calendar size={20} /> },
+  { label: 'Focus Mode', href: '/focus', icon: <Flame size={20} /> },
   { label: 'Finance', href: '/finance', icon: <Wallet size={20} /> },
   { label: 'Habits', href: '/habits', icon: <Activity size={20} /> },
+  { label: 'Weekly Review', href: '/review', icon: <Award size={20} /> },
   { label: 'AI Chat', href: '/chat', icon: <MessageSquare size={20} /> },
 ];
 

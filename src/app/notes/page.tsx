@@ -15,7 +15,9 @@ import {
   Loader2,
   AlertCircle,
   StickyNote,
+  Camera,
 } from 'lucide-react';
+import DocumentScannerModal from '@/components/DocumentScannerModal';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -50,6 +52,46 @@ export default function NotesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  const [scannerOpen, setScannerOpen] = useState(false);
+
+  const handleSaveScannedNote = async (data: {
+    title: string;
+    content: string;
+    tags: string[];
+  }) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    await supabase.from('profiles').upsert(
+      {
+        id: user.id,
+        full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+
+    const { data: newRow, error: insertErr } = await supabase
+      .from('notes')
+      .insert({
+        user_id: user.id,
+        title: data.title || 'Scanned Note',
+        content: data.content || '',
+        tags: data.tags || [],
+        is_pinned: false,
+      })
+      .select()
+      .single();
+
+    if (insertErr) throw insertErr;
+    if (newRow) {
+      setNotes((prev) => [newRow as Note, ...prev]);
+      selectNote(newRow as Note);
+    }
+  };
 
   // auto-save refs
   const debouncedTitle = useDebounce(title, 1000);
@@ -269,13 +311,22 @@ export default function NotesPage() {
               <StickyNote className="w-5 h-5 text-indigo-400" />
               Notes
             </h1>
-            <button
-              onClick={createNote}
-              className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition-colors"
-              title="New Note"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setScannerOpen(true)}
+                className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-400 border border-blue-500/20 transition-colors"
+                title="Scan Document or Photo (AI)"
+              >
+                <Camera className="w-4 h-4" />
+              </button>
+              <button
+                onClick={createNote}
+                className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition-colors"
+                title="New Note"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           {/* Search */}
@@ -492,6 +543,12 @@ export default function NotesPage() {
           </div>
         )}
       </main>
+
+      <DocumentScannerModal
+        isOpen={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onSaveNote={handleSaveScannedNote}
+      />
     </div>
   );
 }

@@ -16,7 +16,9 @@ import {
   Wallet,
   ArrowUpRight,
   ArrowDownRight,
+  Camera,
 } from 'lucide-react';
+import ReceiptScannerModal from '@/components/ReceiptScannerModal';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -75,6 +77,49 @@ export default function FinancePage() {
   const [filterCategory, setFilterCategory] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
+
+  // scanner
+  const [scannerOpen, setScannerOpen] = useState(false);
+
+  const handleSaveScannedTransaction = async (data: {
+    amount: number;
+    type: 'expense';
+    category: string;
+    description: string;
+    date: string;
+  }) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    await supabase.from('profiles').upsert(
+      {
+        id: user.id,
+        full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+
+    const { data: newRow, error: insertErr } = await supabase
+      .from('transactions')
+      .insert({
+        user_id: user.id,
+        amount: data.amount,
+        type: data.type,
+        category: data.category,
+        description: data.description,
+        date: data.date,
+      })
+      .select()
+      .single();
+
+    if (insertErr) throw insertErr;
+    if (newRow) {
+      setTransactions((prev) => [newRow as Transaction, ...prev]);
+    }
+  };
 
   // ---- fetch --------------------------------------------------------------
   const fetchTransactions = useCallback(async () => {
@@ -222,6 +267,12 @@ export default function FinancePage() {
               }`}
             >
               <Filter className="w-4 h-4" /> Filters
+            </button>
+            <button
+              onClick={() => setScannerOpen(true)}
+              className="px-3 py-2 rounded-lg text-sm bg-slate-800 hover:bg-slate-700 transition-colors flex items-center gap-1.5 text-emerald-400 border border-emerald-500/20"
+            >
+              <Camera className="w-4 h-4" /> Scan Receipt (AI)
             </button>
             <button
               onClick={() => setShowForm(!showForm)}
@@ -460,6 +511,12 @@ export default function FinancePage() {
           )}
         </div>
       </div>
+
+      <ReceiptScannerModal
+        isOpen={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onSaveTransaction={handleSaveScannedTransaction}
+      />
     </div>
   );
 }

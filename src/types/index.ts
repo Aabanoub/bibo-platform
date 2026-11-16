@@ -77,12 +77,20 @@ export interface HabitLog {
   notes: string | null;
 }
 
+export interface ActionExecutionResult {
+  type: string;
+  success: boolean;
+  message: string;
+  data?: any;
+}
+
 export interface ChatMessage {
   id: string;
   user_id: string;
   role: ChatRole;
   content: string;
   persona?: string | null;
+  action?: ActionExecutionResult | null;
   created_at: string;
 }
 

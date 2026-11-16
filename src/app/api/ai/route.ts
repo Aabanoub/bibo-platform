@@ -22,6 +22,229 @@ const PERSONA_PROMPTS: Record<string, string> = {
 
 const DEFAULT_PERSONA = 'executive-assistant';
 
+const ACTIONS_INSTRUCTION = `
+=== AUTONOMOUS PLATFORM ACTIONS ===
+You have full permission to execute real actions in the user's database when they ask to log, record, add, create, or check off something.
+When the user expresses an intent to:
+1. Log an expense or income (e.g. "I spent $25 on lunch", "Paid 80 for wifi", "Received $3000 salary")
+2. Add a task or todo (e.g. "Add a task to call dentist tomorrow", "Remind me urgently to submit report")
+3. Save or take a note (e.g. "Save a note about meeting with Sarah...", "Take note: Ideas for my project...")
+4. Check off / complete a habit (e.g. "I finished my workout today", "Done with reading")
+
+You MUST fulfill the user's intent by appending this exact JSON block at the VERY END of your reply (on a new line):
+ACTION: {"type": "<action_type>", "data": { ... }}
+
+Supported action schemas:
+- create_transaction:
+  {"type": "create_transaction", "data": {"amount": number, "type": "expense" | "income", "category": string, "description": string, "date"?: "YYYY-MM-DD"}}
+  (Standard categories: Food, Groceries, Transport, Utilities, Housing, Entertainment, Shopping, Health, Salary, Investment, Other. Default type is "expense" unless income/salary.)
+- create_task:
+  {"type": "create_task", "data": {"title": string, "priority": "low" | "medium" | "high" | "urgent", "due_date"?: "YYYY-MM-DD", "description"?: string}}
+- create_note:
+  {"type": "create_note", "data": {"title": string, "content": string, "tags"?: string[]}}
+- complete_habit:
+  {"type": "complete_habit", "data": {"habit_name": string}}
+
+RULES:
+- Always give a warm, clear conversational response acknowledging the action in your text first.
+- Put the ACTION: {...} block on its own line at the end.
+- Emit at most ONE action per message.
+- If the user is only asking a question or requesting info (e.g. "What is my balance?", "What tasks do I have?"), DO NOT emit an ACTION block; answer directly using the live platform data.
+`;
+
+// ---------------------------------------------------------------------------
+// Action Execution in Supabase
+// ---------------------------------------------------------------------------
+interface ActionPayload {
+  type: string;
+  data: Record<string, any>;
+}
+
+interface ActionExecuted {
+  type: string;
+  success: boolean;
+  message: string;
+  data?: any;
+}
+
+async function executeAction(
+  supabase: any,
+  userId: string,
+  userName: string,
+  action: ActionPayload
+): Promise<ActionExecuted | null> {
+  try {
+    // Ensure profile exists
+    await supabase.from('profiles').upsert(
+      {
+        id: userId,
+        full_name: userName || 'User',
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+
+    if (action.type === 'create_transaction') {
+      const amount = Math.abs(parseFloat(action.data.amount) || 0);
+      if (amount <= 0) return null;
+      const type = action.data.type === 'income' ? 'income' : 'expense';
+      const category = action.data.category || (type === 'income' ? 'Salary' : 'General');
+      const description = action.data.description || (type === 'income' ? 'Income' : 'Expense');
+      const date = action.data.date || new Date().toISOString().split('T')[0];
+
+      const { data, error } = await supabase
+        .from('transactions')
+        .insert({
+          user_id: userId,
+          amount,
+          type,
+          category,
+          description,
+          date,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error inserting transaction from AI:', error);
+        return { type: action.type, success: false, message: error.message };
+      }
+
+      return {
+        type: action.type,
+        success: true,
+        message: `Logged ${type === 'income' ? '+$' : '-$'}${amount.toFixed(2)} (${category}: ${description})`,
+        data,
+      };
+    }
+
+    if (action.type === 'create_task') {
+      const title = action.data.title?.trim();
+      if (!title) return null;
+      const priority = ['urgent', 'high', 'medium', 'low'].includes(action.data.priority)
+        ? action.data.priority
+        : 'medium';
+      const due_date = action.data.due_date ? new Date(action.data.due_date).toISOString() : null;
+
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert({
+          user_id: userId,
+          title,
+          priority,
+          status: 'todo',
+          due_date,
+          description: action.data.description || null,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error inserting task from AI:', error);
+        return { type: action.type, success: false, message: error.message };
+      }
+
+      return {
+        type: action.type,
+        success: true,
+        message: `Created task "${title}" [${priority.toUpperCase()}]`,
+        data,
+      };
+    }
+
+    if (action.type === 'create_note') {
+      const title = action.data.title?.trim() || 'Quick Note';
+      const content = action.data.content || '';
+      const tags = Array.isArray(action.data.tags) ? action.data.tags : [];
+
+      const { data, error } = await supabase
+        .from('notes')
+        .insert({
+          user_id: userId,
+          title,
+          content,
+          tags,
+          is_pinned: false,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error inserting note from AI:', error);
+        return { type: action.type, success: false, message: error.message };
+      }
+
+      return {
+        type: action.type,
+        success: true,
+        message: `Saved note "${title}"`,
+        data,
+      };
+    }
+
+    if (action.type === 'complete_habit') {
+      const habitName = action.data.habit_name?.trim();
+      if (!habitName) return null;
+
+      const { data: existingHabits } = await supabase
+        .from('habits')
+        .select('*')
+        .eq('user_id', userId)
+        .ilike('name', `%${habitName}%`)
+        .limit(1);
+
+      let habitId = existingHabits?.[0]?.id;
+
+      if (!habitId) {
+        const { data: newHabit, error: habitErr } = await supabase
+          .from('habits')
+          .insert({
+            user_id: userId,
+            name: habitName,
+            frequency: 'daily',
+            color: '#3B82F6',
+          })
+          .select()
+          .single();
+
+        if (habitErr) {
+          console.error('Error creating habit:', habitErr);
+          return { type: action.type, success: false, message: habitErr.message };
+        }
+        habitId = newHabit.id;
+      }
+
+      const { data, error } = await supabase
+        .from('habit_logs')
+        .insert({
+          user_id: userId,
+          habit_id: habitId,
+          completed_at: new Date().toISOString(),
+          notes: 'Logged via AI Chat',
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error logging habit from AI:', error);
+        return { type: action.type, success: false, message: error.message };
+      }
+
+      return {
+        type: action.type,
+        success: true,
+        message: `Marked habit "${habitName}" as completed today!`,
+        data,
+      };
+    }
+
+    return null;
+  } catch (err: any) {
+    console.error('executeAction exception:', err);
+    return { type: action.type, success: false, message: err?.message || 'Action failed' };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Helper: Call Groq API (Ultra-Fast 500ms LPU)
 // ---------------------------------------------------------------------------
@@ -33,7 +256,7 @@ async function tryCallGroq(
   const models = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'openai/gpt-oss-20b'];
 
   const lastMsg = messages[messages.length - 1];
-  const lastContent = `${lastMsg.content}\n\n[System Directive: Answer directly from the live platform data provided in the system instructions. If balance is $0.00, state that no transactions have been added to the Finance tab yet. Do not ask the user for spreadsheets, account forms, or bank statements.]`;
+  const lastContent = `${lastMsg.content}\n\n[System Directive: Answer directly from the live platform data provided in the system instructions. If balance is $0.00, state that no transactions have been added to the Finance tab yet. Do not ask the user for spreadsheets, account forms, or bank statements. If the user asks you to log an expense, add a task, take a note, or check a habit, append the ACTION: {...} block at the end.]`;
 
   const groqMessages = [
     { role: 'system', content: systemPrompt },
@@ -102,7 +325,7 @@ async function tryCallGemini(
   }
 
   const lastMessage = messages[messages.length - 1];
-  const currentPrompt = `${lastMessage.content}\n\n[System Directive: Answer directly from the live platform data provided in the system instructions. If balance is $0.00, state that no transactions have been added to the Finance tab yet. Do not ask the user for spreadsheets, account forms, or bank statements.]`;
+  const currentPrompt = `${lastMessage.content}\n\n[System Directive: Answer directly from the live platform data provided in the system instructions. If balance is $0.00, state that no transactions have been added to the Finance tab yet. Do not ask the user for spreadsheets, account forms, or bank statements. If the user asks you to log an expense, add a task, take a note, or check a habit, append the ACTION: {...} block at the end.]`;
 
   const candidateModels = Array.from(
     new Set(
@@ -202,53 +425,92 @@ export async function POST(req: NextRequest) {
 
     // ---- Assemble Live User Context from Database ----
     let liveContextPrompt = '';
+    let authenticatedUser: any = null;
+    let supabaseClient: any = null;
 
-    if (userContext) {
-      liveContextPrompt = formatContextPrompt(userContext, userName);
-    } else {
-      try {
-        const supabase = await createServerClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+    try {
+      supabaseClient = await createServerClient();
+      const {
+        data: { user },
+      } = await supabaseClient.auth.getUser();
+      authenticatedUser = user;
 
-        if (user) {
-          const platformData = await fetchUserPlatformData(supabase as any, user.id);
-          const resolvedName =
-            userName ||
-            user.user_metadata?.full_name ||
-            user.user_metadata?.name ||
-            user.email?.split('@')[0] ||
-            'User';
-          liveContextPrompt = formatContextPrompt(platformData, resolvedName);
-        }
-      } catch (err) {
-        console.warn('Could not load user platform context from cookies:', err);
+      if (userContext) {
+        liveContextPrompt = formatContextPrompt(userContext, userName);
+      } else if (user) {
+        const platformData = await fetchUserPlatformData(supabaseClient, user.id);
+        const resolvedName =
+          userName ||
+          user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          user.email?.split('@')[0] ||
+          'User';
+        liveContextPrompt = formatContextPrompt(platformData, resolvedName);
+      }
+    } catch (err) {
+      console.warn('Could not load user platform context from cookies:', err);
+      if (userContext) {
+        liveContextPrompt = formatContextPrompt(userContext, userName);
       }
     }
 
-    const fullSystemPrompt = `${basePrompt}\n\n${liveContextPrompt}`.trim();
+    const fullSystemPrompt = `${basePrompt}\n\n${ACTIONS_INSTRUCTION}\n\n${liveContextPrompt}`.trim();
 
-    let reply: string | null = null;
+    let rawReply: string | null = null;
 
     // 1. Try Groq first (Ultra-Fast ~500ms response)
     if (groqKey) {
-      reply = await tryCallGroq(groqKey, fullSystemPrompt, messages);
+      rawReply = await tryCallGroq(groqKey, fullSystemPrompt, messages);
     }
 
     // 2. Fall back to Gemini if Groq was unavailable
-    if (!reply && geminiKey) {
-      reply = await tryCallGemini(geminiKey, fullSystemPrompt, messages);
+    if (!rawReply && geminiKey) {
+      rawReply = await tryCallGemini(geminiKey, fullSystemPrompt, messages);
     }
 
-    if (!reply) {
+    if (!rawReply) {
       return NextResponse.json(
         { error: 'AI service temporarily unavailable. Please try again in a few moments.' },
         { status: 503 }
       );
     }
 
-    return NextResponse.json({ reply });
+    // ---- Parse and execute any ACTION block ----
+    let cleanReply = rawReply;
+    let actionExecuted: ActionExecuted | null = null;
+
+    // Match ACTION: { ... } at the end or in markdown
+    const actionPattern = /(?:```(?:json)?\s*)?ACTION:\s*(\{[\s\S]*?\})(?:\s*```)?\s*$/i;
+    const match = rawReply.match(actionPattern);
+
+    if (match) {
+      try {
+        const actionJson = JSON.parse(match[1]);
+        cleanReply = rawReply.replace(actionPattern, '').trim();
+
+        if (authenticatedUser && supabaseClient && actionJson?.type && actionJson?.data) {
+          const resolvedName =
+            userName ||
+            authenticatedUser.user_metadata?.full_name ||
+            authenticatedUser.email?.split('@')[0] ||
+            'User';
+
+          actionExecuted = await executeAction(
+            supabaseClient,
+            authenticatedUser.id,
+            resolvedName,
+            actionJson
+          );
+        }
+      } catch (parseErr) {
+        console.warn('Failed to parse or execute action block:', parseErr);
+      }
+    }
+
+    return NextResponse.json({
+      reply: cleanReply,
+      action: actionExecuted,
+    });
   } catch (err: unknown) {
     console.error('[/api/ai] Fatal Error:', err);
     const message = err instanceof Error ? err.message : 'Internal server error';
