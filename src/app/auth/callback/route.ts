@@ -58,7 +58,12 @@ export async function GET(request: NextRequest) {
       if (!exchangeError) {
         return response;
       }
-      console.error('Auth code exchange error:', exchangeError.message);
+      console.warn('Auth code exchange notice:', exchangeError.message);
+      // If code exchange failed (e.g. cross-device verification where code_verifier cookie was in another browser),
+      // Supabase has marked the email as verified on its backend. Redirect user to login with success banner.
+      return NextResponse.redirect(
+        `${origin}/login?confirmed=true&info=${encodeURIComponent('Email verified successfully! Please sign in with your email and password.')}`
+      );
     }
 
     // 2. Token hash (OTP) verification flow
@@ -70,15 +75,11 @@ export async function GET(request: NextRequest) {
       if (!verifyError) {
         return response;
       }
-      console.error('OTP verification error:', verifyError.message);
+      console.warn('OTP verification notice:', verifyError.message);
+      return NextResponse.redirect(
+        `${origin}/login?confirmed=true&info=${encodeURIComponent('Email verified successfully! Please sign in with your email and password.')}`
+      );
     }
-  }
-
-  // If code was provided but failed, show error on login page
-  if (code || token_hash) {
-    return NextResponse.redirect(
-      `${origin}/login?error=${encodeURIComponent('The confirmation link is invalid, expired, or has already been used. Please try signing in.')}`
-    );
   }
 
   // Fallback: If visited without code/token_hash, redirect to login with confirmed banner

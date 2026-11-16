@@ -16,7 +16,7 @@ import {
   ChevronLeft,
   Sparkles,
 } from 'lucide-react';
-import { createClient, clearStoredBetaUser } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase';
 import NotificationBell from '@/components/NotificationBell';
 
 interface NavItem {
@@ -86,7 +86,6 @@ export default function Sidebar() {
   }, []);
 
   async function handleSignOut() {
-    clearStoredBetaUser();
     await supabase.auth.signOut();
     window.location.href = '/login';
   }

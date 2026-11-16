@@ -45,10 +45,9 @@ export async function middleware(request: NextRequest) {
     user = data.user;
   } catch {}
 
-  const betaCookie = request.cookies.get("abanoub_beta_user");
-  const isAuthenticated = !!user || !!betaCookie?.value;
+  const isAuthenticated = !!user;
 
-  // If there is no authenticated user and the path is protected, redirect.
+  // Route protection
   const { pathname } = request.nextUrl;
 
   const isPublicRoute =
@@ -65,6 +64,7 @@ export async function middleware(request: NextRequest) {
     pathname === "/favicon.ico" ||
     /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?)$/.test(pathname);
 
+  // If user is NOT authenticated and attempting to visit a private route
   if (!isAuthenticated && !isPublicRoute) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
@@ -72,6 +72,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
+  // If user IS authenticated and visits /login, redirect directly to dashboard
   if (isAuthenticated && pathname === "/login") {
     const homeUrl = request.nextUrl.clone();
     homeUrl.pathname = "/";
@@ -82,17 +83,10 @@ export async function middleware(request: NextRequest) {
 }
 
 /**
- * Run the middleware on every route except Next.js internals and static files
- * that are already excluded above (belt-and-suspenders).
+ * Run the middleware on every route except Next.js internals and static files.
  */
 export const config = {
   matcher: [
-    /*
-     * Match all paths except:
-     *   - _next/static  (static files)
-     *   - _next/image   (image optimization)
-     *   - favicon.ico   (browser favicon)
-     */
     "/((?!_next/static|_next/image|favicon.ico).*)",
   ],
 };
