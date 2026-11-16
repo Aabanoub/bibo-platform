@@ -15,8 +15,10 @@ import {
   Award,
   QrCode,
   Sparkles,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
+import { useNavigation } from '@/context/NavigationContext';
 import type { Task, Transaction, Habit, HabitLog, Note } from '@/types';
 
 interface DashboardData {
@@ -49,6 +51,7 @@ const defaultData: DashboardData = {
 
 export default function DashboardPage() {
   const supabase = createClient();
+  const { slots } = useNavigation();
   const [data, setData] = useState<DashboardData>(defaultData);
   const [userName, setUserName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -242,14 +245,68 @@ export default function DashboardPage() {
     },
   ];
 
-  const quickActions = [
-    { label: 'New Note', icon: <StickyNote size={18} />, href: '/notes?new=true', color: 'text-amber-400' },
-    { label: 'Add Task', icon: <Plus size={18} />, href: '/tasks?new=true', color: 'text-blue-400' },
-    { label: 'Focus Mode', icon: <Flame size={18} />, href: '/focus', color: 'text-rose-400' },
-    { label: 'QR Studio', icon: <QrCode size={18} />, href: '/qr', color: 'text-cyan-400' },
-    { label: 'Log Expense', icon: <Wallet size={18} />, href: '/finance?new=true', color: 'text-emerald-400' },
-    { label: 'Life Review', icon: <Award size={18} />, href: '/review', color: 'text-purple-400' },
+  // Quick Actions definitions with navId to dynamically filter out items present in Mobile Bottom Nav
+  const allQuickActions = [
+    { navId: 'notes', label: 'New Note', icon: <StickyNote size={18} />, href: '/notes?new=true', color: 'text-amber-400' },
+    { navId: 'tasks', label: 'Add Task', icon: <Plus size={18} />, href: '/tasks?new=true', color: 'text-blue-400' },
+    { navId: 'finance', label: 'Log Expense', icon: <Wallet size={18} />, href: '/finance?new=true', color: 'text-emerald-400' },
+    { navId: 'focus', label: 'Focus Mode', icon: <Flame size={18} />, href: '/focus', color: 'text-rose-400' },
+    { navId: 'habits', label: 'Check Habits', icon: <Activity size={18} />, href: '/habits', color: 'text-purple-400' },
+    { navId: 'qr', label: 'QR Studio', icon: <QrCode size={18} />, href: '/qr', color: 'text-cyan-400' },
+    { navId: 'review', label: 'Life Review', icon: <Award size={18} />, href: '/review', color: 'text-purple-400' },
+    { navId: 'chat', label: 'AI Assistant', icon: <MessageSquare size={18} />, href: '/chat', color: 'text-indigo-400' },
+    { navId: 'settings', label: 'Settings', icon: <SettingsIcon size={18} />, href: '/settings', color: 'text-slate-400' },
   ];
+
+  // Dynamic filter: if an action is already accessible in the user's Mobile Bottom Navigation Bar, remove it from dashboard Quick Actions
+  const quickActions = allQuickActions.filter((action) => !slots.includes(action.navId));
+
+  // Platform Apps & Tools definitions with navId to dynamically filter out items present in Mobile Bottom Nav
+  const allPlatformTools = [
+    {
+      navId: 'chat',
+      href: '/chat',
+      title: 'AI Assistant',
+      desc: 'Chat with your personal assistant powered by Gemini for insights & organization.',
+      icon: <MessageSquare size={18} />,
+      border: 'border-indigo-500/20 hover:border-indigo-500/40',
+      gradient: 'from-indigo-950/40 to-slate-900',
+      iconBg: 'bg-indigo-500/20 text-indigo-400',
+    },
+    {
+      navId: 'focus',
+      href: '/focus',
+      title: 'Focus Mode',
+      desc: 'Pomodoro deep work timer with customizable focus & break times and ambient rain sound.',
+      icon: <Flame size={18} />,
+      border: 'border-amber-500/20 hover:border-amber-500/40',
+      gradient: 'from-amber-950/40 to-slate-900',
+      iconBg: 'bg-amber-500/20 text-amber-400',
+    },
+    {
+      navId: 'qr',
+      href: '/qr',
+      title: 'QR Code Studio',
+      desc: 'Generate QR codes for URLs, Wi-Fi, vCard contacts, WhatsApp & Crypto.',
+      icon: <QrCode size={18} />,
+      border: 'border-cyan-500/20 hover:border-cyan-500/40',
+      gradient: 'from-cyan-950/40 to-slate-900',
+      iconBg: 'bg-cyan-500/20 text-cyan-400',
+    },
+    {
+      navId: 'review',
+      href: '/review',
+      title: 'Sunday Life Review',
+      desc: 'Weekly savings rate, task performance & downloadable AI PDF report with tables.',
+      icon: <Award size={18} />,
+      border: 'border-purple-500/20 hover:border-purple-500/40',
+      gradient: 'from-purple-950/40 to-slate-900',
+      iconBg: 'bg-purple-500/20 text-purple-400',
+    },
+  ];
+
+  // Dynamic filter: if an app/tool is active in the Mobile Bottom Nav slots, remove it from dashboard Platform Apps & Tools
+  const platformTools = allPlatformTools.filter((tool) => !slots.includes(tool.navId));
 
   if (loading) {
     return (
@@ -308,100 +365,64 @@ export default function DashboardPage() {
         ))}
       </section>
 
-      {/* Platform Apps & AI Suite */}
-      <section>
-        <h2 className="mb-3 flex items-center justify-between text-sm font-semibold uppercase tracking-wider text-slate-400">
-          <span className="flex items-center gap-2">
-            <Sparkles size={15} className="text-blue-400" />
-            Platform Apps & Tools
-          </span>
-        </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Link
-            href="/chat"
-            className="group relative overflow-hidden rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-950/40 to-slate-900 p-4 transition hover:border-indigo-500/40 hover:scale-[1.01]"
+      {/* Platform Apps & AI Suite (Filtered dynamically against Mobile Bottom Nav) */}
+      {platformTools.length > 0 && (
+        <section>
+          <h2 className="mb-3 flex items-center justify-between text-sm font-semibold uppercase tracking-wider text-slate-400">
+            <span className="flex items-center gap-2">
+              <Sparkles size={15} className="text-blue-400" />
+              Platform Apps & Tools
+            </span>
+          </h2>
+          <div
+            className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${
+              platformTools.length >= 3 ? 'lg:grid-cols-3 xl:grid-cols-4' : 'lg:grid-cols-2'
+            }`}
           >
-            <div className="flex items-center gap-3 mb-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/20 text-indigo-400">
-                <MessageSquare size={18} />
-              </div>
-              <h3 className="font-semibold text-white text-sm">AI Assistant</h3>
-            </div>
-            <p className="text-xs text-slate-400">
-              Chat with your personal assistant powered by Gemini for insights & organization.
-            </p>
-          </Link>
+            {platformTools.map((tool) => (
+              <Link
+                key={tool.title}
+                href={tool.href}
+                className={`group relative overflow-hidden rounded-2xl border ${tool.border} bg-gradient-to-br ${tool.gradient} p-4 transition hover:border-opacity-60 hover:scale-[1.01]`}
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${tool.iconBg}`}>
+                    {tool.icon}
+                  </div>
+                  <h3 className="font-semibold text-white text-sm">{tool.title}</h3>
+                </div>
+                <p className="text-xs text-slate-400">{tool.desc}</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
-          <Link
-            href="/focus"
-            className="group relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-950/40 to-slate-900 p-4 transition hover:border-amber-500/40 hover:scale-[1.01]"
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400">
-                <Flame size={18} />
-              </div>
-              <h3 className="font-semibold text-white text-sm">Focus Mode</h3>
-            </div>
-            <p className="text-xs text-slate-400">
-              25m Pomodoro deep work timer with calming ambient rain sound.
-            </p>
-          </Link>
-
-          <Link
-            href="/qr"
-            className="group relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/40 to-slate-900 p-4 transition hover:border-cyan-500/40 hover:scale-[1.01]"
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-400">
-                <QrCode size={18} />
-              </div>
-              <h3 className="font-semibold text-white text-sm">QR Code Studio</h3>
-            </div>
-            <p className="text-xs text-slate-400">
-              Generate QR codes for URLs, Wi-Fi, vCard contacts, WhatsApp & Crypto.
-            </p>
-          </Link>
-
-          <Link
-            href="/review"
-            className="group relative overflow-hidden rounded-2xl border border-purple-500/20 bg-gradient-to-br from-purple-950/40 to-slate-900 p-4 transition hover:border-purple-500/40 hover:scale-[1.01]"
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-500/20 text-purple-400">
-                <Award size={18} />
-              </div>
-              <h3 className="font-semibold text-white text-sm">Sunday Life Review</h3>
-            </div>
-            <p className="text-xs text-slate-400">
-              Weekly savings rate, task performance & downloadable AI PDF report with tables.
-            </p>
-          </Link>
-        </div>
-      </section>
-
-      {/* Quick Actions */}
-      <section>
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-slate-400">
-          <Zap size={14} className="text-yellow-400" />
-          Quick Actions
-        </h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {quickActions.map((action) => (
-            <Link
-              key={action.label}
-              href={action.href}
-              className="group flex items-center gap-3 rounded-xl border border-slate-700/50 bg-slate-800/40 px-4 py-3.5 transition-all duration-200 hover:border-slate-600 hover:bg-slate-800/70"
-            >
-              <span className={`${action.color} transition-transform duration-200 group-hover:scale-110`}>
-                {action.icon}
-              </span>
-              <span className="text-sm font-medium text-slate-300 group-hover:text-white">
-                {action.label}
-              </span>
-            </Link>
-          ))}
-        </div>
-      </section>
+      {/* Quick Actions (Filtered dynamically against Mobile Bottom Nav) */}
+      {quickActions.length > 0 && (
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-slate-400">
+            <Zap size={14} className="text-yellow-400" />
+            Quick Actions
+          </h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            {quickActions.map((action) => (
+              <Link
+                key={action.label}
+                href={action.href}
+                className="group flex items-center gap-3 rounded-xl border border-slate-700/50 bg-slate-800/40 px-4 py-3.5 transition-all duration-200 hover:border-slate-600 hover:bg-slate-800/70"
+              >
+                <span className={`${action.color} transition-transform duration-200 group-hover:scale-110`}>
+                  {action.icon}
+                </span>
+                <span className="text-sm font-medium text-slate-300 group-hover:text-white">
+                  {action.label}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
