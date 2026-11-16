@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, StickyNote, CheckSquare, Calendar, MessageSquare } from 'lucide-react';
+import { Home, StickyNote, CheckSquare, Calendar, MessageSquare } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 
 export default function MobileBottomNav() {
@@ -12,11 +12,11 @@ export default function MobileBottomNav() {
   if (pathname === '/login') return null;
 
   const items = [
-    { label: 'Home', href: '/', icon: LayoutDashboard },
-    { label: 'Notes', href: '/notes', icon: StickyNote },
-    { label: 'Tasks', href: '/tasks', icon: CheckSquare },
-    { label: 'Calendar', href: '/calendar', icon: Calendar },
-    { label: 'AI Chat', href: '/chat', icon: MessageSquare },
+    { label: 'Notes', href: '/notes', icon: StickyNote, isCenter: false },
+    { label: 'Tasks', href: '/tasks', icon: CheckSquare, isCenter: false },
+    { label: 'Home', href: '/', icon: Home, isCenter: true },
+    { label: 'Calendar', href: '/calendar', icon: Calendar, isCenter: false },
+    { label: 'AI Chat', href: '/chat', icon: MessageSquare, isCenter: false },
   ];
 
   return (
@@ -24,6 +24,44 @@ export default function MobileBottomNav() {
       {items.map((item) => {
         const Icon = item.icon;
         const isActive = pathname === item.href;
+
+        // Centered Elevated Home Button
+        if (item.isCenter) {
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="flex flex-col items-center justify-center -mt-5 transition group active:scale-95"
+            >
+              <div
+                className={`flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-all duration-200 ring-4 ring-slate-900 ${
+                  isActive
+                    ? isGirly
+                      ? 'bg-gradient-to-tr from-pink-600 to-rose-500 text-white shadow-pink-500/35 scale-105'
+                      : 'bg-gradient-to-tr from-blue-600 to-cyan-500 text-white shadow-blue-500/35 scale-105'
+                    : isGirly
+                    ? 'bg-slate-800 text-pink-300 hover:bg-slate-700'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                <Icon size={22} className={isActive ? 'text-white' : ''} />
+              </div>
+              <span
+                className={`mt-0.5 text-[10px] font-medium transition ${
+                  isActive
+                    ? isGirly
+                      ? 'text-pink-400 font-bold'
+                      : 'text-blue-400 font-bold'
+                    : 'text-slate-400 group-hover:text-slate-200'
+                }`}
+              >
+                {item.label}
+              </span>
+            </Link>
+          );
+        }
+
+        // Side items (Notes, Tasks, Calendar, AI Chat)
         return (
           <Link
             key={item.href}
