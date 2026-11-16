@@ -119,3 +119,21 @@ export interface DailySummary {
   content: string | null;
   created_at: string;
 }
+
+export type ReminderIntervalId = 'at_time' | '15m' | '1h' | '3h' | '1d' | '3d' | '1w';
+
+export interface CountdownEvent {
+  id: string;
+  user_id?: string;
+  title: string;
+  description?: string | null;
+  target_date: string; // ISO date-time string
+  category: 'goal' | 'event' | 'travel' | 'birthday' | 'deadline' | 'exam' | 'launch' | 'other';
+  emoji: string;
+  color: 'blue' | 'purple' | 'pink' | 'emerald' | 'amber' | 'rose' | 'cyan';
+  is_pinned?: boolean;
+  reminder_intervals: ReminderIntervalId[];
+  triggered_reminders?: string[]; // IDs of reminders that have already fired
+  created_at: string;
+  updated_at?: string;
+}

@@ -149,6 +149,23 @@ CREATE TABLE IF NOT EXISTS daily_summaries (
     UNIQUE (user_id, summary_date)
 );
 
+-- 3.11 countdown_events
+CREATE TABLE IF NOT EXISTS countdown_events (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id             UUID NOT NULL DEFAULT auth.uid() REFERENCES auth.users (id) ON DELETE CASCADE,
+    title               TEXT NOT NULL,
+    description         TEXT,
+    target_date         TIMESTAMPTZ NOT NULL,
+    category            TEXT NOT NULL DEFAULT 'event',
+    emoji               TEXT NOT NULL DEFAULT '⏳',
+    color               TEXT NOT NULL DEFAULT 'blue',
+    is_pinned           BOOLEAN NOT NULL DEFAULT false,
+    reminder_intervals  TEXT[] NOT NULL DEFAULT '{"at_time", "1h", "1d"}',
+    triggered_reminders TEXT[] NOT NULL DEFAULT '{}',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- ============================================================================
 -- 4. Indexes for Performance
 -- ============================================================================
@@ -165,6 +182,8 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_user_id     ON chat_messages (user_
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id     ON notifications (user_id);
 CREATE INDEX IF NOT EXISTS idx_push_subs_user_id         ON push_subscriptions (user_id);
 CREATE INDEX IF NOT EXISTS idx_daily_summaries_user_date ON daily_summaries (user_id, summary_date);
+CREATE INDEX IF NOT EXISTS idx_countdown_events_user_id  ON countdown_events (user_id);
+CREATE INDEX IF NOT EXISTS idx_countdown_events_target   ON countdown_events (user_id, target_date);
 
 -- ============================================================================
 -- 5. Row-Level Security (RLS) Policies
@@ -180,6 +199,7 @@ ALTER TABLE chat_messages      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_summaries    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE countdown_events   ENABLE ROW LEVEL SECURITY;
 
 -- Helper to safely drop old policies before creating new ones
 DO $$ BEGIN
@@ -285,6 +305,12 @@ CREATE POLICY "Users can view their own daily summaries"   ON daily_summaries FO
 CREATE POLICY "Users can create their own daily summaries" ON daily_summaries FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can delete their own daily summaries" ON daily_summaries FOR DELETE USING (auth.uid() = user_id);
 
+-- Countdown Events Policies
+CREATE POLICY "Users can view their own countdown events"   ON countdown_events FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can create their own countdown events" ON countdown_events FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own countdown events" ON countdown_events FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own countdown events" ON countdown_events FOR DELETE USING (auth.uid() = user_id);
+
 -- ============================================================================
 -- 6. Trigger — auto-create profile on signup & backfill
 -- ============================================================================
@@ -349,6 +375,11 @@ CREATE TRIGGER set_updated_at_tasks
     BEFORE UPDATE ON tasks
     FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
 
+DROP TRIGGER IF EXISTS set_updated_at_countdown ON countdown_events;
+CREATE TRIGGER set_updated_at_countdown
+    BEFORE UPDATE ON countdown_events
+    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
+
 -- ============================================================================
 -- 8. Enable Realtime on tables for live updates
 -- ============================================================================
@@ -357,5 +388,6 @@ DO $$ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE tasks;
     ALTER PUBLICATION supabase_realtime ADD TABLE notes;
     ALTER PUBLICATION supabase_realtime ADD TABLE habit_logs;
+    ALTER PUBLICATION supabase_realtime ADD TABLE countdown_events;
 EXCEPTION WHEN OTHERS THEN null;
 END $$;

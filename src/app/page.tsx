@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { useNavigation } from '@/context/NavigationContext';
+import CountdownWidget from '@/components/CountdownWidget';
 import type { Task, Transaction, Habit, HabitLog, Note } from '@/types';
 
 interface DashboardData {
@@ -331,6 +332,9 @@ export default function DashboardPage() {
         </h1>
         <p className="mt-1 text-sm text-slate-400">{formatDate()}</p>
       </header>
+
+      {/* Anchored Countdown Timer & Push Reminders */}
+      <CountdownWidget />
 
       {/* Summary Cards */}
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
