@@ -156,9 +156,9 @@ export default function DashboardPage() {
           // Recent habit logs
           supabase
             .from('habit_logs')
-            .select('id, habit_id, created_at, habits(name)')
+            .select('id, habit_id, completed_at')
             .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
+            .order('completed_at', { ascending: false })
             .limit(5),
         ]);
 
@@ -191,19 +191,19 @@ export default function DashboardPage() {
           });
         });
 
-        recentHabitLogsRes.data?.forEach((log: any) => {
+        (recentHabitLogsRes.data as any[])?.forEach((log: any) => {
           activities.push({
             id: `habit-${log.id}`,
             type: 'habit',
-            title: log.habits?.name || 'Habit',
+            title: log.habits?.name || 'Habit Check-in',
             description: 'Habit completed',
-            timestamp: log.created_at,
+            timestamp: log.completed_at || log.created_at || new Date().toISOString(),
           });
         });
 
         // Sort by time and take the 5 most recent
         activities.sort(
-          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          (a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()
         );
 
         setData({
@@ -225,7 +225,7 @@ export default function DashboardPage() {
     }
 
     fetchDashboard();
-  }, [supabase]);
+  }, []);
 
   function getGreeting(): string {
     const hour = new Date().getHours();

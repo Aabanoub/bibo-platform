@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI, Content } from '@google/generative-ai';
 
+export const dynamic = 'force-dynamic';
+
 // ---------------------------------------------------------------------------
 // Persona system prompts
 // ---------------------------------------------------------------------------

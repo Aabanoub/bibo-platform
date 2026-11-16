@@ -423,17 +423,7 @@ function createMockSupabaseClient() {
         clearStoredBetaUser();
         return { error: null };
       },
-      onAuthStateChange(callback: (event: string, session: any) => void) {
-        const beta = getStoredBetaUser() || DEFAULT_BETA_USER;
-        setTimeout(() => {
-          callback("SIGNED_IN", {
-            user: {
-              id: beta.id,
-              email: beta.email,
-              user_metadata: { full_name: beta.name },
-            },
-          });
-        }, 10);
+      onAuthStateChange(_callback: (event: string, session: any) => void) {
         return {
           data: {
             subscription: {
@@ -446,7 +436,13 @@ function createMockSupabaseClient() {
   };
 }
 
+let cachedBrowserClient: any = null;
+
 export function createClient() {
+  if (typeof window !== "undefined" && cachedBrowserClient) {
+    return cachedBrowserClient;
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -457,7 +453,9 @@ export function createClient() {
     anonKey.includes("placeholder");
 
   if (isPlaceholder) {
-    return createMockSupabaseClient() as any;
+    const mock = createMockSupabaseClient() as any;
+    if (typeof window !== "undefined") cachedBrowserClient = mock;
+    return mock;
   }
 
   // Real Supabase client
@@ -497,6 +495,10 @@ export function createClient() {
     clearStoredBetaUser();
     return originalSignOut();
   };
+
+  if (typeof window !== "undefined") {
+    cachedBrowserClient = client;
+  }
 
   return client;
 }

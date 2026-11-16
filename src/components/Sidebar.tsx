@@ -80,8 +80,10 @@ export default function Sidebar() {
       }
     });
 
-    return () => subscription.unsubscribe();
-  }, [supabase]);
+    return () => {
+      subscription?.unsubscribe?.();
+    };
+  }, []);
 
   async function handleSignOut() {
     clearStoredBetaUser();

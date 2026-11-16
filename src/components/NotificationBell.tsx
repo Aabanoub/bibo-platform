@@ -44,60 +44,64 @@ export default function NotificationBell({ collapsed = false }: NotificationBell
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     fetchNotifications();
 
     // Subscribe to realtime notifications
-    const channel = supabase
-      .channel('notifications-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-        },
-        (payload: any) => {
-          const newNotification = payload.new as Notification;
-          setNotifications((prev) => [newNotification, ...prev].slice(0, 20));
-          setUnreadCount((prev) => prev + 1);
+    try {
+      const channel = supabase
+        .channel('notifications-realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+          },
+          (payload: any) => {
+            const newNotification = payload.new as Notification;
+            setNotifications((prev) => [newNotification, ...prev].slice(0, 20));
+            setUnreadCount((prev) => prev + 1);
 
-          // Show browser notification if permitted
-          if (typeof window !== 'undefined' && 'Notification' in window && window.Notification.permission === 'granted') {
-            new window.Notification('AbanoubApp', {
-              body: newNotification.message || newNotification.title,
-              icon: '/favicon.ico',
+            // Show browser notification if permitted
+            if (typeof window !== 'undefined' && 'Notification' in window && window.Notification.permission === 'granted') {
+              new window.Notification('AbanoubApp', {
+                body: newNotification.message || newNotification.title,
+                icon: '/icon.svg',
+              });
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'notifications',
+          },
+          (payload: any) => {
+            const updated = payload.new as Notification;
+            setNotifications((prev) =>
+              prev.map((n) => (n.id === updated.id ? updated : n))
+            );
+            setUnreadCount((prev) => {
+              const oldItem = notifications.find((n) => n.id === updated.id);
+              if (oldItem && !oldItem.is_read && updated.is_read) return Math.max(0, prev - 1);
+              return prev;
             });
           }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'notifications',
-        },
-        (payload: any) => {
-          const updated = payload.new as Notification;
-          setNotifications((prev) =>
-            prev.map((n) => (n.id === updated.id ? updated : n))
-          );
-          setUnreadCount((prev) => {
-            const oldItem = notifications.find((n) => n.id === updated.id);
-            if (oldItem && !oldItem.is_read && updated.is_read) return Math.max(0, prev - 1);
-            return prev;
-          });
-        }
-      )
-      .subscribe();
+        )
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [fetchNotifications, supabase]);
+      return () => {
+        try {
+          supabase.removeChannel(channel);
+        } catch {}
+      };
+    } catch {}
+  }, [fetchNotifications]);
 
   // Close dropdown on outside click
   useEffect(() => {
