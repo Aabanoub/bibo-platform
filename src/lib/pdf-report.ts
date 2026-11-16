@@ -32,6 +32,18 @@ export interface WeeklyPdfData {
   aiSynthesis?: string;
 }
 
+// Helper to remove emoji characters that cause mojibake / corrupted glyphs in standard PDF fonts
+function stripEmojis(str: string): string {
+  return str
+    .replace(
+      /([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g,
+      ''
+    )
+    .replace(/[^\x00-\x7F]/g, '') // Keep clean ASCII text for PDF compatibility
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function generateWeeklyReportPdf(data: WeeklyPdfData) {
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -56,7 +68,7 @@ export function generateWeeklyReportPdf(data: WeeklyPdfData) {
   doc.setFontSize(10);
   doc.setTextColor(148, 163, 184); // slate-400
   doc.text(
-    `Prepared for: ${data.userName} | Period: ${data.startDate} to ${data.endDate} | Generated: ${new Date().toLocaleDateString()}`,
+    `Prepared for: ${stripEmojis(data.userName)} | Period: ${data.startDate} to ${data.endDate} | Generated: ${new Date().toLocaleDateString()}`,
     14,
     26
   );
@@ -74,22 +86,22 @@ export function generateWeeklyReportPdf(data: WeeklyPdfData) {
     [
       'Total Money In (Income)',
       `$${data.stats.income.toFixed(2)}`,
-      data.stats.income > 0 ? '🟢 Received' : '⚪ None',
+      data.stats.income > 0 ? 'Received' : 'None',
     ],
     [
       'Total Money Out (Expenses)',
       `$${data.stats.expense.toFixed(2)}`,
-      data.stats.expense > 0 ? '🔴 Disbursed' : '⚪ None',
+      data.stats.expense > 0 ? 'Disbursed' : 'None',
     ],
     [
       'Net Cash Flow / Savings',
       `$${data.stats.netSavings.toFixed(2)}`,
-      data.stats.netSavings >= 0 ? '📈 Positive Surplus' : '⚠️ Deficit',
+      data.stats.netSavings >= 0 ? 'Positive Surplus (+)' : 'Deficit (-)',
     ],
     [
       'Weekly Savings Rate',
       `${data.stats.savingsRate}%`,
-      data.stats.savingsRate >= 20 ? '⭐ Excellent (>20%)' : 'Needs attention',
+      data.stats.savingsRate >= 20 ? 'Target Met (>=20%)' : 'Needs attention',
     ],
     [
       'Task Execution Rate',
@@ -145,8 +157,8 @@ export function generateWeeklyReportPdf(data: WeeklyPdfData) {
 
     const txRows = data.transactions.slice(0, 15).map((t) => [
       t.date,
-      t.description || t.category,
-      t.category,
+      stripEmojis(t.description || t.category),
+      stripEmojis(t.category),
       t.type.toUpperCase(),
       `${t.type === 'income' ? '+' : '-'}$${Math.abs(t.amount).toFixed(2)}`,
     ]);
@@ -187,13 +199,15 @@ export function generateWeeklyReportPdf(data: WeeklyPdfData) {
     doc.text('3. AI Executive Coaching & Strategic Synthesis', 14, currentY);
     currentY += 6;
 
-    // Strip markdown formatting for clean text rendering in PDF
-    const cleanAiText = data.aiSynthesis
-      .replace(/###/g, '')
-      .replace(/##/g, '')
-      .replace(/\*\*/g, '')
-      .replace(/\*/g, '')
-      .trim();
+    // Strip markdown formatting and emojis for clean text rendering in PDF
+    const cleanAiText = stripEmojis(
+      data.aiSynthesis
+        .replace(/###/g, '')
+        .replace(/##/g, '')
+        .replace(/\*\*/g, '')
+        .replace(/\*/g, '')
+        .trim()
+    );
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9.5);
