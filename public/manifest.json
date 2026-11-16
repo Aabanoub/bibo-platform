@@ -1,15 +1,17 @@
 {
-  "name": "AbanoubApp",
+  "name": "AbanoubApp - Personal AI Platform",
   "short_name": "AbanoubApp",
-  "description": "Personal AI Platform",
+  "description": "Your personal AI-powered productivity platform",
   "start_url": "/",
+  "id": "/",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "theme_color": "#0f172a",
   "background_color": "#0f172a",
   "icons": [
     {
       "src": "/icon.svg",
-      "sizes": "any",
+      "sizes": "192x192 512x512 any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
     }
