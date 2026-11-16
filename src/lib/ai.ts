@@ -79,9 +79,19 @@ export async function generateDailySummary(data: DailySummaryData): Promise<stri
     throw new Error('Gemini API key environment variable is not set.');
   }
 
-  const modelName = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+  const candidateModels = Array.from(
+    new Set(
+      [
+        process.env.GEMINI_MODEL,
+        'gemini-3.8-flash',
+        'gemini-2.5-flash',
+        'gemini-1.5-flash',
+        'gemini-1.5-pro',
+      ].filter(Boolean) as string[]
+    )
+  );
+
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: modelName });
 
   const dateStr = data.date ?? new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -140,9 +150,18 @@ Keep the tone warm, supportive, and actionable.
 ${sections.join('\n\n')}
 --- End ---`;
 
-  const result = await model.generateContent(prompt);
-  const response = result.response;
-  const text = response.text();
+  let lastError: any = null;
+  for (const modelToTry of candidateModels) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelToTry });
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      if (text) return text;
+    } catch (err: any) {
+      lastError = err;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+  }
 
-  return text;
+  throw lastError || new Error('Failed to generate daily summary from all candidate models.');
 }

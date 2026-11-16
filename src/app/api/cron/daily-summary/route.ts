@@ -62,9 +62,18 @@ export async function GET(req: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin();
-    const modelName = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+    const candidateModels = Array.from(
+      new Set(
+        [
+          process.env.GEMINI_MODEL,
+          'gemini-3.8-flash',
+          'gemini-2.5-flash',
+          'gemini-1.5-flash',
+          'gemini-1.5-pro',
+        ].filter(Boolean) as string[]
+      )
+    );
     const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({ model: modelName });
     const { startISO, endISO, dateLabel } = todayRange();
 
     // ---- Fetch all users ----
@@ -169,8 +178,17 @@ Write a short motivational daily briefing (3-5 paragraphs). Include:
 Keep it warm but concise.
 `.trim();
 
-        const result = await model.generateContent(prompt);
-        const summary = result.response.text();
+        let summary = '';
+        for (const modelToTry of candidateModels) {
+          try {
+            const model = genAI.getGenerativeModel({ model: modelToTry });
+            const result = await model.generateContent(prompt);
+            summary = result.response.text();
+            if (summary) break;
+          } catch {
+            await new Promise((r) => setTimeout(r, 400));
+          }
+        }
 
         if (!summary) {
           results.push({ userId, status: 'empty_response' });

@@ -72,14 +72,11 @@ export async function POST(req: NextRequest) {
       PERSONA_PROMPTS[DEFAULT_PERSONA];
 
     // --- Build Gemini chat history ---
-    // Gemini expects alternating user / model turns. We map the incoming
-    // messages accordingly and ensure the conversation starts with a user turn.
     const history: Content[] = [];
 
     for (const msg of messages.slice(0, -1)) {
       const geminiRole = msg.role === 'assistant' ? 'model' : 'user';
 
-      // Gemini disallows two consecutive turns by the same role. Merge if needed.
       if (history.length > 0 && history[history.length - 1].role === geminiRole) {
         history[history.length - 1].parts.push({ text: msg.content });
       } else {
@@ -87,29 +84,75 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // The last message is the current user prompt.
+    // Current user prompt
     const lastMessage = messages[messages.length - 1];
     const currentPrompt = lastMessage.content;
 
-    // --- Call Gemini ---
-    const modelName = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+    // Candidate models to cascade through in case of temporary 503 high demand or 429
+    const candidateModels = Array.from(
+      new Set(
+        [
+          process.env.GEMINI_MODEL,
+          'gemini-3.8-flash',
+          'gemini-2.5-flash',
+          'gemini-1.5-flash',
+          'gemini-1.5-pro',
+        ].filter(Boolean) as string[]
+      )
+    );
+
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: modelName,
-      systemInstruction: systemPrompt,
-    });
+    let reply = '';
+    let lastError: any = null;
 
-    const chat = model.startChat({
-      history,
-    });
+    for (const modelToTry of candidateModels) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelToTry,
+          systemInstruction: systemPrompt,
+        });
 
-    const result = await chat.sendMessage(currentPrompt);
-    const response = result.response;
-    const reply = response.text();
+        const chat = model.startChat({
+          history,
+        });
+
+        const result = await chat.sendMessage(currentPrompt);
+        reply = result.response.text();
+
+        if (reply) {
+          break; // Succeeded!
+        }
+      } catch (err: any) {
+        lastError = err;
+        const errMsg = err?.message || '';
+
+        // If high demand (503), rate limit (429), or 404, cascade to next candidate model
+        if (
+          errMsg.includes('503') ||
+          errMsg.includes('high demand') ||
+          errMsg.includes('429') ||
+          errMsg.includes('RESOURCE_EXHAUSTED') ||
+          errMsg.includes('404') ||
+          errMsg.includes('not found') ||
+          errMsg.includes('no longer available')
+        ) {
+          console.warn(`[AI] Model ${modelToTry} busy or unavailable (${errMsg.slice(0, 60)}...). Trying next model...`);
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          continue;
+        }
+
+        // Safety or blocked errors should fail fast
+        throw err;
+      }
+    }
+
+    if (!reply && lastError) {
+      throw lastError;
+    }
 
     if (!reply) {
       return NextResponse.json(
-        { error: 'Gemini returned an empty response.' },
+        { error: 'Gemini returned an empty response. Please try again.' },
         { status: 502 },
       );
     }
@@ -118,9 +161,16 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     console.error('[/api/ai] Error:', err);
 
-    // Surface Gemini-specific blocked-prompt errors
     const message =
       err instanceof Error ? err.message : 'Internal server error';
+
+    // Friendly message for high demand if all fallbacks failed
+    if (message.includes('503') || message.includes('high demand')) {
+      return NextResponse.json(
+        { error: 'Google Gemini servers are currently experiencing peak global demand. Please try sending your message again in a few moments.' },
+        { status: 503 }
+      );
+    }
 
     const status =
       message.includes('SAFETY') || message.includes('blocked')
