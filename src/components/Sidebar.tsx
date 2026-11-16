@@ -19,6 +19,7 @@ import {
   Flame,
   Award,
   QrCode,
+  Settings,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import NotificationBell from '@/components/NotificationBell';
@@ -40,6 +41,7 @@ const navItems: NavItem[] = [
   { label: 'QR Studio', href: '/qr', icon: <QrCode size={20} /> },
   { label: 'Weekly Review', href: '/review', icon: <Award size={20} /> },
   { label: 'AI Chat', href: '/chat', icon: <MessageSquare size={20} /> },
+  { label: 'Settings', href: '/settings', icon: <Settings size={20} /> },
 ];
 
 export default function Sidebar() {
@@ -186,19 +188,28 @@ export default function Sidebar() {
               )}
             </div>
             {!collapsed && (
-              <div className="flex-1 min-w-0">
+              <Link href="/settings" className="flex-1 min-w-0 hover:opacity-85 transition">
                 <p className="truncate text-sm font-medium text-slate-200">{user.name}</p>
                 <p className="truncate text-xs text-slate-500">{user.email}</p>
-              </div>
+              </Link>
             )}
             {!collapsed && (
-              <button
-                onClick={handleSignOut}
-                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-red-500/10 hover:text-red-400"
-                title="Sign Out"
-              >
-                <LogOut size={16} />
-              </button>
+              <div className="flex items-center gap-1">
+                <Link
+                  href="/settings"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-300"
+                  title="Settings & Reset Data"
+                >
+                  <Settings size={15} />
+                </Link>
+                <button
+                  onClick={handleSignOut}
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                  title="Sign Out"
+                >
+                  <LogOut size={15} />
+                </button>
+              </div>
             )}
           </div>
         ) : (
