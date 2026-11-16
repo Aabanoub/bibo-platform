@@ -140,6 +140,14 @@ export default function LoginPage() {
         });
 
         if (error) {
+          if (error.message.toLowerCase().includes('rate limit')) {
+            setMessage({
+              type: 'error',
+              text: '⚠️ Supabase email rate limit reached. To sign in immediately without email limits, go to Supabase Dashboard ➔ Authentication ➔ Providers ➔ Email and switch "Confirm email" to OFF, or wait a few minutes.',
+            });
+            setLoading(false);
+            return;
+          }
           setMessage({ type: 'error', text: error.message });
           setLoading(false);
           return;
