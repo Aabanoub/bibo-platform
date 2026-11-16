@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import Sidebar from '@/components/Sidebar';
+import MobileBottomNav from '@/components/MobileBottomNav';
 import PwaRegister from '@/components/PwaRegister';
 
 const inter = Inter({
@@ -43,12 +44,13 @@ export default function RootLayout({
         <PwaRegister />
         <div className="flex h-screen overflow-hidden">
           <Sidebar />
-          <main className="flex-1 overflow-y-auto">
+          <main className="flex-1 overflow-y-auto pb-20 lg:pb-0">
             <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
               {children}
             </div>
           </main>
         </div>
+        <MobileBottomNav />
       </body>
     </html>
   );

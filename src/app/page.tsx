@@ -17,6 +17,7 @@ import {
   Flame,
   Award,
   QrCode,
+  Sparkles,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import type { Task, Transaction, Habit, HabitLog, Note } from '@/types';
@@ -387,6 +388,77 @@ export default function DashboardPage() {
             </div>
           </Link>
         ))}
+      </section>
+
+      {/* Platform Apps & AI Suite */}
+      <section>
+        <h2 className="mb-3 flex items-center justify-between text-sm font-semibold uppercase tracking-wider text-slate-400">
+          <span className="flex items-center gap-2">
+            <Sparkles size={15} className="text-blue-400" />
+            Platform Apps & Tools
+          </span>
+        </h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Link
+            href="/calendar"
+            className="group relative overflow-hidden rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-950/40 to-slate-900 p-4 transition hover:border-indigo-500/40 hover:scale-[1.01]"
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/20 text-indigo-400">
+                <Calendar size={18} />
+              </div>
+              <h3 className="font-semibold text-white text-sm">Smart Calendar</h3>
+            </div>
+            <p className="text-xs text-slate-400">
+              Tasks by due date, habit logs & Google / Samsung Calendar iCal sync.
+            </p>
+          </Link>
+
+          <Link
+            href="/focus"
+            className="group relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-950/40 to-slate-900 p-4 transition hover:border-amber-500/40 hover:scale-[1.01]"
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400">
+                <Flame size={18} />
+              </div>
+              <h3 className="font-semibold text-white text-sm">Focus Mode</h3>
+            </div>
+            <p className="text-xs text-slate-400">
+              25m Pomodoro deep work timer with calming ambient rain sound.
+            </p>
+          </Link>
+
+          <Link
+            href="/qr"
+            className="group relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/40 to-slate-900 p-4 transition hover:border-cyan-500/40 hover:scale-[1.01]"
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-400">
+                <QrCode size={18} />
+              </div>
+              <h3 className="font-semibold text-white text-sm">QR Code Studio</h3>
+            </div>
+            <p className="text-xs text-slate-400">
+              Generate QR codes for URLs, Wi-Fi, vCard contacts, WhatsApp & Crypto.
+            </p>
+          </Link>
+
+          <Link
+            href="/review"
+            className="group relative overflow-hidden rounded-2xl border border-purple-500/20 bg-gradient-to-br from-purple-950/40 to-slate-900 p-4 transition hover:border-purple-500/40 hover:scale-[1.01]"
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-500/20 text-purple-400">
+                <Award size={18} />
+              </div>
+              <h3 className="font-semibold text-white text-sm">Sunday Life Review</h3>
+            </div>
+            <p className="text-xs text-slate-400">
+              Weekly savings rate, task performance & AI executive coaching report.
+            </p>
+          </Link>
+        </div>
       </section>
 
       {/* Quick Actions */}
