@@ -69,8 +69,9 @@ export default function NotesPage() {
 
       if (err) throw err;
       setNotes((data as Note[]) ?? []);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load notes');
+    } catch (e: any) {
+      const msg = e?.message || e?.error_description || (e instanceof Error ? e.message : 'Failed to load notes');
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -131,17 +132,46 @@ export default function NotesPage() {
   const createNote = async () => {
     try {
       setError(null);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setError('Please sign in to create notes.');
+        return;
+      }
+
+      // Ensure profile row exists to satisfy foreign key constraints
+      try {
+        await supabase.from('profiles').upsert(
+          {
+            id: user.id,
+            full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+          },
+          { onConflict: 'id' }
+        );
+      } catch {}
+
       const { data, error: err } = await supabase
         .from('notes')
-        .insert({ title: 'Untitled Note', content: '', tags: [], is_pinned: false })
+        .insert({
+          user_id: user.id,
+          title: 'Untitled Note',
+          content: '',
+          tags: [],
+          is_pinned: false,
+        })
         .select()
         .single();
+
       if (err) throw err;
       const note = data as Note;
       setNotes((prev) => [note, ...prev]);
       selectNote(note);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to create note');
+    } catch (e: any) {
+      console.error('createNote error:', e);
+      const msg = e?.message || e?.error_description || (e instanceof Error ? e.message : 'Failed to create note');
+      setError(msg);
     }
   };
 

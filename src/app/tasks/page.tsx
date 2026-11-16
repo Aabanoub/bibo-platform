@@ -100,9 +100,30 @@ export default function TasksPage() {
     setSubmitting(true);
     try {
       setError(null);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setError('Please sign in to create tasks.');
+        return;
+      }
+
+      // Ensure profile row exists to satisfy foreign key constraints
+      try {
+        await supabase.from('profiles').upsert(
+          {
+            id: user.id,
+            full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+          },
+          { onConflict: 'id' }
+        );
+      } catch {}
+
       const { data, error: err } = await supabase
         .from('tasks')
         .insert({
+          user_id: user.id,
           title: formTitle.trim(),
           description: formDesc.trim() || null,
           priority: formPriority,
@@ -116,13 +137,16 @@ export default function TasksPage() {
       setTasks((prev) => [task, ...prev]);
 
       // create notification
-      await supabase.from('notifications').insert({
-        title: 'New Task Created',
-        message: `Task "${task.title}" has been added to your To Do list.`,
-        type: 'task',
-        is_read: false,
-        action_url: '/tasks',
-      });
+      try {
+        await supabase.from('notifications').insert({
+          user_id: user.id,
+          title: 'New Task Created',
+          message: `Task "${task.title}" has been added to your To Do list.`,
+          type: 'task',
+          is_read: false,
+          action_url: '/tasks',
+        });
+      } catch {}
 
       // reset form
       setFormTitle('');
@@ -130,8 +154,10 @@ export default function TasksPage() {
       setFormPriority('medium');
       setFormDue('');
       setShowForm(false);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to create task');
+    } catch (e: any) {
+      console.error('createTask error:', e);
+      const msg = e?.message || e?.error_description || (e instanceof Error ? e.message : 'Failed to create task');
+      setError(msg);
     } finally {
       setSubmitting(false);
     }

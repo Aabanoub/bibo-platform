@@ -168,9 +168,30 @@ export default function HabitsPage() {
     setSubmitting(true);
     try {
       setError(null);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setError('Please sign in to create habits.');
+        return;
+      }
+
+      // Ensure profile row exists
+      try {
+        await supabase.from('profiles').upsert(
+          {
+            id: user.id,
+            full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+          },
+          { onConflict: 'id' }
+        );
+      } catch {}
+
       const { data, error: err } = await supabase
         .from('habits')
         .insert({
+          user_id: user.id,
           name: formName.trim(),
           description: formDesc.trim() || null,
           frequency: formFreq,
@@ -184,8 +205,10 @@ export default function HabitsPage() {
       setFormName('');
       setFormDesc('');
       setShowForm(false);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to create habit');
+    } catch (e: any) {
+      console.error('createHabit error:', e);
+      const msg = e?.message || e?.error_description || (e instanceof Error ? e.message : 'Failed to create habit');
+      setError(msg);
     } finally {
       setSubmitting(false);
     }
@@ -214,6 +237,15 @@ export default function HabitsPage() {
 
     try {
       setError(null);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setError('Please sign in to update habits.');
+        return;
+      }
+
       if (existing) {
         const { error: err } = await supabase.from('habit_logs').delete().eq('id', existing.id);
         if (err) throw err;
@@ -221,23 +253,32 @@ export default function HabitsPage() {
       } else {
         const { data, error: err } = await supabase
           .from('habit_logs')
-          .insert({ habit_id: habit.id, completed_at: date })
+          .insert({
+            user_id: user.id,
+            habit_id: habit.id,
+            completed_at: date,
+          })
           .select()
           .single();
         if (err) throw err;
         setLogs((prev) => [data as HabitLog, ...prev]);
 
         // create notification on completion
-        await supabase.from('notifications').insert({
-          title: 'Habit Completed! 🎉',
-          message: `You completed "${habit.name}" for today. Keep the streak going!`,
-          type: 'habit',
-          is_read: false,
-          action_url: '/habits',
-        });
+        try {
+          await supabase.from('notifications').insert({
+            user_id: user.id,
+            title: 'Habit Completed! 🎉',
+            message: `You completed "${habit.name}" for today. Keep the streak going!`,
+            type: 'habit',
+            is_read: false,
+            action_url: '/habits',
+          });
+        } catch {}
       }
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to update habit log');
+    } catch (e: any) {
+      console.error('toggleHabit error:', e);
+      const msg = e?.message || e?.error_description || (e instanceof Error ? e.message : 'Failed to update habit log');
+      setError(msg);
     }
   };
 

@@ -104,9 +104,30 @@ export default function FinancePage() {
     setSubmitting(true);
     try {
       setError(null);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setError('Please sign in to add transactions.');
+        return;
+      }
+
+      // Ensure profile row exists
+      try {
+        await supabase.from('profiles').upsert(
+          {
+            id: user.id,
+            full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+          },
+          { onConflict: 'id' }
+        );
+      } catch {}
+
       const { data, error: err } = await supabase
         .from('transactions')
         .insert({
+          user_id: user.id,
           amount,
           type: formType,
           category: formCategory,
@@ -121,8 +142,10 @@ export default function FinancePage() {
       setFormDesc('');
       setFormDate(new Date().toISOString().split('T')[0]);
       setShowForm(false);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to create transaction');
+    } catch (e: any) {
+      console.error('createTransaction error:', e);
+      const msg = e?.message || e?.error_description || (e instanceof Error ? e.message : 'Failed to create transaction');
+      setError(msg);
     } finally {
       setSubmitting(false);
     }
