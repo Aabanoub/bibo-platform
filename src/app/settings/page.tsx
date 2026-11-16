@@ -30,7 +30,30 @@ export default function SettingsPage() {
   const { gender, setGender, isGirly } = useTheme();
   const { slots, updateSlot, resetSlots } = useNavigation();
 
-  const [isNavSettingsOpen, setIsNavSettingsOpen] = useState(false);
+  // Accordion open/close state for all settings sections
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    profile: false,
+    theme: false,
+    nav: false,
+    ai: false,
+    danger: false,
+  });
+
+  const toggleSection = (section: string) => {
+    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const areAllOpen = Object.values(openSections).every(Boolean);
+  const toggleAll = () => {
+    const nextState = !areAllOpen;
+    setOpenSections({
+      profile: nextState,
+      theme: nextState,
+      nav: nextState,
+      ai: nextState,
+      danger: nextState,
+    });
+  };
 
   const [user, setUser] = useState<{
     id: string;
@@ -115,119 +138,224 @@ export default function SettingsPage() {
             <p className="text-[11px] sm:text-xs text-zinc-400">Manage account credentials, AI preferences & data</p>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={toggleAll}
+          className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 px-3 py-1.5 rounded-xl border border-zinc-800 bg-zinc-900/80 hover:bg-zinc-800 transition"
+        >
+          <span>{areAllOpen ? 'Collapse All' : 'Expand All'}</span>
+        </button>
       </header>
 
       {/* Main Content */}
       <main className="p-0 sm:p-2">
-        <div className="mx-auto max-w-4xl space-y-6">
-          {/* Account Profile Card */}
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 space-y-4">
-            <div className="flex items-center gap-2.5 pb-2 border-b border-zinc-800">
-              <User size={18} className="text-blue-400" />
-              <h2 className="text-sm font-semibold text-white">Profile Information</h2>
-            </div>
-
-            <form onSubmit={handleUpdateName} className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="text-xs text-zinc-400 block mb-1">Display Name:</label>
-                  <input
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3.5 py-2 text-xs text-zinc-100 outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs text-zinc-400 block mb-1">Account Email:</label>
-                  <input
-                    type="email"
-                    disabled
-                    value={user?.email || ''}
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-xs text-zinc-400 cursor-not-allowed"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-[11px] text-zinc-500">
-                  Member since: {user?.createdAt || 'Active'}
-                </span>
-
-                <button
-                  type="submit"
-                  disabled={savingName || !fullName.trim()}
-                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition disabled:opacity-50"
+        <div className="mx-auto max-w-4xl space-y-4">
+          {/* Account Profile Card (Collapsible) */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 overflow-hidden transition-all duration-200">
+            <button
+              type="button"
+              onClick={() => toggleSection('profile')}
+              className="w-full flex items-center justify-between p-5 sm:p-6 text-left transition hover:bg-zinc-800/40 select-none"
+            >
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div
+                  className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl shadow-md transition-all ${
+                    isGirly
+                      ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30'
+                      : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                  }`}
                 >
-                  {nameSaved ? <Check size={14} className="text-emerald-300" /> : null}
-                  <span>{nameSaved ? 'Saved!' : savingName ? 'Saving...' : 'Update Name'}</span>
-                </button>
+                  <User size={20} />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-white">Profile Information</h2>
+                    <span
+                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                        openSections.profile
+                          ? isGirly
+                            ? 'bg-pink-500/20 text-pink-300'
+                            : 'bg-blue-500/20 text-blue-300'
+                          : 'bg-zinc-800 text-zinc-400'
+                      }`}
+                    >
+                      {openSections.profile ? 'Open' : 'Manage'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-400 truncate mt-0.5">
+                    {fullName || user?.name || 'Account details'} • {user?.email || 'Authenticated'}
+                  </p>
+                </div>
               </div>
-            </form>
+
+              <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-800/80 text-zinc-400 transition-transform duration-200 ${
+                    openSections.profile ? 'rotate-180 text-white' : ''
+                  }`}
+                >
+                  <ChevronDown size={16} />
+                </div>
+              </div>
+            </button>
+
+            {openSections.profile && (
+              <div className="px-5 sm:px-6 pb-6 pt-2 space-y-4 border-t border-zinc-800/80 animate-fade-in">
+                <form onSubmit={handleUpdateName} className="space-y-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="text-xs text-zinc-400 block mb-1">Display Name:</label>
+                      <input
+                        type="text"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3.5 py-2 text-xs text-zinc-100 outline-none focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-zinc-400 block mb-1">Account Email:</label>
+                      <input
+                        type="email"
+                        disabled
+                        value={user?.email || ''}
+                        className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-xs text-zinc-400 cursor-not-allowed"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11px] text-zinc-500">
+                      Member since: {user?.createdAt || 'Active'}
+                    </span>
+
+                    <button
+                      type="submit"
+                      disabled={savingName || !fullName.trim()}
+                      className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition disabled:opacity-50"
+                    >
+                      {nameSaved ? <Check size={14} className="text-emerald-300" /> : null}
+                      <span>{nameSaved ? 'Saved!' : savingName ? 'Saving...' : 'Update Name'}</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
           </div>
 
-          {/* Theme & Gender Preference Card */}
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 space-y-4">
-            <div className="flex items-center gap-2.5 pb-2 border-b border-zinc-800">
-              <Palette size={18} className={isGirly ? 'text-pink-400' : 'text-blue-400'} />
-              <h2 className="text-sm font-semibold text-white">Platform Theme & Gender Design</h2>
-            </div>
-            <p className="text-xs text-zinc-400">
-              Personalize your platform&apos;s colors and visual aesthetic based on your preference.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              <button
-                type="button"
-                onClick={() => setGender('female')}
-                className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-all ${
-                  gender === 'female'
-                    ? 'border-pink-500 bg-pink-500/20 text-pink-200 shadow-lg shadow-pink-500/20 ring-2 ring-pink-500/40'
-                    : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-pink-500/50 hover:text-pink-300'
-                }`}
-              >
-                <span className="text-3xl">🌸</span>
-                <div>
-                  <div className="text-sm font-bold text-white flex items-center gap-2">
-                    Girl / Female
-                    {gender === 'female' && (
-                      <span className="rounded-full bg-pink-500/30 px-2 py-0.5 text-[10px] font-semibold text-pink-300">
-                        ACTIVE
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-xs text-pink-300/80 mt-0.5">
-                    Girly state: Soft rose, pink gradients, plum night & aesthetic accents
-                  </div>
+          {/* Theme & Gender Preference Card (Collapsible) */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 overflow-hidden transition-all duration-200">
+            <button
+              type="button"
+              onClick={() => toggleSection('theme')}
+              className="w-full flex items-center justify-between p-5 sm:p-6 text-left transition hover:bg-zinc-800/40 select-none"
+            >
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div
+                  className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl shadow-md transition-all ${
+                    isGirly
+                      ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30'
+                      : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                  }`}
+                >
+                  <Palette size={20} />
                 </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setGender('male')}
-                className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-all ${
-                  gender === 'male' || gender === 'default'
-                    ? 'border-blue-500 bg-blue-500/20 text-blue-200 shadow-lg shadow-blue-500/20 ring-2 ring-blue-500/40'
-                    : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-blue-500/50 hover:text-blue-300'
-                }`}
-              >
-                <span className="text-3xl">⚡</span>
-                <div>
-                  <div className="text-sm font-bold text-white flex items-center gap-2">
-                    Boy / Male
-                    {(gender === 'male' || gender === 'default') && (
-                      <span className="rounded-full bg-blue-500/30 px-2 py-0.5 text-[10px] font-semibold text-blue-300">
-                        ACTIVE
-                      </span>
-                    )}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-white">Platform Theme & Visual Style</h2>
+                    <span
+                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                        openSections.theme
+                          ? isGirly
+                            ? 'bg-pink-500/20 text-pink-300'
+                            : 'bg-purple-500/20 text-purple-300'
+                          : isGirly
+                            ? 'bg-pink-500/10 text-pink-400'
+                            : 'bg-blue-500/10 text-blue-400'
+                      }`}
+                    >
+                      {openSections.theme ? 'Open' : gender === 'female' ? '🌸 Girl Theme' : '⚡ Boy Theme'}
+                    </span>
                   </div>
-                  <div className="text-xs text-blue-300/80 mt-0.5">
-                    Tech state: Electric blue, cyan gradients & deep slate aesthetic
-                  </div>
+                  <p className="text-xs text-zinc-400 truncate mt-0.5">
+                    {gender === 'female'
+                      ? '🌸 Girly state: Soft rose, pink gradients & aesthetic accents'
+                      : '⚡ Tech state: Electric blue, cyan gradients & dark slate'}
+                  </p>
                 </div>
-              </button>
-            </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-800/80 text-zinc-400 transition-transform duration-200 ${
+                    openSections.theme ? 'rotate-180 text-white' : ''
+                  }`}
+                >
+                  <ChevronDown size={16} />
+                </div>
+              </div>
+            </button>
+
+            {openSections.theme && (
+              <div className="px-5 sm:px-6 pb-6 pt-2 space-y-4 border-t border-zinc-800/80 animate-fade-in">
+                <p className="text-xs text-zinc-400">
+                  Personalize your platform&apos;s colors and visual aesthetic based on your preference.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setGender('female')}
+                    className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-all ${
+                      gender === 'female'
+                        ? 'border-pink-500 bg-pink-500/20 text-pink-200 shadow-lg shadow-pink-500/20 ring-2 ring-pink-500/40'
+                        : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-pink-500/50 hover:text-pink-300'
+                    }`}
+                  >
+                    <span className="text-3xl">🌸</span>
+                    <div>
+                      <div className="text-sm font-bold text-white flex items-center gap-2">
+                        Girl / Female
+                        {gender === 'female' && (
+                          <span className="rounded-full bg-pink-500/30 px-2 py-0.5 text-[10px] font-semibold text-pink-300">
+                            ACTIVE
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-pink-300/80 mt-0.5">
+                        Girly state: Soft rose, pink gradients, plum night & aesthetic accents
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setGender('male')}
+                    className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-all ${
+                      gender === 'male' || gender === 'default'
+                        ? 'border-blue-500 bg-blue-500/20 text-blue-200 shadow-lg shadow-blue-500/20 ring-2 ring-blue-500/40'
+                        : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-blue-500/50 hover:text-blue-300'
+                    }`}
+                  >
+                    <span className="text-3xl">⚡</span>
+                    <div>
+                      <div className="text-sm font-bold text-white flex items-center gap-2">
+                        Boy / Male
+                        {(gender === 'male' || gender === 'default') && (
+                          <span className="rounded-full bg-blue-500/30 px-2 py-0.5 text-[10px] font-semibold text-blue-300">
+                            ACTIVE
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-blue-300/80 mt-0.5">
+                        Tech state: Electric blue, cyan gradients & deep slate aesthetic
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Mobile Bottom Navigation Bar Customization (Collapsible) */}
@@ -235,7 +363,7 @@ export default function SettingsPage() {
             {/* Clickable Header / Icon Row */}
             <button
               type="button"
-              onClick={() => setIsNavSettingsOpen((prev) => !prev)}
+              onClick={() => toggleSection('nav')}
               className="w-full flex items-center justify-between p-5 sm:p-6 text-left transition hover:bg-zinc-800/40 select-none"
             >
               <div className="flex items-center gap-3.5 min-w-0">
@@ -253,14 +381,14 @@ export default function SettingsPage() {
                     <h2 className="text-sm font-semibold text-white">Mobile Bottom Navigation Bar</h2>
                     <span
                       className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                        isNavSettingsOpen
+                        openSections.nav
                           ? isGirly
                             ? 'bg-pink-500/20 text-pink-300'
                             : 'bg-emerald-500/20 text-emerald-300'
                           : 'bg-zinc-800 text-zinc-400'
                       }`}
                     >
-                      {isNavSettingsOpen ? 'Open' : 'Configure'}
+                      {openSections.nav ? 'Open' : 'Configure'}
                     </span>
                   </div>
                   <p className="text-xs text-zinc-400 truncate mt-0.5">
@@ -272,7 +400,7 @@ export default function SettingsPage() {
               <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                 <div
                   className={`flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-800/80 text-zinc-400 transition-transform duration-200 ${
-                    isNavSettingsOpen ? 'rotate-180 text-white' : ''
+                    openSections.nav ? 'rotate-180 text-white' : ''
                   }`}
                 >
                   <ChevronDown size={16} />
@@ -281,7 +409,7 @@ export default function SettingsPage() {
             </button>
 
             {/* Collapsible Content */}
-            {isNavSettingsOpen && (
+            {openSections.nav && (
               <div className="px-5 sm:px-6 pb-6 pt-2 space-y-5 border-t border-zinc-800/80 animate-fade-in">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-xs text-zinc-400 leading-relaxed max-w-xl">
@@ -452,65 +580,153 @@ export default function SettingsPage() {
             )}
           </div>
 
-          {/* AI Engines & System Status */}
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 space-y-4">
-            <div className="flex items-center gap-2.5 pb-2 border-b border-zinc-800">
-              <Cpu size={18} className="text-purple-400" />
-              <h2 className="text-sm font-semibold text-white">AI Engine & Capabilities</h2>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-xs">
-              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-200">Groq LPU Engine</span>
-                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
-                    ONLINE
-                  </span>
+          {/* AI Engines & System Status (Collapsible) */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 overflow-hidden transition-all duration-200">
+            <button
+              type="button"
+              onClick={() => toggleSection('ai')}
+              className="w-full flex items-center justify-between p-5 sm:p-6 text-left transition hover:bg-zinc-800/40 select-none"
+            >
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div
+                  className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl shadow-md transition-all ${
+                    isGirly
+                      ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30'
+                      : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                  }`}
+                >
+                  <Cpu size={20} />
                 </div>
-                <p className="text-zinc-500 text-[11px]">
-                  Powering conversational AI and Whisper Large V3 Turbo speech transcription.
-                </p>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-white">AI Engine & Capabilities</h2>
+                    <span
+                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                        openSections.ai
+                          ? isGirly
+                            ? 'bg-pink-500/20 text-pink-300'
+                            : 'bg-purple-500/20 text-purple-300'
+                          : 'bg-emerald-500/20 text-emerald-300'
+                      }`}
+                    >
+                      {openSections.ai ? 'Open' : 'Active (2)'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-400 truncate mt-0.5">
+                    Groq LPU Engine (Online) • Google Gemini Multimodal (Online)
+                  </p>
+                </div>
               </div>
 
-              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-200">Google Gemini Multimodal</span>
-                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
-                    ONLINE
-                  </span>
+              <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-800/80 text-zinc-400 transition-transform duration-200 ${
+                    openSections.ai ? 'rotate-180 text-white' : ''
+                  }`}
+                >
+                  <ChevronDown size={16} />
                 </div>
-                <p className="text-zinc-500 text-[11px]">
-                  Powering receipt OCR scanning, document analysis, and fallback reasoning.
-                </p>
               </div>
-            </div>
+            </button>
+
+            {openSections.ai && (
+              <div className="px-5 sm:px-6 pb-6 pt-2 space-y-4 border-t border-zinc-800/80 animate-fade-in">
+                <p className="text-xs text-zinc-400">
+                  Platform machine intelligence backend services, models, and real-time inference status.
+                </p>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-xs">
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-zinc-200">Groq LPU Engine</span>
+                      <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                        ONLINE
+                      </span>
+                    </div>
+                    <p className="text-zinc-500 text-[11px]">
+                      Powering conversational AI and Whisper Large V3 Turbo speech transcription.
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-zinc-200">Google Gemini Multimodal</span>
+                      <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                        ONLINE
+                      </span>
+                    </div>
+                    <p className="text-zinc-500 text-[11px]">
+                      Powering receipt OCR scanning, document analysis, and fallback reasoning.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Danger Zone: Reset All Data */}
-          <div className="rounded-2xl border border-red-500/30 bg-red-950/10 p-6 space-y-4">
-            <div className="flex items-center gap-2.5 pb-2 border-b border-red-500/20">
-              <AlertTriangle size={18} className="text-red-400" />
-              <h2 className="text-sm font-semibold text-red-400">Danger Zone</h2>
-            </div>
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h3 className="text-sm font-semibold text-white">Reset All Platform Data</h3>
-                <p className="mt-1 text-xs text-zinc-400 max-w-xl">
-                  Permanently wipe all your financial transactions, tasks, notes, habits, and chat
-                  conversations back to a fresh starting state. Requires your account password to confirm.
-                </p>
+          {/* Danger Zone: Reset All Data (Collapsible) */}
+          <div className="rounded-2xl border border-red-500/30 bg-red-950/10 overflow-hidden transition-all duration-200">
+            <button
+              type="button"
+              onClick={() => toggleSection('danger')}
+              className="w-full flex items-center justify-between p-5 sm:p-6 text-left transition hover:bg-red-900/10 select-none"
+            >
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 shadow-md">
+                  <AlertTriangle size={20} />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-red-400">Danger Zone</h2>
+                    <span
+                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                        openSections.danger
+                          ? 'bg-red-500/20 text-red-300'
+                          : 'bg-zinc-800 text-zinc-400'
+                      }`}
+                    >
+                      {openSections.danger ? 'Open' : 'Restricted'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-400 truncate mt-0.5">
+                    Permanently wipe account financial, task, note & habit records
+                  </p>
+                </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setResetModalOpen(true)}
-                className="flex items-center justify-center gap-2 rounded-xl bg-red-600/90 hover:bg-red-600 px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-red-600/20 transition shrink-0"
-              >
-                <Lock size={14} />
-                <span>Reset All Data...</span>
-              </button>
-            </div>
+              <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-800/80 text-zinc-400 transition-transform duration-200 ${
+                    openSections.danger ? 'rotate-180 text-white' : ''
+                  }`}
+                >
+                  <ChevronDown size={16} />
+                </div>
+              </div>
+            </button>
+
+            {openSections.danger && (
+              <div className="px-5 sm:px-6 pb-6 pt-2 space-y-4 border-t border-red-500/20 animate-fade-in">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-white">Reset All Platform Data</h3>
+                    <p className="mt-1 text-xs text-zinc-400 max-w-xl">
+                      Permanently wipe all your financial transactions, tasks, notes, habits, and chat
+                      conversations back to a fresh starting state. Requires your account password to confirm.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setResetModalOpen(true)}
+                    className="flex items-center justify-center gap-2 rounded-xl bg-red-600/90 hover:bg-red-600 px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-red-600/20 transition shrink-0"
+                  >
+                    <Lock size={14} />
+                    <span>Reset All Data...</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </main>
