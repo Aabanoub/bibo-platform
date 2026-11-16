@@ -10,9 +10,7 @@ import {
   Plus,
   MessageSquare,
   TrendingUp,
-  Clock,
   Zap,
-  ArrowRight,
   Flame,
   Award,
   QrCode,
@@ -33,15 +31,6 @@ interface DashboardData {
   totalHabits: number;
   totalNotes: number;
   recentlyUpdatedNotes: number;
-  recentActivity: ActivityItem[];
-}
-
-interface ActivityItem {
-  id: string;
-  type: 'task' | 'note' | 'finance' | 'habit';
-  title: string;
-  description: string;
-  timestamp: string;
 }
 
 const defaultData: DashboardData = {
@@ -56,7 +45,6 @@ const defaultData: DashboardData = {
   totalHabits: 0,
   totalNotes: 0,
   recentlyUpdatedNotes: 0,
-  recentActivity: [],
 };
 
 export default function DashboardPage() {
@@ -95,8 +83,6 @@ export default function DashboardPage() {
           habitLogsRes,
           notesRes,
           recentNotesRes,
-          recentTasksRes,
-          recentHabitLogsRes,
         ] = await Promise.all([
           // Open tasks
           supabase
@@ -139,20 +125,6 @@ export default function DashboardPage() {
             .select('id', { count: 'exact', head: true })
             .eq('user_id', user.id)
             .gte('updated_at', weekAgo),
-          // Recent tasks for activity feed
-          supabase
-            .from('tasks')
-            .select('id, title, updated_at')
-            .eq('user_id', user.id)
-            .order('updated_at', { ascending: false })
-            .limit(5),
-          // Recent habit logs
-          supabase
-            .from('habit_logs')
-            .select('id, habit_id, completed_at')
-            .eq('user_id', user.id)
-            .order('completed_at', { ascending: false })
-            .limit(5),
         ]);
 
         // Calculate synchronized Net Balance and spending totals
@@ -184,45 +156,6 @@ export default function DashboardPage() {
 
         const netBalance = totalIncome - totalExpenses;
 
-        // Build activity feed
-        const activities: ActivityItem[] = [];
-
-        (recentTasksRes.data as any[])?.forEach((task: any) => {
-          activities.push({
-            id: `task-${task.id}`,
-            type: 'task',
-            title: task.title,
-            description: 'Task updated',
-            timestamp: task.updated_at,
-          });
-        });
-
-        // 5 most recent transactions for activity feed
-        allTransactions.slice(0, 5).forEach((tx: any) => {
-          activities.push({
-            id: `tx-${tx.id}`,
-            type: 'finance',
-            title: tx.description || `${tx.type === 'expense' ? 'Expense' : 'Income'}`,
-            description: `$${Math.abs(Number(tx.amount) || 0).toFixed(2)} ${tx.type}`,
-            timestamp: tx.created_at,
-          });
-        });
-
-        (recentHabitLogsRes.data as any[])?.forEach((log: any) => {
-          activities.push({
-            id: `habit-${log.id}`,
-            type: 'habit',
-            title: log.habits?.name || 'Habit Check-in',
-            description: 'Habit completed',
-            timestamp: log.completed_at || log.created_at || new Date().toISOString(),
-          });
-        });
-
-        // Sort by time and take the 5 most recent
-        activities.sort(
-          (a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()
-        );
-
         setData({
           openTasks: tasksRes.count || 0,
           completedToday: completedTasksRes.count || 0,
@@ -235,7 +168,6 @@ export default function DashboardPage() {
           totalHabits: habitsRes.count || 0,
           totalNotes: notesRes.count || 0,
           recentlyUpdatedNotes: recentNotesRes.count || 0,
-          recentActivity: activities.slice(0, 5),
         });
       } catch (err) {
         console.error('Dashboard fetch error:', err);
@@ -262,34 +194,6 @@ export default function DashboardPage() {
       day: 'numeric',
     });
   }
-
-  function timeAgo(dateString: string): string {
-    const now = new Date();
-    const date = new Date(dateString);
-    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-    if (seconds < 60) return 'just now';
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
-  }
-
-  const activityIcon = (type: string) => {
-    switch (type) {
-      case 'task':
-        return <CheckSquare size={16} className="text-blue-400" />;
-      case 'finance':
-        return <Wallet size={16} className="text-emerald-400" />;
-      case 'habit':
-        return <Activity size={16} className="text-purple-400" />;
-      case 'note':
-        return <StickyNote size={16} className="text-amber-400" />;
-      default:
-        return <Clock size={16} className="text-slate-400" />;
-    }
-  };
 
   const summaryCards = [
     {
@@ -496,56 +400,6 @@ export default function DashboardPage() {
               </span>
             </Link>
           ))}
-        </div>
-      </section>
-
-      {/* Recent Activity */}
-      <section>
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-slate-400">
-          <Clock size={14} />
-          Recent Activity
-        </h2>
-        <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 overflow-hidden">
-          {data.recentActivity.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-500">
-              <Clock size={32} className="mb-3 opacity-30" />
-              <p className="text-sm">No recent activity</p>
-              <p className="mt-1 text-xs text-slate-600">
-                Start by creating a note, task, or logging an expense
-              </p>
-            </div>
-          ) : (
-            <ul className="divide-y divide-slate-700/40">
-              {data.recentActivity.map((item) => (
-                <li
-                  key={item.id}
-                  className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-slate-700/20"
-                >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800">
-                    {activityIcon(item.type)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-200">{item.title}</p>
-                    <p className="text-xs text-slate-500">{item.description}</p>
-                  </div>
-                  <span className="flex-shrink-0 text-xs text-slate-600">
-                    {timeAgo(item.timestamp)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {data.recentActivity.length > 0 && (
-            <div className="border-t border-slate-700/40 px-4 py-2.5">
-              <Link
-                href="/tasks"
-                className="flex items-center gap-1 text-xs font-medium text-slate-500 transition-colors hover:text-blue-400"
-              >
-                View all activity
-                <ArrowRight size={12} />
-              </Link>
-            </div>
-          )}
         </div>
       </section>
     </div>
