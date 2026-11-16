@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI, Content } from '@google/generative-ai';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 // ---------------------------------------------------------------------------
 // Persona system prompts
@@ -88,15 +89,16 @@ export async function POST(req: NextRequest) {
     const lastMessage = messages[messages.length - 1];
     const currentPrompt = lastMessage.content;
 
-    // Candidate models to cascade through in case of temporary 503 high demand or 429
+    // Tested and verified fast candidate models
     const candidateModels = Array.from(
       new Set(
         [
           process.env.GEMINI_MODEL,
+          'gemini-flash-lite-latest',
+          'gemini-3.1-flash-lite',
+          'gemini-3.5-flash-lite',
           'gemini-3.8-flash',
-          'gemini-2.5-flash',
-          'gemini-1.5-flash',
-          'gemini-1.5-pro',
+          'gemini-flash-latest',
         ].filter(Boolean) as string[]
       )
     );
@@ -116,7 +118,16 @@ export async function POST(req: NextRequest) {
           history,
         });
 
-        const result = await chat.sendMessage(currentPrompt);
+        // 12-second timeout per individual model call to prevent Vercel 504 gateway timeout
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Timeout on model ${modelToTry}`)), 12000)
+        );
+
+        const result: any = await Promise.race([
+          chat.sendMessage(currentPrompt),
+          timeoutPromise,
+        ]);
+
         reply = result.response.text();
 
         if (reply) {
@@ -134,10 +145,10 @@ export async function POST(req: NextRequest) {
           errMsg.includes('RESOURCE_EXHAUSTED') ||
           errMsg.includes('404') ||
           errMsg.includes('not found') ||
-          errMsg.includes('no longer available')
+          errMsg.includes('no longer available') ||
+          errMsg.includes('Timeout')
         ) {
-          console.warn(`[AI] Model ${modelToTry} busy or unavailable (${errMsg.slice(0, 60)}...). Trying next model...`);
-          await new Promise((resolve) => setTimeout(resolve, 500));
+          console.warn(`[AI] Model ${modelToTry} busy or timed out (${errMsg.slice(0, 60)}...). Trying next model...`);
           continue;
         }
 
@@ -165,7 +176,7 @@ export async function POST(req: NextRequest) {
       err instanceof Error ? err.message : 'Internal server error';
 
     // Friendly message for high demand if all fallbacks failed
-    if (message.includes('503') || message.includes('high demand')) {
+    if (message.includes('503') || message.includes('high demand') || message.includes('Timeout')) {
       return NextResponse.json(
         { error: 'Google Gemini servers are currently experiencing peak global demand. Please try sending your message again in a few moments.' },
         { status: 503 }
