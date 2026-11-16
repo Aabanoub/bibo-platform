@@ -121,8 +121,21 @@ export async function GET(req: NextRequest) {
     });
 
     if (!res.ok) {
+      if (normalizedUrl.includes('/public/basic.ics') || normalizedUrl.includes('/public/')) {
+        return NextResponse.json(
+          {
+            error:
+              'You pasted the "Public" link, which Google blocks with 404. In Google Calendar Settings, scroll down to "Secret address in iCal format" (which has /private-XXXXX/ in the URL) and copy that link instead.',
+          },
+          { status: 400 }
+        );
+      }
       return NextResponse.json(
-        { error: `Could not fetch calendar feed: ${res.statusText}` },
+        {
+          error: `Could not fetch calendar feed (HTTP ${res.status}${
+            res.statusText ? ` - ${res.statusText}` : ''
+          }). Please verify the link.`,
+        },
         { status: res.status }
       );
     }

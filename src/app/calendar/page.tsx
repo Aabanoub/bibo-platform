@@ -687,20 +687,22 @@ export default function CalendarPage() {
               </div>
 
               {/* Instructions Accordion */}
-              <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 text-xs text-zinc-400 space-y-2">
-                <div className="flex items-center gap-1.5 text-zinc-200 font-medium">
-                  <HelpCircle size={14} className="text-purple-400" />
-                  <span>How to get your Calendar iCal link:</span>
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3.5 text-xs text-zinc-400 space-y-2.5">
+                <div className="flex items-center gap-1.5 text-zinc-200 font-semibold">
+                  <HelpCircle size={15} className="text-purple-400" />
+                  <span>How to get the correct Secret iCal link:</span>
                 </div>
-                <p>
-                  <strong>Google Calendar:</strong> Open Google Calendar Settings &gt; select your
-                  calendar &gt; scroll down to <em>&quot;Integrate calendar&quot;</em> &gt; copy{' '}
-                  <em>&quot;Secret address in iCal format&quot;</em>.
+                <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-2.5 text-[11px] text-amber-300">
+                  ⚠️ <strong>Crucial:</strong> Do <strong>NOT</strong> copy the &quot;Public address&quot; (Google blocks it with a 404 error). Scroll down to <strong>&quot;Secret address in iCal format&quot;</strong> (which has <code>/private-XXXX/</code> in the link).
+                </div>
+                <p className="leading-relaxed">
+                  <strong>1.</strong> Open <strong>calendar.google.com</strong> &gt; Settings (⚙️) &gt; click your calendar on the left.
                 </p>
-                <p>
-                  <strong>Samsung Calendar:</strong> Samsung Calendar syncs automatically with your
-                  Google account, so pasting your Google Calendar iCal link above will sync all your
-                  Samsung Calendar events!
+                <p className="leading-relaxed">
+                  <strong>2.</strong> Scroll down to <em>&quot;Integrate calendar&quot;</em> &gt; copy the <strong>&quot;Secret address in iCal format&quot;</strong>.
+                </p>
+                <p className="leading-relaxed">
+                  <strong>3.</strong> Paste it in the input above. All your Samsung Calendar events will sync into AbanoubApp!
                 </p>
               </div>
 
