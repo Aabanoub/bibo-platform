@@ -24,8 +24,11 @@ import type { Task, Transaction, Habit, HabitLog, Note } from '@/types';
 interface DashboardData {
   openTasks: number;
   completedToday: number;
+  netBalance: number;
   todaySpending: number;
   monthlySpending: number;
+  totalIncome: number;
+  totalExpenses: number;
   habitsCompletedToday: number;
   totalHabits: number;
   totalNotes: number;
@@ -44,8 +47,11 @@ interface ActivityItem {
 const defaultData: DashboardData = {
   openTasks: 0,
   completedToday: 0,
+  netBalance: 0,
   todaySpending: 0,
   monthlySpending: 0,
+  totalIncome: 0,
+  totalExpenses: 0,
   habitsCompletedToday: 0,
   totalHabits: 0,
   totalNotes: 0,
@@ -84,14 +90,12 @@ export default function DashboardPage() {
         const [
           tasksRes,
           completedTasksRes,
-          todaySpendingRes,
-          monthlySpendingRes,
+          transactionsRes,
           habitsRes,
           habitLogsRes,
           notesRes,
           recentNotesRes,
           recentTasksRes,
-          recentTransactionsRes,
           recentHabitLogsRes,
         ] = await Promise.all([
           // Open tasks
@@ -107,20 +111,12 @@ export default function DashboardPage() {
             .eq('user_id', user.id)
             .eq('status', 'done')
             .gte('updated_at', todayStart),
-          // Today spending
+          // All user transactions (for live synchronized Net Balance, daily & monthly spending)
           supabase
             .from('transactions')
-            .select('amount')
+            .select('id, description, amount, type, date, created_at')
             .eq('user_id', user.id)
-            .eq('type', 'expense')
-            .gte('created_at', todayStart),
-          // Monthly spending
-          supabase
-            .from('transactions')
-            .select('amount')
-            .eq('user_id', user.id)
-            .eq('type', 'expense')
-            .gte('created_at', monthStart),
+            .order('created_at', { ascending: false }),
           // Total habits
           supabase
             .from('habits')
@@ -150,13 +146,6 @@ export default function DashboardPage() {
             .eq('user_id', user.id)
             .order('updated_at', { ascending: false })
             .limit(5),
-          // Recent transactions
-          supabase
-            .from('transactions')
-            .select('id, description, amount, type, created_at')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(5),
           // Recent habit logs
           supabase
             .from('habit_logs')
@@ -166,11 +155,34 @@ export default function DashboardPage() {
             .limit(5),
         ]);
 
-        // Calculate spending totals
-        const todaySpending =
-          (todaySpendingRes.data as any[])?.reduce((sum: number, t: any) => sum + Math.abs(t.amount), 0) || 0;
-        const monthlySpending =
-          (monthlySpendingRes.data as any[])?.reduce((sum: number, t: any) => sum + Math.abs(t.amount), 0) || 0;
+        // Calculate synchronized Net Balance and spending totals
+        const allTransactions = (transactionsRes.data as any[]) || [];
+        let totalIncome = 0;
+        let totalExpenses = 0;
+        let todaySpending = 0;
+        let monthlySpending = 0;
+
+        const currentMonthPrefix = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+
+        for (const t of allTransactions) {
+          const amt = Math.abs(Number(t.amount)) || 0;
+          const isIncome = t.type === 'income';
+          const isExpense = t.type === 'expense';
+          const txDate = t.date ? String(t.date).slice(0, 10) : '';
+
+          if (isIncome) totalIncome += amt;
+          if (isExpense) {
+            totalExpenses += amt;
+            if (txDate.startsWith(currentMonthPrefix)) {
+              monthlySpending += amt;
+            }
+            if (txDate === todayDateStr) {
+              todaySpending += amt;
+            }
+          }
+        }
+
+        const netBalance = totalIncome - totalExpenses;
 
         // Build activity feed
         const activities: ActivityItem[] = [];
@@ -185,12 +197,13 @@ export default function DashboardPage() {
           });
         });
 
-        (recentTransactionsRes.data as any[])?.forEach((tx: any) => {
+        // 5 most recent transactions for activity feed
+        allTransactions.slice(0, 5).forEach((tx: any) => {
           activities.push({
             id: `tx-${tx.id}`,
             type: 'finance',
             title: tx.description || `${tx.type === 'expense' ? 'Expense' : 'Income'}`,
-            description: `$${Math.abs(tx.amount).toFixed(2)} ${tx.type}`,
+            description: `$${Math.abs(Number(tx.amount) || 0).toFixed(2)} ${tx.type}`,
             timestamp: tx.created_at,
           });
         });
@@ -213,6 +226,9 @@ export default function DashboardPage() {
         setData({
           openTasks: tasksRes.count || 0,
           completedToday: completedTasksRes.count || 0,
+          netBalance,
+          totalIncome,
+          totalExpenses,
           todaySpending,
           monthlySpending,
           habitsCompletedToday: habitLogsRes.count || 0,
@@ -290,12 +306,12 @@ export default function DashboardPage() {
     {
       title: 'Finance',
       icon: <Wallet size={22} />,
-      value: `$${data.todaySpending.toFixed(2)}`,
-      label: 'today',
-      sub: `$${data.monthlySpending.toFixed(2)} this month`,
+      value: `${data.netBalance >= 0 ? '+' : '-'}$${Math.abs(data.netBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      label: 'net balance',
+      sub: `$${data.monthlySpending.toFixed(2)} spent this month`,
       gradient: 'from-emerald-500/20 to-emerald-600/5',
       border: 'border-emerald-500/20',
-      iconColor: 'text-emerald-400',
+      iconColor: data.netBalance >= 0 ? 'text-emerald-400' : 'text-rose-400',
       href: '/finance',
     },
     {
