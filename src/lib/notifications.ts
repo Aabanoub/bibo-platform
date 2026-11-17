@@ -158,7 +158,12 @@ export async function requestNotificationPermission(
  * (e.g. "AI task completed", "Reminder fired").
  */
 export async function sendLocalNotification(title: string, body: string): Promise<void> {
-  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  if (typeof window === 'undefined') return;
+
+  if (!('Notification' in window)) {
+    console.warn('Notifications not supported in this browser window.');
+    return;
+  }
 
   // Ensure we have permission
   if (Notification.permission !== 'granted') {
@@ -166,21 +171,30 @@ export async function sendLocalNotification(title: string, body: string): Promis
     if (perm !== 'granted') return;
   }
 
-  // Prefer showing via the active service-worker registration so it can
-  // handle `notificationclick`, but fall back to `new Notification()`.
+  // 1. Try via active service-worker registration (required on mobile browsers)
   if ('serviceWorker' in navigator) {
-    const registration = await navigator.serviceWorker.ready;
-    await registration.showNotification(title, {
-      body,
-      icon: '/icon.svg',
-      badge: '/icon.svg',
-      tag: 'abanoubapp-local',
-    } as NotificationOptions);
-  } else {
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      await registration.showNotification(title, {
+        body,
+        icon: '/icon.svg',
+        tag: 'abanoubapp-local',
+        renotify: true,
+      } as NotificationOptions);
+      return;
+    } catch (swErr) {
+      console.warn('Service worker showNotification error, falling back:', swErr);
+    }
+  }
+
+  // 2. Fallback to standard window Notification
+  try {
     new Notification(title, {
       body,
       icon: '/icon.svg',
     });
+  } catch (windowNotifErr) {
+    console.warn('Window Notification error:', windowNotifErr);
   }
 }
 

@@ -31,6 +31,7 @@ import {
   Volume2,
   ExternalLink,
   Loader2,
+  Share2,
 } from 'lucide-react';
 import { useNavigation, AVAILABLE_NAV_OPTIONS, NAV_OPTIONS_MAP } from '@/context/NavigationContext';
 import {
@@ -152,6 +153,19 @@ export default function SettingsPage() {
   } | null>(null);
   const [delayedCountdown, setDelayedCountdown] = useState<number | null>(null);
 
+  // Device & Mobile Platform Detection
+  const [deviceInfo, setDeviceInfo] = useState<{
+    isMobile: boolean;
+    isIOS: boolean;
+    isAndroid: boolean;
+    isStandalone: boolean;
+  }>({
+    isMobile: false,
+    isIOS: false,
+    isAndroid: false,
+    isStandalone: false,
+  });
+
   useEffect(() => {
     async function checkNotificationHealth() {
       if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -164,6 +178,20 @@ export default function SettingsPage() {
         } catch {
           setSwRegistered(false);
         }
+      }
+
+      if (typeof window !== 'undefined' && typeof navigator !== 'undefined') {
+        const ua = navigator.userAgent || '';
+        const isIOS =
+          /iPad|iPhone|iPod/.test(ua) ||
+          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const isAndroid = /Android/i.test(ua);
+        const isMobile = isIOS || isAndroid || /Mobi|Mobile/i.test(ua);
+        const isStandalone =
+          window.matchMedia('(display-mode: standalone)').matches ||
+          (navigator as any).standalone === true;
+
+        setDeviceInfo({ isMobile, isIOS, isAndroid, isStandalone });
       }
     }
     checkNotificationHealth();
@@ -943,6 +971,49 @@ export default function SettingsPage() {
                     )}
                   </div>
                 </div>
+
+                {/* Mobile / iOS Specific Instructions & Guidance */}
+                {deviceInfo.isIOS && !deviceInfo.isStandalone && (
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-950/40 to-purple-950/40 border border-indigo-500/30 text-xs space-y-2.5">
+                    <div className="flex items-center gap-2 font-bold text-indigo-300">
+                      <Smartphone className="w-4 h-4 text-indigo-400" />
+                      <span>iPhone / iOS Web Push Requirement (Apple Policy)</span>
+                    </div>
+                    <p className="text-zinc-300 text-[11px] leading-relaxed">
+                      Apple Safari on iOS (16.4+) strictly requires web applications to be added to your <strong>Home Screen</strong> before it allows push notifications:
+                    </p>
+                    <div className="bg-zinc-950/80 p-3 rounded-lg border border-zinc-800 space-y-2 text-zinc-300 text-[11px]">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 flex items-center justify-center font-bold text-[10px] shrink-0">1</span>
+                        <span>Tap the <strong>Share</strong> button (<Share2 className="w-3.5 h-3.5 inline mx-0.5 text-blue-400" />) in your Safari toolbar at the bottom.</span>
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 flex items-center justify-center font-bold text-[10px] shrink-0">2</span>
+                        <span>Scroll down and tap <strong>&quot;Add to Home Screen&quot;</strong>.</span>
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 flex items-center justify-center font-bold text-[10px] shrink-0">3</span>
+                        <span>Open <strong>AbanoubApp</strong> from your Home Screen icon and click &quot;Enable Now&quot;!</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {deviceInfo.isAndroid && (
+                  <div className="p-3 rounded-xl bg-blue-950/20 border border-blue-800/30 text-[11px] text-blue-300 flex items-start gap-2.5">
+                    <Smartphone className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Android Notice:</strong> If notification popups do not appear on your phone, ensure Chrome notifications are allowed in your Android System Settings: <em>Settings &gt; Apps &gt; Chrome &gt; Notifications &gt; Allowed</em>.
+                    </span>
+                  </div>
+                )}
+
+                {deviceInfo.isStandalone && (
+                  <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-300 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Running in standalone Home Screen App mode — Mobile WebPush fully enabled.</span>
+                  </div>
+                )}
 
                 {/* Test Feedback Alert Box */}
                 {testResult && (

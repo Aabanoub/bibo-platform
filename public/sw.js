@@ -1,5 +1,15 @@
 /// <reference lib="webworker" />
 
+// ── Install — claim immediately on all platforms ───────────────────────────
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
+});
+
+// ── Activate — claim clients immediately ────────────────────────────────────
+self.addEventListener('activate', (event) => {
+  event.waitUntil(clients.claim());
+});
+
 // ── Push Event ──────────────────────────────────────────────────────────────
 self.addEventListener('push', (event) => {
   /** @type {PushEvent} */
@@ -15,21 +25,25 @@ self.addEventListener('push', (event) => {
     }
   }
 
+  // Mobile-safe notification options (avoid SVG badge which crashes Android NotificationManager)
   const options = {
     body: data.body,
     icon: '/icon.svg',
-    badge: '/icon.svg',
     tag: 'abanoubapp-notification',
     renotify: true,
     data: { url: data.url || '/' },
-    vibrate: [100, 50, 100],
-    actions: [
-      { action: 'open', title: 'Open' },
-      { action: 'dismiss', title: 'Dismiss' },
-    ],
   };
 
-  pushEvent.waitUntil(self.registration.showNotification(data.title, options));
+  try {
+    pushEvent.waitUntil(self.registration.showNotification(data.title, options));
+  } catch (err) {
+    // Ultra-safe fallback for older mobile engines
+    pushEvent.waitUntil(
+      self.registration.showNotification(data.title, {
+        body: data.body,
+      })
+    );
+  }
 });
 
 // ── Notification Click ──────────────────────────────────────────────────────
@@ -59,9 +73,4 @@ self.addEventListener('notificationclick', (event) => {
       return clients.openWindow(targetUrl);
     })
   );
-});
-
-// ── Activate — claim clients immediately ────────────────────────────────────
-self.addEventListener('activate', (event) => {
-  event.waitUntil(clients.claim());
 });
