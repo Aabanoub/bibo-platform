@@ -71,12 +71,37 @@ export async function requestNotificationPermission(
     const vapidPublicKey =
       process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || DEFAULT_VAPID_PUBLIC_KEY;
 
-    const subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as unknown as BufferSource,
-    });
+    let subscription: PushSubscription | null = null;
+    try {
+      subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as unknown as BufferSource,
+        });
+      }
+    } catch (subErr) {
+      console.warn('Renewing push subscription:', subErr);
+      try {
+        const existing = await registration.pushManager.getSubscription();
+        if (existing) {
+          await existing.unsubscribe();
+        }
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as unknown as BufferSource,
+        });
+      } catch (retryErr) {
+        console.error('Failed to subscribe to pushManager:', retryErr);
+        return null;
+      }
+    }
 
-    // 4. Resolve user ID and save subscription to backend
+    if (!subscription) {
+      return null;
+    }
+
+    // 4. Resolve user ID and save subscription to backend & database
     let targetUserId = explicitUserId;
     if (!targetUserId) {
       try {
@@ -89,18 +114,33 @@ export async function requestNotificationPermission(
     }
 
     if (targetUserId) {
-      const response = await fetch('/api/notifications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: targetUserId,
-          subscription: subscription.toJSON(),
-        }),
-      });
+      // 1. Save via backend API
+      try {
+        const response = await fetch('/api/notifications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: targetUserId,
+            subscription: subscription.toJSON(),
+          }),
+        });
 
-      if (!response.ok) {
-        console.error('Failed to save push subscription on server:', response.statusText);
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          console.error('Failed to save push subscription on server:', errData);
+        }
+      } catch (apiErr) {
+        console.warn('Backend API subscription post warning:', apiErr);
       }
+
+      // 2. Also save directly to Supabase with user auth context
+      try {
+        const supabase = createClient();
+        await supabase.from('push_subscriptions').insert({
+          user_id: targetUserId,
+          subscription: subscription.toJSON(),
+        });
+      } catch {}
     }
 
     return subscription;

@@ -279,10 +279,18 @@ export default function SettingsPage() {
     setTestingChannel('webpush');
     setTestResult(null);
     try {
-      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission !== 'granted') {
-        await handleRequestPermission();
+      // 1. Ensure the browser is actively subscribed and recorded in database
+      const sub = await requestNotificationPermission(user.id);
+      if (!sub) {
+        throw new Error(
+          'Could not retrieve browser push subscription. Please ensure notifications are allowed in your browser address bar.'
+        );
       }
 
+      // Small tick to ensure DB commit is visible
+      await new Promise((r) => setTimeout(r, 400));
+
+      // 2. Trigger WebPush via API
       const res = await fetch('/api/notifications', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -304,8 +312,8 @@ export default function SettingsPage() {
       } else if (res.status === 404) {
         setTestResult({
           type: 'info',
-          message: 'No Active Push Subscription Found',
-          details: 'Please click "Enable Now" above to register and subscribe this browser with the server first.',
+          message: 'Subscription Pending',
+          details: 'Your device subscription was just registered. Click "Test WebPush API" once more to dispatch.',
         });
       } else {
         throw new Error(data.error || 'Failed to dispatch web push');

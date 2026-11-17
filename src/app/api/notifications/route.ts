@@ -73,24 +73,44 @@ export async function POST(req: NextRequest) {
 
     const supabase = getSupabaseAdmin();
 
-    // Upsert so re-subscribing the same endpoint just updates the record
-    const { error } = await supabase
+    // Check if this user already has this subscription stored by matching endpoint in JSONB
+    const { data: existingRows } = await supabase
       .from('push_subscriptions')
-      .upsert(
-        {
-          user_id: userId,
-          endpoint: subscription.endpoint,
-          keys: subscription.keys,
-          subscription: subscription,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'endpoint' },
-      );
+      .select('id, subscription')
+      .eq('user_id', userId);
 
-    if (error) {
-      console.error('[POST /api/notifications] Supabase error:', error);
+    const existingMatch = existingRows?.find((row: any) => {
+      const subObj =
+        typeof row.subscription === 'string'
+          ? JSON.parse(row.subscription)
+          : row.subscription;
+      return subObj?.endpoint === subscription.endpoint;
+    });
+
+    let saveError = null;
+
+    if (existingMatch) {
+      // Update existing record
+      const { error } = await supabase
+        .from('push_subscriptions')
+        .update({ subscription })
+        .eq('id', existingMatch.id);
+      saveError = error;
+    } else {
+      // Insert new subscription record
+      const { error } = await supabase
+        .from('push_subscriptions')
+        .insert({
+          user_id: userId,
+          subscription,
+        });
+      saveError = error;
+    }
+
+    if (saveError) {
+      console.error('[POST /api/notifications] Supabase error:', saveError);
       return NextResponse.json(
-        { error: 'Failed to save subscription.' },
+        { error: `Failed to save subscription: ${saveError.message}` },
         { status: 500 },
       );
     }
@@ -182,7 +202,7 @@ export async function PUT(req: NextRequest) {
             await supabase
               .from('push_subscriptions')
               .delete()
-              .eq('endpoint', pushSub.endpoint);
+              .eq('id', sub.id);
           }
 
           throw err;
