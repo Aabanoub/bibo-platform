@@ -15,7 +15,17 @@ import {
   Calendar,
   ClipboardList,
   ArrowRight,
+  Bell,
+  BellRing,
+  Clock,
+  CheckCircle2,
+  Check,
 } from 'lucide-react';
+import {
+  requestNotificationPermission,
+  sendLocalNotification,
+  createInAppNotification,
+} from '@/lib/notifications';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -66,12 +76,93 @@ export default function TasksPage() {
   const [formDesc, setFormDesc] = useState('');
   const [formPriority, setFormPriority] = useState<TaskPriority>('medium');
   const [formDue, setFormDue] = useState('');
+  const [enableReminder, setEnableReminder] = useState(false);
+  const [formReminderAt, setFormReminderAt] = useState('');
+  const [notifPermission, setNotifPermission] = useState<string>('default');
+  const [checkingPerm, setCheckingPerm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // filters
   const [filterPriority, setFilterPriority] = useState<TaskPriority | ''>('');
   const [filterStatus, setFilterStatus] = useState<TaskStatus | ''>('');
   const [showFilters, setShowFilters] = useState(false);
+
+  // Check notification permission status
+  const checkNotificationStatus = useCallback(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setNotifPermission(Notification.permission);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkNotificationStatus();
+  }, [checkNotificationStatus]);
+
+  // Request browser notification permission explicitly
+  const requestPermission = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return false;
+    setCheckingPerm(true);
+    try {
+      await requestNotificationPermission();
+      const status = Notification.permission;
+      setNotifPermission(status);
+      return status === 'granted';
+    } finally {
+      setCheckingPerm(false);
+    }
+  };
+
+  // Toggle reminder and automatically verify notification permission
+  const handleToggleReminder = async (checked: boolean) => {
+    setEnableReminder(checked);
+    if (checked) {
+      if (!formReminderAt) {
+        // Default to 1 hour from now
+        const d = new Date(Date.now() + 60 * 60 * 1000);
+        const offset = d.getTimezoneOffset() * 60000;
+        setFormReminderAt(new Date(d.getTime() - offset).toISOString().slice(0, 16));
+      }
+      // Check if user has enabled notifications, and prompt if not granted
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        if (Notification.permission !== 'granted') {
+          await requestPermission();
+        }
+      }
+    }
+  };
+
+  // Quick preset buttons for reminders
+  const setQuickReminder = async (type: '1h' | '3h' | 'tonight' | 'tomorrow' | 'due') => {
+    const now = new Date();
+    let target = new Date();
+
+    if (type === '1h') {
+      target = new Date(now.getTime() + 60 * 60 * 1000);
+    } else if (type === '3h') {
+      target = new Date(now.getTime() + 3 * 60 * 60 * 1000);
+    } else if (type === 'tonight') {
+      target.setHours(20, 0, 0, 0);
+      if (target.getTime() <= now.getTime()) {
+        target = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+      }
+    } else if (type === 'tomorrow') {
+      target.setDate(target.getDate() + 1);
+      target.setHours(9, 0, 0, 0);
+    } else if (type === 'due' && formDue) {
+      target = new Date(formDue);
+      target.setHours(12, 0, 0, 0);
+    }
+
+    const offset = target.getTimezoneOffset() * 60000;
+    setFormReminderAt(new Date(target.getTime() - offset).toISOString().slice(0, 16));
+    setEnableReminder(true);
+
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission !== 'granted') {
+        await requestPermission();
+      }
+    }
+  };
 
   // ---- fetch --------------------------------------------------------------
   const fetchTasks = useCallback(async () => {
@@ -88,11 +179,82 @@ export default function TasksPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
+
+  // Automated Task Reminder Dispatcher (Runs every 15s)
+  useEffect(() => {
+    if (tasks.length === 0) return;
+
+    async function checkTaskReminders() {
+      const now = Date.now();
+      for (const t of tasks) {
+        if (t.status === 'done' || !t.reminder_at || t.reminder_sent) continue;
+        const remTime = new Date(t.reminder_at).getTime();
+
+        if (now >= remTime) {
+          // 1. Native browser push notification
+          try {
+            await sendLocalNotification(
+              `⏰ Task Reminder: ${t.title}`,
+              `Time to finish your task: "${t.title}"! Priority: ${t.priority.toUpperCase()}`
+            );
+          } catch (err) {
+            console.warn('Local push failed:', err);
+          }
+
+          // 2. In-app notification & webpush
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+
+          if (user) {
+            try {
+              await createInAppNotification(
+                user.id,
+                `⏰ Task Reminder: ${t.title}`,
+                `Time to finish your task: "${t.title}". Scheduled finish reminder reached.`,
+                'reminder',
+                '/tasks'
+              );
+
+              fetch('/api/notifications', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  userId: user.id,
+                  title: `⏰ Task Reminder: ${t.title}`,
+                  message: `Time to finish: "${t.title}".`,
+                  actionUrl: '/tasks',
+                }),
+              }).catch(() => {});
+            } catch {}
+          }
+
+          // 3. Mark reminder_sent in Supabase
+          try {
+            await supabase
+              .from('tasks')
+              .update({ reminder_sent: true, updated_at: new Date().toISOString() })
+              .eq('id', t.id);
+
+            setTasks((prev) =>
+              prev.map((item) => (item.id === t.id ? { ...item, reminder_sent: true } : item))
+            );
+          } catch (e) {
+            console.warn('Failed to mark reminder_sent:', e);
+          }
+        }
+      }
+    }
+
+    checkTaskReminders();
+    const interval = setInterval(checkTaskReminders, 15000);
+    return () => clearInterval(interval);
+  }, [tasks, supabase]);
 
   // ---- create task --------------------------------------------------------
   const createTask = async () => {
@@ -107,6 +269,17 @@ export default function TasksPage() {
       if (!user) {
         setError('Please sign in to create tasks.');
         return;
+      }
+
+      // If user enabled a reminder, check and prompt for notification permission
+      let reminderDateISO: string | null = null;
+      if (enableReminder && formReminderAt) {
+        reminderDateISO = new Date(formReminderAt).toISOString();
+        if (typeof window !== 'undefined' && 'Notification' in window) {
+          if (Notification.permission !== 'granted') {
+            await requestPermission();
+          }
+        }
       }
 
       // Ensure profile row exists to satisfy foreign key constraints
@@ -129,9 +302,12 @@ export default function TasksPage() {
           priority: formPriority,
           status: 'todo' as TaskStatus,
           due_date: formDue || null,
+          reminder_at: reminderDateISO,
+          reminder_sent: false,
         })
         .select()
         .single();
+
       if (err) throw err;
       const task = data as Task;
       setTasks((prev) => [task, ...prev]);
@@ -141,7 +317,9 @@ export default function TasksPage() {
         await supabase.from('notifications').insert({
           user_id: user.id,
           title: 'New Task Created',
-          message: `Task "${task.title}" has been added to your To Do list.`,
+          message: reminderDateISO
+            ? `Task "${task.title}" added with a reminder set for ${new Date(reminderDateISO).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}.`
+            : `Task "${task.title}" has been added to your To Do list.`,
           type: 'task',
           is_read: false,
           action_url: '/tasks',
@@ -153,6 +331,8 @@ export default function TasksPage() {
       setFormDesc('');
       setFormPriority('medium');
       setFormDue('');
+      setEnableReminder(false);
+      setFormReminderAt('');
       setShowForm(false);
     } catch (e: any) {
       console.error('createTask error:', e);
@@ -313,53 +493,185 @@ export default function TasksPage() {
 
         {/* Add Task Form */}
         {showForm && (
-          <div className="mb-6 p-4 rounded-lg bg-slate-900 border border-slate-800">
-            <h2 className="text-lg font-semibold mb-3">New Task</h2>
+          <div className="mb-6 p-4 sm:p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4 shadow-xl">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <ClipboardList className="w-5 h-5 text-blue-400" />
+              <span>New Task</span>
+            </h2>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <input
                 type="text"
                 placeholder="Task title *"
                 value={formTitle}
                 onChange={(e) => setFormTitle(e.target.value)}
-                className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
+                className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-500 text-slate-100"
               />
               <input
                 type="text"
                 placeholder="Description (optional)"
                 value={formDesc}
                 onChange={(e) => setFormDesc(e.target.value)}
-                className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
+                className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-500 text-slate-100"
               />
-              <select
-                value={formPriority}
-                onChange={(e) => setFormPriority(e.target.value as TaskPriority)}
-                className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {PRIORITIES.map((p) => (
-                  <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
-                ))}
-              </select>
-              <input
-                type="date"
-                value={formDue}
-                onChange={(e) => setFormDue(e.target.value)}
-                className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <div>
+                <label className="block text-[11px] font-medium text-slate-400 mb-1">Priority</label>
+                <select
+                  value={formPriority}
+                  onChange={(e) => setFormPriority(e.target.value as TaskPriority)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-slate-200"
+                >
+                  {PRIORITIES.map((p) => (
+                    <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-slate-400 mb-1">Due Date (Optional)</label>
+                <input
+                  type="date"
+                  value={formDue}
+                  onChange={(e) => setFormDue(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-slate-200"
+                />
+              </div>
             </div>
-            <div className="flex justify-end gap-2 mt-3">
+
+            {/* Task Finish Reminder Section */}
+            <div className="pt-3 border-t border-slate-800 space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={enableReminder}
+                    onChange={(e) => handleToggleReminder(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900 cursor-pointer"
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <Bell className="w-4 h-4 text-amber-400" />
+                    <span className="text-sm font-medium text-slate-200">
+                      Remind me to finish this task with a notification
+                    </span>
+                  </div>
+                </label>
+
+                {/* Live Permission Status Badge */}
+                {enableReminder && (
+                  <div className="text-[11px] font-medium">
+                    {notifPermission === 'granted' ? (
+                      <span className="flex items-center gap-1 text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                        <CheckCircle2 className="w-3 h-3" /> Notifications Enabled
+                      </span>
+                    ) : notifPermission === 'denied' ? (
+                      <span className="flex items-center gap-1 text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
+                        <AlertCircle className="w-3 h-3" /> Notifications Blocked
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={requestPermission}
+                        disabled={checkingPerm}
+                        className="flex items-center gap-1 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30 transition text-[11px]"
+                      >
+                        <BellRing className="w-3 h-3" />
+                        {checkingPerm ? 'Enabling...' : 'Enable in Browser'}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Reminder Details & Time Pickers */}
+              {enableReminder && (
+                <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 space-y-3 animate-fade-in">
+                  {notifPermission === 'denied' && (
+                    <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-800/80 text-rose-300 text-xs flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-semibold block">Browser notifications are blocked</span>
+                        <span>
+                          Please allow notifications in your browser address bar settings so we can notify you at your scheduled finish time.
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <label className="text-xs text-slate-300 font-medium">
+                      Select specific finish reminder date & time:
+                    </label>
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => setQuickReminder('1h')}
+                        className="px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                      >
+                        In 1h
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setQuickReminder('3h')}
+                        className="px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                      >
+                        In 3h
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setQuickReminder('tonight')}
+                        className="px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                      >
+                        Tonight (8 PM)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setQuickReminder('tomorrow')}
+                        className="px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                      >
+                        Tomorrow (9 AM)
+                      </button>
+                      {formDue && (
+                        <button
+                          type="button"
+                          onClick={() => setQuickReminder('due')}
+                          className="px-2 py-1 rounded-md bg-blue-600/30 hover:bg-blue-600/40 text-blue-300 border border-blue-500/40 transition"
+                        >
+                          At Due Date
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <input
+                    type="datetime-local"
+                    value={formReminderAt}
+                    onChange={(e) => {
+                      setFormReminderAt(e.target.value);
+                      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission !== 'granted') {
+                        requestPermission();
+                      }
+                    }}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
               <button
+                type="button"
                 onClick={() => setShowForm(false)}
-                className="px-4 py-2 rounded-lg text-sm bg-slate-800 hover:bg-slate-700 transition-colors"
+                className="px-4 py-2 rounded-lg text-sm bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={createTask}
                 disabled={!formTitle.trim() || submitting}
-                className="px-4 py-2 rounded-lg text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
+                className="px-4 py-2 rounded-lg text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 font-medium shadow-md shadow-blue-500/20"
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                Create
+                Create Task
               </button>
             </div>
           </div>
@@ -405,6 +717,24 @@ export default function TasksPage() {
                             <Calendar className="w-3 h-3" />
                             {new Date(task.due_date).toLocaleDateString()}
                             {isOverdue(task) && ' (overdue)'}
+                          </p>
+                        )}
+                        {task.reminder_at && (
+                          <p className="text-xs mt-1.5 flex items-center gap-1.5 text-amber-400/95 font-medium">
+                            <Bell className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                            <span>
+                              Remind: {new Date(task.reminder_at).toLocaleString([], {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                            {task.reminder_sent && (
+                              <span className="text-[9px] text-slate-400 bg-slate-800 px-1.5 py-0.2 rounded border border-slate-700">
+                                Sent
+                              </span>
+                            )}
                           </p>
                         )}
                         <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-700/50">

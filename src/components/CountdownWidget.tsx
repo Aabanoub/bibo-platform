@@ -24,8 +24,11 @@ import { createClient } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
 import type { CountdownEvent, ReminderIntervalId } from '@/types';
 
-const STORAGE_KEY = 'bibo_countdown_events';
-const ACTIVE_ID_KEY = 'bibo_active_countdown_id';
+const getStorageKey = (userId?: string | null) =>
+  userId ? `bibo_countdown_events_${userId}` : 'bibo_countdown_events_guest';
+
+const getActiveIdKey = (userId?: string | null) =>
+  userId ? `bibo_active_countdown_id_${userId}` : 'bibo_active_countdown_id_guest';
 
 const COLOR_CLASSES: Record<
   CountdownEvent['color'],
@@ -121,34 +124,43 @@ export default function CountdownWidget() {
     progress: 0,
   });
 
-  // 1. Initial Load & Bidirectional Sync with Supabase
+  // 1. Initial Load & User-Scoped Sync with Supabase
   const loadData = useCallback(async () => {
     setIsSyncing(true);
     setDbError(null);
-    let localEvents: CountdownEvent[] = [];
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        localEvents = JSON.parse(stored);
-      }
-    } catch (e) {
-      console.warn('[CountdownWidget] Could not read local countdowns:', e);
-    }
 
-    // Set local state immediately for instant rendering
-    if (localEvents.length > 0) {
-      setEvents(localEvents);
-    }
-
-    // Check current authenticated user
+    // Get current authenticated user first
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    let finalEvents = localEvents;
+    setCurrentUser(user);
+    const storageKey = getStorageKey(user?.id);
+    const activeKey = getActiveIdKey(user?.id);
 
+    // Clean up old legacy non-user-scoped localStorage keys
+    try {
+      localStorage.removeItem('bibo_countdown_events');
+      localStorage.removeItem('bibo_active_countdown_id');
+    } catch {}
+
+    // Read this specific user's cached countdowns for instant rendering
+    let cachedEvents: CountdownEvent[] = [];
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (stored) {
+        cachedEvents = JSON.parse(stored);
+      }
+    } catch (e) {
+      console.warn('[CountdownWidget] Could not read user local countdowns:', e);
+    }
+
+    if (cachedEvents.length > 0) {
+      setEvents(cachedEvents);
+    }
+
+    // If authenticated, Supabase is the single source of truth for this user
     if (user) {
-      setCurrentUser(user);
       try {
         const { data: dbEvents, error } = await supabase
           .from('countdown_events')
@@ -160,54 +172,45 @@ export default function CountdownWidget() {
           console.warn('[CountdownWidget] Supabase countdown_events error:', error.message);
           setDbError(error.message);
         } else if (dbEvents) {
-          let merged = [...(dbEvents as CountdownEvent[])];
+          const freshEvents = dbEvents as CountdownEvent[];
+          setEvents(freshEvents);
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(freshEvents));
+          } catch {}
 
-          // Check if local cache has any events not yet pushed to Supabase (created offline or before migration)
-          const unsynced = localEvents.filter(
-            (le) => !merged.some((de) => de.id === le.id)
-          );
-
-          if (unsynced.length > 0) {
-            console.log(`[CountdownWidget] Auto-syncing ${unsynced.length} unsynced local countdown(s) to cloud database...`);
-            for (const item of unsynced) {
-              await supabase.from('countdown_events').upsert({
-                id: item.id,
-                user_id: user.id,
-                title: item.title,
-                description: item.description || null,
-                target_date: item.target_date,
-                category: item.category || 'event',
-                emoji: item.emoji || '⏳',
-                color: item.color || 'blue',
-                is_pinned: !!item.is_pinned,
-                reminder_intervals: item.reminder_intervals || ['at_time', '1h', '1d'],
-                triggered_reminders: item.triggered_reminders || [],
-              });
-              merged.push(item);
+          // Determine active event for this user
+          const storedActiveId = localStorage.getItem(activeKey);
+          if (storedActiveId && freshEvents.some((e) => e.id === storedActiveId)) {
+            setActiveEventId(storedActiveId);
+          } else {
+            const pinned = freshEvents.find((e) => e.is_pinned);
+            const chosenId = pinned ? pinned.id : freshEvents[0]?.id || null;
+            setActiveEventId(chosenId);
+            if (chosenId) {
+              try {
+                localStorage.setItem(activeKey, chosenId);
+              } catch {}
             }
           }
-
-          finalEvents = merged;
-          try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(finalEvents));
-          } catch {}
           setDbError(null);
+          setIsSyncing(false);
+          return;
         }
       } catch (err: any) {
         console.warn('[CountdownWidget] Database sync failed:', err);
       }
-    }
-
-    setEvents(finalEvents);
-
-    // Determine active event
-    const storedActiveId = localStorage.getItem(ACTIVE_ID_KEY);
-    if (storedActiveId && finalEvents.some((e) => e.id === storedActiveId)) {
-      setActiveEventId(storedActiveId);
     } else {
-      const pinned = finalEvents.find((e) => e.is_pinned);
-      setActiveEventId(pinned ? pinned.id : finalEvents[0]?.id || null);
+      // Guest / unauthenticated fallback
+      setEvents(cachedEvents);
+      const storedActiveId = localStorage.getItem(activeKey);
+      if (storedActiveId && cachedEvents.some((e) => e.id === storedActiveId)) {
+        setActiveEventId(storedActiveId);
+      } else {
+        const pinned = cachedEvents.find((e) => e.is_pinned);
+        setActiveEventId(pinned ? pinned.id : cachedEvents[0]?.id || null);
+      }
     }
+
     setIsSyncing(false);
   }, [supabase]);
 
@@ -215,13 +218,34 @@ export default function CountdownWidget() {
     loadData();
   }, [loadData]);
 
-  // Realtime subscription for live sync across devices and browser tabs
+  // Auth state listener: immediately switch and clean data when user logs in or out
   useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setCurrentUser(session?.user || null);
+      loadData();
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [supabase, loadData]);
+
+  // Realtime subscription for live sync across devices and browser tabs for THIS user only
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
     const channel = supabase
-      .channel('countdown_events_realtime_sync')
+      .channel(`countdown_events_user_${currentUser.id}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'countdown_events' },
+        {
+          event: '*',
+          schema: 'public',
+          table: 'countdown_events',
+          filter: `user_id=eq.${currentUser.id}`,
+        },
         () => {
           loadData();
         }
@@ -231,7 +255,7 @@ export default function CountdownWidget() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, loadData]);
+  }, [supabase, currentUser?.id, loadData]);
 
   const activeEvent = events.find((e) => e.id === activeEventId) || events[0] || null;
 
@@ -357,7 +381,10 @@ export default function CountdownWidget() {
 
       if (hasUpdates) {
         setEvents(updatedEvents);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedEvents));
+        const storageKey = getStorageKey(currentUser?.id);
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(updatedEvents));
+        } catch {}
 
         // Sync to Supabase if available
         if (currentUser?.id) {
@@ -366,7 +393,8 @@ export default function CountdownWidget() {
               await supabase
                 .from('countdown_events')
                 .update({ triggered_reminders: ev.triggered_reminders })
-                .eq('id', ev.id);
+                .eq('id', ev.id)
+                .eq('user_id', currentUser.id);
             }
           } catch {}
         }
@@ -376,13 +404,14 @@ export default function CountdownWidget() {
     checkReminders();
     const interval = setInterval(checkReminders, 15000);
     return () => clearInterval(interval);
-  }, [events, currentUser]);
+  }, [events, currentUser, supabase]);
 
   // 4. Persistence Handlers (Create / Update / Delete)
   const saveEvents = async (newEvents: CountdownEvent[]) => {
     setEvents(newEvents);
+    const storageKey = getStorageKey(currentUser?.id);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newEvents));
+      localStorage.setItem(storageKey, JSON.stringify(newEvents));
     } catch {}
   };
 
@@ -398,6 +427,7 @@ export default function CountdownWidget() {
       if (user) setCurrentUser(user);
     }
 
+    const activeKey = getActiveIdKey(user?.id);
     let updatedList: CountdownEvent[] = [];
 
     if (existingId) {
@@ -417,7 +447,7 @@ export default function CountdownWidget() {
       if (data.is_pinned) {
         setActiveEventId(existingId);
         try {
-          localStorage.setItem(ACTIVE_ID_KEY, existingId);
+          localStorage.setItem(activeKey, existingId);
         } catch {}
       }
 
@@ -479,7 +509,7 @@ export default function CountdownWidget() {
 
       setActiveEventId(newEvent.id);
       try {
-        localStorage.setItem(ACTIVE_ID_KEY, newEvent.id);
+        localStorage.setItem(activeKey, newEvent.id);
       } catch {}
 
       // Supabase insert
@@ -541,6 +571,7 @@ export default function CountdownWidget() {
       if (user) setCurrentUser(user);
     }
 
+    const activeKey = getActiveIdKey(user?.id);
     const updated = events.filter((e) => e.id !== id);
     saveEvents(updated);
 
@@ -548,8 +579,8 @@ export default function CountdownWidget() {
       const nextActive = updated[0]?.id || null;
       setActiveEventId(nextActive);
       try {
-        if (nextActive) localStorage.setItem(ACTIVE_ID_KEY, nextActive);
-        else localStorage.removeItem(ACTIVE_ID_KEY);
+        if (nextActive) localStorage.setItem(activeKey, nextActive);
+        else localStorage.removeItem(activeKey);
       } catch {}
     }
 
@@ -574,7 +605,10 @@ export default function CountdownWidget() {
 
   const handleSelectActive = (id: string) => {
     setActiveEventId(id);
-    localStorage.setItem(ACTIVE_ID_KEY, id);
+    const activeKey = getActiveIdKey(currentUser?.id);
+    try {
+      localStorage.setItem(activeKey, id);
+    } catch {}
     setShowEventList(false);
   };
 

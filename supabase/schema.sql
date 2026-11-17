@@ -77,6 +77,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     priority    task_priority NOT NULL DEFAULT 'medium',
     status      task_status   NOT NULL DEFAULT 'todo',
     due_date    TIMESTAMPTZ,
+    reminder_at TIMESTAMPTZ,
+    reminder_sent BOOLEAN NOT NULL DEFAULT false,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -431,6 +433,10 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS long_break_duration INT NOT NULL D
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS nav_slots TEXT[] NOT NULL DEFAULT '{"notes", "tasks", "finance", "chat"}';
 
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS receipt_url TEXT;
+
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS reminder_at TIMESTAMPTZ;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS reminder_sent BOOLEAN NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS idx_tasks_reminder ON tasks (user_id, reminder_at);
 
 ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS date DATE NOT NULL DEFAULT CURRENT_DATE;
 ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS summary TEXT;

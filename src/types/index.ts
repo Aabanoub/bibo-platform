@@ -49,6 +49,8 @@ export interface Task {
   priority: TaskPriority;
   status: TaskStatus;
   due_date: string | null;
+  reminder_at?: string | null;
+  reminder_sent?: boolean;
   created_at: string;
   updated_at: string;
 }
