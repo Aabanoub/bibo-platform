@@ -173,7 +173,7 @@ export default function SettingsPage() {
     setTestingChannel('perm');
     setTestResult(null);
     try {
-      const sub = await requestNotificationPermission();
+      const sub = await requestNotificationPermission(user?.id);
       const status = typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported';
       setNotifPermission(status);
       if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
@@ -279,6 +279,10 @@ export default function SettingsPage() {
     setTestingChannel('webpush');
     setTestResult(null);
     try {
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission !== 'granted') {
+        await handleRequestPermission();
+      }
+
       const res = await fetch('/api/notifications', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -300,8 +304,8 @@ export default function SettingsPage() {
       } else if (res.status === 404) {
         setTestResult({
           type: 'info',
-          message: 'No Push Subscriptions Found',
-          details: 'Click "Enable & Subscribe" first to register this browser with the server.',
+          message: 'No Active Push Subscription Found',
+          details: 'Please click "Enable Now" above to register and subscribe this browser with the server first.',
         });
       } else {
         throw new Error(data.error || 'Failed to dispatch web push');

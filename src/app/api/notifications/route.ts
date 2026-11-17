@@ -19,14 +19,18 @@ function getSupabaseAdmin() {
 // ---------------------------------------------------------------------------
 // Configure web-push VAPID credentials once at module level
 // ---------------------------------------------------------------------------
-function configureWebPush() {
-  const publicKey = process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-  const privateKey = process.env.VAPID_PRIVATE_KEY;
-  const subject = process.env.VAPID_SUBJECT ?? 'mailto:abanoub@example.com';
+const DEFAULT_VAPID_PUBLIC_KEY =
+  'BIxGd6n4Vp17qTxzxLJCE4VxdJgbX3FEt28UtDXyT3I7czJLDzJVFFdfiNyDDqLj1OVMgm74ii-cT-exXN-MnRk';
+const DEFAULT_VAPID_PRIVATE_KEY = 'm7dG_YFOY7qyTwsIaevYkvQaSt4PXmE0nMFFBG17q68';
+const DEFAULT_VAPID_SUBJECT = 'mailto:admin@abanoub.app';
 
-  if (!publicKey || !privateKey) {
-    throw new Error('Missing VAPID keys in environment variables.');
-  }
+function configureWebPush() {
+  const publicKey =
+    process.env.VAPID_PUBLIC_KEY ||
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
+    DEFAULT_VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY || DEFAULT_VAPID_PRIVATE_KEY;
+  const subject = process.env.VAPID_SUBJECT || DEFAULT_VAPID_SUBJECT;
 
   webpush.setVapidDetails(subject, publicKey, privateKey);
 }

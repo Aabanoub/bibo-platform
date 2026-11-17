@@ -17,6 +17,9 @@ export interface InAppNotification {
 
 // ── VAPID helper ────────────────────────────────────────────────────────────
 
+const DEFAULT_VAPID_PUBLIC_KEY =
+  'BIxGd6n4Vp17qTxzxLJCE4VxdJgbX3FEt28UtDXyT3I7czJLDzJVFFdfiNyDDqLj1OVMgm74ii-cT-exXN-MnRk';
+
 /**
  * Convert a Base64-URL-encoded VAPID public key to a Uint8Array
  * suitable for `applicationServerKey` in pushManager.subscribe().
@@ -43,7 +46,9 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
  *
  * Returns the PushSubscription on success, or `null` if denied / unsupported.
  */
-export async function requestNotificationPermission(): Promise<PushSubscription | null> {
+export async function requestNotificationPermission(
+  explicitUserId?: string
+): Promise<PushSubscription | null> {
   // Guard: browser support
   if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) {
     console.warn('Push notifications are not supported in this browser.');
@@ -63,26 +68,39 @@ export async function requestNotificationPermission(): Promise<PushSubscription 
     await navigator.serviceWorker.ready; // wait until active
 
     // 3. Subscribe to push
-    const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    if (!vapidPublicKey) {
-      console.error('NEXT_PUBLIC_VAPID_PUBLIC_KEY is not set.');
-      return null;
-    }
+    const vapidPublicKey =
+      process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || DEFAULT_VAPID_PUBLIC_KEY;
 
     const subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as unknown as BufferSource,
     });
 
-    // 4. Send subscription to backend
-    const response = await fetch('/api/notifications', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subscription: subscription.toJSON() }),
-    });
+    // 4. Resolve user ID and save subscription to backend
+    let targetUserId = explicitUserId;
+    if (!targetUserId) {
+      try {
+        const supabase = createClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        targetUserId = user?.id;
+      } catch {}
+    }
 
-    if (!response.ok) {
-      console.error('Failed to save push subscription on server:', response.statusText);
+    if (targetUserId) {
+      const response = await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: targetUserId,
+          subscription: subscription.toJSON(),
+        }),
+      });
+
+      if (!response.ok) {
+        console.error('Failed to save push subscription on server:', response.statusText);
+      }
     }
 
     return subscription;
