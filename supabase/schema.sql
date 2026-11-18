@@ -647,6 +647,11 @@ CREATE POLICY "Users delete own distribution cycles"
 CREATE OR REPLACE FUNCTION public.protect_completed_cycles()
 RETURNS TRIGGER AS $$
 BEGIN
+    -- Allow service_role / administrative reset operations
+    IF current_setting('request.jwt.claim.role', true) = 'service_role' THEN
+        RETURN NEW;
+    END IF;
+
     IF OLD.status IN ('completed', 'archived_incomplete') THEN
         RAISE EXCEPTION 'Completed and archived distribution cycles are immutable and cannot be updated.';
     END IF;
@@ -668,6 +673,11 @@ EXECUTE FUNCTION public.protect_completed_cycles();
 CREATE OR REPLACE FUNCTION public.prevent_delete_completed_cycles()
 RETURNS TRIGGER AS $$
 BEGIN
+    -- Allow service_role / administrative reset operations
+    IF current_setting('request.jwt.claim.role', true) = 'service_role' THEN
+        RETURN OLD;
+    END IF;
+
     IF OLD.status IN ('completed', 'archived_incomplete') THEN
         RAISE EXCEPTION 'Completed historical cycles cannot be deleted.';
     END IF;

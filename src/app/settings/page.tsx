@@ -1523,8 +1523,9 @@ export default function SettingsPage() {
                   <div>
                     <h3 className="text-sm font-semibold text-white">Reset All Platform Data</h3>
                     <p className="mt-1 text-xs text-zinc-400 max-w-xl">
-                      Permanently wipe all your financial transactions, tasks, notes, habits, and chat
-                      conversations back to a fresh starting state. Requires your account password to confirm.
+                      Permanently wipe all your financial transactions, salary distribution plans and cycles,
+                      tasks, notes, habits, countdowns, notifications, and AI conversations back to a fresh
+                      starting state. Requires your account password to confirm.
                     </p>
                   </div>
 

@@ -52,6 +52,36 @@ export default function ResetDataModal({
         throw new Error(data.error || 'Failed to reset data');
       }
 
+      // Purge all client-side cached data in browser localStorage (preserve user theme preference)
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (
+            key &&
+            key.startsWith('bibo_') &&
+            key !== 'bibo_user_theme' &&
+            key !== 'bibo_user_gender'
+          ) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach((k) => localStorage.removeItem(k));
+      } catch (storageErr) {
+        console.warn('Could not clear local storage cache:', storageErr);
+      }
+
+      // Dismiss any open notification banners in browser/SW
+      try {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then((reg) => {
+            reg.getNotifications().then((notifs) => {
+              notifs.forEach((n) => n.close());
+            });
+          });
+        }
+      } catch {}
+
       setSuccess(true);
       setTimeout(() => {
         if (onSuccess) {
@@ -122,11 +152,13 @@ export default function ResetDataModal({
                   The following data will be permanently wiped from your account:
                 </p>
                 <ul className="list-disc pl-4 text-[11px] text-zinc-400 space-y-0.5">
-                  <li>All Financial Transactions & Balance History</li>
-                  <li>All Tasks (Todo, In-Progress, Done)</li>
-                  <li>All Saved Notes & Documents</li>
-                  <li>All Habits & Consistency Logs</li>
-                  <li>All AI Chat History & Messages</li>
+                  <li>All Financial Transactions, Salary Plans & Distribution Cycles</li>
+                  <li>All Tasks (Todo, In-Progress, Done) & Reminders</li>
+                  <li>All Saved Notes, Documents & Scanned Receipts</li>
+                  <li>All Habits & Daily Consistency Logs</li>
+                  <li>All AI Chat History & Daily Summaries</li>
+                  <li>All Countdowns & Milestone Events</li>
+                  <li>All Notifications, Preferences & Scheduled Alerts</li>
                 </ul>
                 <p className="text-[10px] text-zinc-500 pt-1">
                   *Your account email and login credentials will remain intact.

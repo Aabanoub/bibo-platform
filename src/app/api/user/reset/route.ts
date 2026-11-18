@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
     // Verify the account password against Supabase Auth
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !supabaseAnonKey) {
       return NextResponse.json(
@@ -50,27 +51,64 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Password verified! Delete all user-scoped data across all tables
-    // 1. Habit logs & Habits
-    await supabase.from('habit_logs').delete().eq('user_id', user.id);
-    await supabase.from('habits').delete().eq('user_id', user.id);
+    // Use service role admin client if available (bypasses RLS & immutability triggers for clean administrative purge)
+    // or fall back to authenticated server client
+    const client = supabaseServiceKey
+      ? createSupabaseClient(supabaseUrl, supabaseServiceKey)
+      : supabase;
 
-    // 2. Tasks
-    await supabase.from('tasks').delete().eq('user_id', user.id);
+    // Password verified! Delete all user-scoped data across ALL platform tables in safe dependency order:
+    const tablesToWipe = [
+      // 1. Habits & Habit consistency logs
+      'habit_logs',
+      'habits',
+      // 2. Tasks & Deadlines
+      'tasks',
+      // 3. Salary Distribution Cycles & Plans
+      'salary_distribution_cycles',
+      'salary_distribution_plans',
+      // 4. Financial Transactions
+      'transactions',
+      // 5. Notes & Scanned Documents
+      'notes',
+      // 6. AI Chat Messages & Summaries
+      'chat_messages',
+      'daily_summaries',
+      // 7. Countdowns & Milestones
+      'countdown_events',
+      // 8. Notifications, Scheduled Reminders, Subscriptions & Preferences
+      'notifications',
+      'scheduled_notifications',
+      'push_subscriptions',
+      'notification_preferences',
+    ];
 
-    // 3. Transactions
-    await supabase.from('transactions').delete().eq('user_id', user.id);
+    for (const table of tablesToWipe) {
+      try {
+        const { error } = await client.from(table).delete().eq('user_id', user.id);
+        if (error) {
+          console.warn(`[/api/user/reset] Warning clearing table "${table}":`, error.message);
+        }
+      } catch (tableErr) {
+        console.warn(`[/api/user/reset] Exception clearing table "${table}":`, tableErr);
+      }
+    }
 
-    // 4. Notes
-    await supabase.from('notes').delete().eq('user_id', user.id);
-
-    // 5. Chat messages
-    await supabase.from('chat_messages').delete().eq('user_id', user.id);
-
-    // 6. Notifications, Summaries & Countdowns
-    await supabase.from('daily_summaries').delete().eq('user_id', user.id);
-    await supabase.from('notifications').delete().eq('user_id', user.id);
-    await supabase.from('countdown_events').delete().eq('user_id', user.id);
+    // 9. Reset User Profile to factory defaults (focus durations, mobile nav slots)
+    try {
+      await client
+        .from('profiles')
+        .update({
+          focus_duration: 25,
+          short_break_duration: 5,
+          long_break_duration: 15,
+          nav_slots: ['notes', 'tasks', 'finance', 'chat'],
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
+    } catch (profileErr) {
+      console.warn('[/api/user/reset] Warning resetting profile defaults:', profileErr);
+    }
 
     return NextResponse.json({
       success: true,

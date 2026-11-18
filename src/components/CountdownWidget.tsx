@@ -148,7 +148,7 @@ export default function CountdownWidget() {
     try {
       localStorage.removeItem('bibo_countdown_events');
       localStorage.removeItem('bibo_active_countdown_id');
-    } catch {}
+    } catch { }
 
     // Read this specific user's cached countdowns for instant rendering
     let cachedEvents: CountdownEvent[] = [];
@@ -182,7 +182,7 @@ export default function CountdownWidget() {
           setEvents(freshEvents);
           try {
             localStorage.setItem(storageKey, JSON.stringify(freshEvents));
-          } catch {}
+          } catch { }
 
           // Determine active event for this user
           const storedActiveId = localStorage.getItem(activeKey);
@@ -195,7 +195,7 @@ export default function CountdownWidget() {
             if (chosenId) {
               try {
                 localStorage.setItem(activeKey, chosenId);
-              } catch {}
+              } catch { }
             }
           }
           setDbError(null);
@@ -371,7 +371,7 @@ export default function CountdownWidget() {
                       message: notifMsg,
                       actionUrl: '/',
                     }),
-                  }).catch(() => {});
+                  }).catch(() => { });
                 } catch (e) {
                   console.warn('In-app notification error:', e);
                 }
@@ -391,7 +391,7 @@ export default function CountdownWidget() {
         const storageKey = getStorageKey(currentUser?.id);
         try {
           localStorage.setItem(storageKey, JSON.stringify(updatedEvents));
-        } catch {}
+        } catch { }
 
         // Sync to Supabase if available
         if (currentUser?.id) {
@@ -403,7 +403,7 @@ export default function CountdownWidget() {
                 .eq('id', ev.id)
                 .eq('user_id', currentUser.id);
             }
-          } catch {}
+          } catch { }
         }
       }
     }
@@ -419,7 +419,7 @@ export default function CountdownWidget() {
     const storageKey = getStorageKey(currentUser?.id);
     try {
       localStorage.setItem(storageKey, JSON.stringify(newEvents));
-    } catch {}
+    } catch { }
   };
 
   const handleSaveEvent = async (
@@ -442,20 +442,20 @@ export default function CountdownWidget() {
       updatedList = events.map((e) =>
         e.id === existingId
           ? {
-              ...e,
-              ...data,
-              updated_at: new Date().toISOString(),
-            }
+            ...e,
+            ...data,
+            updated_at: new Date().toISOString(),
+          }
           : data.is_pinned
-          ? { ...e, is_pinned: false }
-          : e
+            ? { ...e, is_pinned: false }
+            : e
       );
 
       if (data.is_pinned) {
         setActiveEventId(existingId);
         try {
           localStorage.setItem(activeKey, existingId);
-        } catch {}
+        } catch { }
       }
 
       // Supabase update
@@ -513,7 +513,7 @@ export default function CountdownWidget() {
                     category: 'countdown',
                     actionUrl: '/',
                     scheduledFor: new Date(triggerTime),
-                  }).catch(() => {});
+                  }).catch(() => { });
                 }
               });
             }
@@ -544,7 +544,7 @@ export default function CountdownWidget() {
       setActiveEventId(newEvent.id);
       try {
         localStorage.setItem(activeKey, newEvent.id);
-      } catch {}
+      } catch { }
 
       // Supabase insert
       if (user?.id) {
@@ -558,7 +558,7 @@ export default function CountdownWidget() {
               },
               { onConflict: 'id' }
             );
-          } catch {}
+          } catch { }
 
           if (data.is_pinned) {
             await supabase
@@ -610,7 +610,7 @@ export default function CountdownWidget() {
                     category: 'countdown',
                     actionUrl: '/',
                     scheduledFor: new Date(triggerTime),
-                  }).catch(() => {});
+                  }).catch(() => { });
                 }
               });
             }
@@ -642,7 +642,7 @@ export default function CountdownWidget() {
       try {
         if (nextActive) localStorage.setItem(activeKey, nextActive);
         else localStorage.removeItem(activeKey);
-      } catch {}
+      } catch { }
     }
 
     if (user?.id) {
@@ -658,12 +658,13 @@ export default function CountdownWidget() {
         } else {
           console.log('[CountdownWidget] Deleted countdown event from Supabase successfully:', id);
           // Clean up any pending scheduled background notifications
-          supabase
-            .from('scheduled_notifications')
-            .delete()
-            .eq('user_id', user.id)
-            .like('idempotency_key', `countdown_${id}_%`)
-            .then(null, () => {});
+          try {
+            await supabase
+              .from('scheduled_notifications')
+              .delete()
+              .eq('user_id', user.id)
+              .like('idempotency_key', `countdown_${id}_%`);
+          } catch {}
         }
       } catch (err: any) {
         console.error('[CountdownWidget] Supabase delete failed:', err);
@@ -676,7 +677,7 @@ export default function CountdownWidget() {
     const activeKey = getActiveIdKey(currentUser?.id);
     try {
       localStorage.setItem(activeKey, id);
-    } catch {}
+    } catch { }
     setShowEventList(false);
   };
 
@@ -699,13 +700,13 @@ export default function CountdownWidget() {
   // Format target date for display
   const targetFormatted = activeEvent
     ? new Date(activeEvent.target_date).toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      })
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
     : '';
 
   // ── Render: Empty State ───────────────────────────────────────────────────
@@ -777,15 +778,13 @@ export default function CountdownWidget() {
   return (
     <>
       <section
-        className={`relative overflow-hidden rounded-2xl border ${
-          isGirly ? 'border-pink-500/30 bg-pink-950/20 shadow-pink-500/10' : `${colorStyle.border} ${colorStyle.bg} ${colorStyle.glow}`
-        } p-5 sm:p-6 backdrop-blur-md shadow-xl transition-all duration-300`}
+        className={`relative overflow-hidden rounded-2xl border ${isGirly ? 'border-pink-500/30 bg-pink-950/20 shadow-pink-500/10' : `${colorStyle.border} ${colorStyle.bg} ${colorStyle.glow}`
+          } p-5 sm:p-6 backdrop-blur-md shadow-xl transition-all duration-300`}
       >
         {/* Background glow decoration */}
         <div
-          className={`absolute -right-16 -top-16 h-56 w-56 rounded-full bg-gradient-to-br ${
-            isGirly ? 'from-pink-500/15' : colorStyle.gradient
-          } opacity-15 blur-3xl pointer-events-none`}
+          className={`absolute -right-16 -top-16 h-56 w-56 rounded-full bg-gradient-to-br ${isGirly ? 'from-pink-500/15' : colorStyle.gradient
+            } opacity-15 blur-3xl pointer-events-none`}
         />
 
         {/* Top Header Row */}
@@ -793,11 +792,10 @@ export default function CountdownWidget() {
           {/* Left: Emoji, Title, Category */}
           <div className="flex items-center gap-3">
             <div
-              className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl text-2xl shadow-md border ${
-                isGirly
-                  ? 'border-pink-500/40 bg-pink-900/40 ring-2 ring-pink-500/20'
-                  : `${colorStyle.border} bg-slate-800/80 ring-2 ring-blue-500/20`
-              }`}
+              className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl text-2xl shadow-md border ${isGirly
+                ? 'border-pink-500/40 bg-pink-900/40 ring-2 ring-pink-500/20'
+                : `${colorStyle.border} bg-slate-800/80 ring-2 ring-blue-500/20`
+                }`}
             >
               {activeEvent.emoji}
             </div>
@@ -808,11 +806,10 @@ export default function CountdownWidget() {
                   {activeEvent.title}
                 </h2>
                 <span
-                  className={`capitalize px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                    isGirly
-                      ? 'border-pink-500/30 bg-pink-500/15 text-pink-300'
-                      : `${colorStyle.border} ${colorStyle.bg} ${colorStyle.text}`
-                  }`}
+                  className={`capitalize px-2 py-0.5 rounded-full text-[10px] font-semibold border ${isGirly
+                    ? 'border-pink-500/30 bg-pink-500/15 text-pink-300'
+                    : `${colorStyle.border} ${colorStyle.bg} ${colorStyle.text}`
+                    }`}
                 >
                   {activeEvent.category}
                 </span>
@@ -842,19 +839,18 @@ export default function CountdownWidget() {
               type="button"
               onClick={() => loadData()}
               disabled={isSyncing}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-medium transition ${
-                dbError
-                  ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
-                  : currentUser
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-medium transition ${dbError
+                ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+                : currentUser
                   ? 'border-slate-700/80 bg-slate-800/70 hover:bg-slate-700 text-slate-300'
                   : 'border-slate-800 bg-slate-900/50 text-slate-500'
-              }`}
+                }`}
               title={
                 dbError
                   ? `Supabase sync error: ${dbError}. Run section 9 in schema.sql.`
                   : currentUser
-                  ? 'Click to sync with Supabase cloud database'
-                  : 'Sign in to sync countdowns to cloud database'
+                    ? 'Click to sync with Supabase cloud database'
+                    : 'Sign in to sync countdowns to cloud database'
               }
             >
               <RefreshCw size={12} className={isSyncing ? 'animate-spin text-blue-400' : 'text-slate-400'} />
@@ -918,11 +914,10 @@ export default function CountdownWidget() {
                 setEditingEvent(null);
                 setIsModalOpen(true);
               }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white transition active:scale-95 shadow-md ${
-                isGirly
-                  ? 'bg-gradient-to-r from-pink-600 to-rose-500 hover:from-pink-500 hover:to-rose-400 shadow-pink-500/20'
-                  : 'bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 shadow-blue-500/20'
-              }`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white transition active:scale-95 shadow-md ${isGirly
+                ? 'bg-gradient-to-r from-pink-600 to-rose-500 hover:from-pink-500 hover:to-rose-400 shadow-pink-500/20'
+                : 'bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 shadow-blue-500/20'
+                }`}
             >
               <Plus size={14} />
               <span>New</span>
@@ -954,9 +949,8 @@ export default function CountdownWidget() {
           {/* Days */}
           <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-700/60 bg-slate-900/80 p-2.5 sm:p-4 shadow-inner">
             <span
-              className={`font-mono text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight ${
-                isGirly ? 'text-pink-400' : colorStyle.text
-              }`}
+              className={`font-mono text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight ${isGirly ? 'text-pink-400' : colorStyle.text
+                }`}
             >
               {String(time.days).padStart(2, '0')}
             </span>
@@ -968,9 +962,8 @@ export default function CountdownWidget() {
           {/* Hours */}
           <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-700/60 bg-slate-900/80 p-2.5 sm:p-4 shadow-inner">
             <span
-              className={`font-mono text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight ${
-                isGirly ? 'text-pink-400' : colorStyle.text
-              }`}
+              className={`font-mono text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight ${isGirly ? 'text-pink-400' : colorStyle.text
+                }`}
             >
               {String(time.hours).padStart(2, '0')}
             </span>
@@ -982,9 +975,8 @@ export default function CountdownWidget() {
           {/* Minutes */}
           <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-700/60 bg-slate-900/80 p-2.5 sm:p-4 shadow-inner">
             <span
-              className={`font-mono text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight ${
-                isGirly ? 'text-pink-400' : colorStyle.text
-              }`}
+              className={`font-mono text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight ${isGirly ? 'text-pink-400' : colorStyle.text
+                }`}
             >
               {String(time.minutes).padStart(2, '0')}
             </span>
@@ -996,9 +988,8 @@ export default function CountdownWidget() {
           {/* Seconds */}
           <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-700/60 bg-slate-900/80 p-2.5 sm:p-4 shadow-inner">
             <span
-              className={`font-mono text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight ${
-                isGirly ? 'text-pink-400' : colorStyle.text
-              } animate-pulse`}
+              className={`font-mono text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight ${isGirly ? 'text-pink-400' : colorStyle.text
+                } animate-pulse`}
             >
               {String(time.seconds).padStart(2, '0')}
             </span>
@@ -1019,9 +1010,8 @@ export default function CountdownWidget() {
           </div>
           <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800 border border-slate-700/50">
             <div
-              className={`h-full bg-gradient-to-r transition-all duration-500 ease-out ${
-                isGirly ? 'from-pink-500 via-rose-400 to-pink-400' : colorStyle.bar
-              }`}
+              className={`h-full bg-gradient-to-r transition-all duration-500 ease-out ${isGirly ? 'from-pink-500 via-rose-400 to-pink-400' : colorStyle.bar
+                }`}
               style={{ width: `${time.progress}%` }}
             />
           </div>
@@ -1049,11 +1039,10 @@ export default function CountdownWidget() {
             <div className="flex items-center justify-between pb-3.5 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div
-                  className={`p-2 rounded-xl border ${
-                    isGirly
-                      ? 'bg-pink-500/15 border-pink-500/30 text-pink-400'
-                      : 'bg-blue-500/15 border-blue-500/30 text-blue-400'
-                  }`}
+                  className={`p-2 rounded-xl border ${isGirly
+                    ? 'bg-pink-500/15 border-pink-500/30 text-pink-400'
+                    : 'bg-blue-500/15 border-blue-500/30 text-blue-400'
+                    }`}
                 >
                   <List size={16} />
                 </div>
@@ -1096,22 +1085,20 @@ export default function CountdownWidget() {
                       handleSelectActive(ev.id);
                       setShowEventList(false);
                     }}
-                    className={`w-full flex items-center justify-between p-3.5 rounded-2xl border transition-all text-left ${
-                      isActive
-                        ? isGirly
-                          ? 'bg-pink-500/15 border-pink-500/50 shadow-md shadow-pink-500/10'
-                          : 'bg-blue-600/15 border-blue-500/50 shadow-md shadow-blue-500/10'
-                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 hover:bg-slate-850'
-                    }`}
+                    className={`w-full flex items-center justify-between p-3.5 rounded-2xl border transition-all text-left ${isActive
+                      ? isGirly
+                        ? 'bg-pink-500/15 border-pink-500/50 shadow-md shadow-pink-500/10'
+                        : 'bg-blue-600/15 border-blue-500/50 shadow-md shadow-blue-500/10'
+                      : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 hover:bg-slate-850'
+                      }`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <span className="text-2xl flex-shrink-0">{ev.emoji}</span>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span
-                            className={`text-xs sm:text-sm font-bold truncate ${
-                              isActive ? 'text-white' : 'text-slate-200'
-                            }`}
+                            className={`text-xs sm:text-sm font-bold truncate ${isActive ? 'text-white' : 'text-slate-200'
+                              }`}
                           >
                             {ev.title}
                           </span>
@@ -1136,11 +1123,10 @@ export default function CountdownWidget() {
                     <div className="flex flex-col items-end flex-shrink-0 ml-2">
                       {isActive && (
                         <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full mb-1 ${
-                            isGirly
-                              ? 'bg-pink-500/20 text-pink-300'
-                              : 'bg-blue-500/20 text-blue-300'
-                          }`}
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full mb-1 ${isGirly
+                            ? 'bg-pink-500/20 text-pink-300'
+                            : 'bg-blue-500/20 text-blue-300'
+                            }`}
                         >
                           Active ✓
                         </span>
@@ -1163,11 +1149,10 @@ export default function CountdownWidget() {
                   setEditingEvent(null);
                   setIsModalOpen(true);
                 }}
-                className={`w-full py-2.5 rounded-xl text-xs font-semibold text-white transition flex items-center justify-center gap-1.5 shadow-md ${
-                  isGirly
-                    ? 'bg-gradient-to-r from-pink-600 to-rose-500 hover:from-pink-500 hover:to-rose-400'
-                    : 'bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400'
-                }`}
+                className={`w-full py-2.5 rounded-xl text-xs font-semibold text-white transition flex items-center justify-center gap-1.5 shadow-md ${isGirly
+                  ? 'bg-gradient-to-r from-pink-600 to-rose-500 hover:from-pink-500 hover:to-rose-400'
+                  : 'bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400'
+                  }`}
               >
                 <Plus size={14} />
                 <span>Create New Countdown</span>

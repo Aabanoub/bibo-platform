@@ -347,8 +347,8 @@ export default function TasksPage() {
                   message: `Time to finish: "${t.title}".`,
                   actionUrl: '/tasks',
                 }),
-              }).catch(() => {});
-            } catch {}
+              }).catch(() => { });
+            } catch { }
           }
 
           // 3. Mark reminder_sent in Supabase
@@ -400,12 +400,13 @@ export default function TasksPage() {
       if (err) throw err;
 
       if (nextStatus === 'done') {
-        supabase
-          .from('scheduled_notifications')
-          .update({ status: 'delivered', updated_at: new Date().toISOString() })
-          .eq('status', 'pending')
-          .like('idempotency_key', `task_reminder_${task.id}_%`)
-          .then(null, () => {});
+        try {
+          await supabase
+            .from('scheduled_notifications')
+            .update({ status: 'delivered', updated_at: new Date().toISOString() })
+            .eq('status', 'pending')
+            .like('idempotency_key', `task_reminder_${task.id}_%`);
+        } catch {}
       }
     } catch (e: unknown) {
       console.error('toggleTaskDone error:', e);
@@ -492,7 +493,7 @@ export default function TasksPage() {
           category: 'task',
           actionUrl: '/tasks',
           scheduledFor: new Date(reminderDateISO),
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       // Reset Quick Add fields
@@ -515,7 +516,7 @@ export default function TasksPage() {
           is_read: false,
           action_url: '/tasks',
         });
-      } catch {}
+      } catch { }
 
       // Keep focus on input for rapid entry
       quickInputRef.current?.focus();
@@ -536,11 +537,12 @@ export default function TasksPage() {
       setTasks((prev) => prev.filter((t) => t.id !== id));
       const { error: err } = await supabase.from('tasks').delete().eq('id', id);
       if (err) throw err;
-      supabase
-        .from('scheduled_notifications')
-        .delete()
-        .like('idempotency_key', `task_reminder_${id}_%`)
-        .then(null, () => {});
+      try {
+        await supabase
+          .from('scheduled_notifications')
+          .delete()
+          .like('idempotency_key', `task_reminder_${id}_%`);
+      } catch {}
     } catch (e: unknown) {
       fetchTasks();
       setError(e instanceof Error ? e.message : 'Failed to delete task');
@@ -628,7 +630,7 @@ export default function TasksPage() {
             category: 'task',
             actionUrl: '/tasks',
             scheduledFor: new Date(reminderDateISO),
-          }).catch(() => {});
+          }).catch(() => { });
         }
       }
 
@@ -636,17 +638,17 @@ export default function TasksPage() {
         prev.map((t) =>
           t.id === editingTask.id
             ? {
-                ...t,
-                title: editTitle.trim(),
-                description: editDescription.trim() || null,
-                priority: editPriority,
-                status: editStatus,
-                due_date: editDueDate || null,
-                reminder_at: reminderDateISO,
-                reminder_sent:
-                  reminderDateISO !== editingTask.reminder_at ? false : editingTask.reminder_sent,
-                updated_at: new Date().toISOString(),
-              }
+              ...t,
+              title: editTitle.trim(),
+              description: editDescription.trim() || null,
+              priority: editPriority,
+              status: editStatus,
+              due_date: editDueDate || null,
+              reminder_at: reminderDateISO,
+              reminder_sent:
+                reminderDateISO !== editingTask.reminder_at ? false : editingTask.reminder_sent,
+              updated_at: new Date().toISOString(),
+            }
             : t
         )
       );
@@ -927,11 +929,10 @@ export default function TasksPage() {
                 <button
                   type="button"
                   onClick={() => setQuickDatePreset('today')}
-                  className={`py-1 px-2.5 rounded-lg border text-[11px] transition-colors flex items-center gap-1 ${
-                    quickDueDate === new Date().toISOString().slice(0, 10)
-                      ? 'bg-blue-600/30 border-blue-500 text-blue-300 font-semibold'
-                      : 'bg-slate-800/80 border-slate-700/60 text-slate-300 hover:bg-slate-700'
-                  }`}
+                  className={`py-1 px-2.5 rounded-lg border text-[11px] transition-colors flex items-center gap-1 ${quickDueDate === new Date().toISOString().slice(0, 10)
+                    ? 'bg-blue-600/30 border-blue-500 text-blue-300 font-semibold'
+                    : 'bg-slate-800/80 border-slate-700/60 text-slate-300 hover:bg-slate-700'
+                    }`}
                 >
                   <Calendar className="w-3 h-3" /> Today
                 </button>
@@ -956,11 +957,10 @@ export default function TasksPage() {
                 <button
                   type="button"
                   onClick={() => setQuickReminderPreset('1h')}
-                  className={`py-1 px-2.5 rounded-lg border text-[11px] transition-colors flex items-center gap-1 ${
-                    quickReminderAt
-                      ? 'bg-amber-500/20 border-amber-500/40 text-amber-300 font-medium'
-                      : 'bg-slate-800/80 border-slate-700/60 text-slate-300 hover:bg-slate-700'
-                  }`}
+                  className={`py-1 px-2.5 rounded-lg border text-[11px] transition-colors flex items-center gap-1 ${quickReminderAt
+                    ? 'bg-amber-500/20 border-amber-500/40 text-amber-300 font-medium'
+                    : 'bg-slate-800/80 border-slate-700/60 text-slate-300 hover:bg-slate-700'
+                    }`}
                   title="Set reminder for 1 hour from now"
                 >
                   <Bell className="w-3 h-3" />
@@ -987,11 +987,10 @@ export default function TasksPage() {
         <div className="flex items-center bg-slate-900 border border-slate-800 p-1 rounded-xl overflow-x-auto text-xs">
           <button
             onClick={() => setActiveTab('all')}
-            className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'all'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'all'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
           >
             All
             <span className="text-[10px] bg-black/20 px-1.5 py-0.2 rounded-full">
@@ -1001,18 +1000,16 @@ export default function TasksPage() {
 
           <button
             onClick={() => setActiveTab('today')}
-            className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'today'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'today'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
           >
             Today
             {taskStats.today > 0 && (
               <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                  taskStats.overdue > 0 ? 'bg-red-500 text-white' : 'bg-black/20'
-                }`}
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${taskStats.overdue > 0 ? 'bg-red-500 text-white' : 'bg-black/20'
+                  }`}
               >
                 {taskStats.today}
               </span>
@@ -1021,11 +1018,10 @@ export default function TasksPage() {
 
           <button
             onClick={() => setActiveTab('upcoming')}
-            className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'upcoming'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'upcoming'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
           >
             Upcoming
             <span className="text-[10px] bg-black/20 px-1.5 py-0.2 rounded-full">
@@ -1035,11 +1031,10 @@ export default function TasksPage() {
 
           <button
             onClick={() => setActiveTab('done')}
-            className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'done'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'done'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
           >
             Completed
             <span className="text-[10px] bg-black/20 px-1.5 py-0.2 rounded-full">
@@ -1112,12 +1107,12 @@ export default function TasksPage() {
             {searchQuery
               ? 'No tasks match your search filter.'
               : activeTab === 'today'
-              ? 'No tasks due today. Great job keeping on top of your schedule!'
-              : activeTab === 'upcoming'
-              ? 'No upcoming scheduled tasks.'
-              : activeTab === 'done'
-              ? 'No completed tasks yet. Finish a task to see it here!'
-              : 'Add your first task using the box above to get organized.'}
+                ? 'No tasks due today. Great job keeping on top of your schedule!'
+                : activeTab === 'upcoming'
+                  ? 'No upcoming scheduled tasks.'
+                  : activeTab === 'done'
+                    ? 'No completed tasks yet. Finish a task to see it here!'
+                    : 'Add your first task using the box above to get organized.'}
           </p>
         </div>
       ) : (
@@ -1385,15 +1380,14 @@ function TaskItem({ task, onToggleDone, onToggleInProgress, onEdit, onDelete }: 
   return (
     <div
       onClick={(e) => onEdit(task, e)}
-      className={`group relative flex items-start sm:items-center justify-between gap-3 p-3 sm:py-3 sm:px-3.5 rounded-xl border transition-all cursor-pointer ${
-        isDone
-          ? 'bg-slate-900/40 border-slate-800/50 opacity-60 hover:opacity-90'
-          : overdue
+      className={`group relative flex items-start sm:items-center justify-between gap-3 p-3 sm:py-3 sm:px-3.5 rounded-xl border transition-all cursor-pointer ${isDone
+        ? 'bg-slate-900/40 border-slate-800/50 opacity-60 hover:opacity-90'
+        : overdue
           ? 'bg-red-950/20 border-red-800/40 hover:border-red-700/60 shadow-sm shadow-red-950/20'
           : isInProgress
-          ? 'bg-blue-950/15 border-blue-800/40 hover:border-blue-700/60'
-          : 'bg-slate-900/80 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900 shadow-sm'
-      }`}
+            ? 'bg-blue-950/15 border-blue-800/40 hover:border-blue-700/60'
+            : 'bg-slate-900/80 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900 shadow-sm'
+        }`}
     >
       {/* LEFT: 1-Tap Checkbox & Content */}
       <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
@@ -1404,13 +1398,12 @@ function TaskItem({ task, onToggleDone, onToggleInProgress, onEdit, onDelete }: 
             e.stopPropagation();
             onToggleDone(task);
           }}
-          className={`shrink-0 w-6 h-6 rounded-full border flex items-center justify-center transition-all mt-0.5 sm:mt-0 ${
-            isDone
-              ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm shadow-emerald-500/30'
-              : overdue
+          className={`shrink-0 w-6 h-6 rounded-full border flex items-center justify-center transition-all mt-0.5 sm:mt-0 ${isDone
+            ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm shadow-emerald-500/30'
+            : overdue
               ? 'border-red-500 hover:bg-red-500/20 text-transparent hover:text-red-300'
               : 'border-slate-600 hover:border-blue-400 hover:bg-blue-500/10 text-transparent hover:text-blue-400'
-          }`}
+            }`}
           title={isDone ? 'Mark as incomplete' : 'Mark as done'}
         >
           <Check className="w-3.5 h-3.5 stroke-[3]" />
@@ -1420,13 +1413,12 @@ function TaskItem({ task, onToggleDone, onToggleInProgress, onEdit, onDelete }: 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span
-              className={`text-sm sm:text-base font-medium break-words transition-all ${
-                isDone
-                  ? 'line-through text-slate-500'
-                  : overdue
+              className={`text-sm sm:text-base font-medium break-words transition-all ${isDone
+                ? 'line-through text-slate-500'
+                : overdue
                   ? 'text-red-200'
                   : 'text-slate-100 group-hover:text-white'
-              }`}
+                }`}
             >
               {task.title}
             </span>
@@ -1448,9 +1440,8 @@ function TaskItem({ task, onToggleDone, onToggleInProgress, onEdit, onDelete }: 
           <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs">
             {/* Priority Chip */}
             <span
-              className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
-                PRIORITY_CONFIG[task.priority].badge
-              }`}
+              className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${PRIORITY_CONFIG[task.priority].badge
+                }`}
             >
               {PRIORITY_CONFIG[task.priority].label}
             </span>
@@ -1458,20 +1449,19 @@ function TaskItem({ task, onToggleDone, onToggleInProgress, onEdit, onDelete }: 
             {/* Due Date Indicator */}
             {task.due_date && (
               <span
-                className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md ${
-                  overdue
-                    ? 'bg-red-500/20 text-red-300 border border-red-500/30 font-semibold'
-                    : dueToday
+                className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md ${overdue
+                  ? 'bg-red-500/20 text-red-300 border border-red-500/30 font-semibold'
+                  : dueToday
                     ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium'
                     : 'bg-slate-800 text-slate-400'
-                }`}
+                  }`}
               >
                 <Calendar className="w-3 h-3 shrink-0" />
                 {overdue
                   ? `Overdue (${daysOverdue}d ago)`
                   : dueToday
-                  ? 'Due Today'
-                  : new Date(task.due_date).toLocaleDateString([], {
+                    ? 'Due Today'
+                    : new Date(task.due_date).toLocaleDateString([], {
                       month: 'short',
                       day: 'numeric',
                     })}
@@ -1506,11 +1496,10 @@ function TaskItem({ task, onToggleDone, onToggleInProgress, onEdit, onDelete }: 
           <button
             type="button"
             onClick={(e) => onToggleInProgress(task, e)}
-            className={`p-1.5 rounded-lg text-xs transition-colors ${
-              isInProgress
-                ? 'bg-blue-600/30 text-blue-300 hover:bg-blue-600/50'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
+            className={`p-1.5 rounded-lg text-xs transition-colors ${isInProgress
+              ? 'bg-blue-600/30 text-blue-300 hover:bg-blue-600/50'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
             title={isInProgress ? 'Set back to To Do' : 'Mark as In Progress'}
           >
             <Zap className="w-3.5 h-3.5" />
