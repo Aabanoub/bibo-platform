@@ -1031,7 +1031,7 @@ export default function TasksPage() {
               className="bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs rounded-xl px-2.5 py-1.5 outline-none focus:border-blue-500 cursor-pointer pr-7 appearance-none font-medium"
               title="Change task sorting algorithm"
             >
-              <option value="smart">⚡ Smart Algorithm (Priority + Urgency)</option>
+              <option value="smart">⚡ Smart Algorithm</option>
               <option value="due_date">📅 Due Date</option>
               <option value="priority">🚩 Priority (Urgent first)</option>
               <option value="newest">🕒 Newest first</option>
