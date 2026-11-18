@@ -67,6 +67,8 @@ export default function ResetDataModal({
           }
         }
         keysToRemove.forEach((k) => localStorage.removeItem(k));
+        // Record client reset timestamp
+        localStorage.setItem('bibo_last_reset_at', new Date().toISOString());
       } catch (storageErr) {
         console.warn('Could not clear local storage cache:', storageErr);
       }

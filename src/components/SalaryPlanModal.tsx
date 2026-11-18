@@ -184,16 +184,26 @@ export default function SalaryPlanModal({
 
         if (!user) return;
 
-        const { data, error: histErr } = await supabase
+        const lastResetAt =
+          user.user_metadata?.last_data_reset_at ||
+          (typeof window !== 'undefined' ? localStorage.getItem('bibo_last_reset_at') : null);
+
+        let query = supabase
           .from('salary_distribution_cycles')
           .select('*')
-          .eq('user_id', user.id)
+          .eq('user_id', user.id);
+
+        if (lastResetAt) {
+          query = query.gt('created_at', lastResetAt);
+        }
+
+        const { data, error: histErr } = await query
           .order('created_at', { ascending: false })
           .limit(20);
 
         if (histErr) throw histErr;
-        if (isMounted && data) {
-          setPastCycles(data as SalaryCycle[]);
+        if (isMounted) {
+          setPastCycles(data ? (data as SalaryCycle[]) : []);
         }
       } catch (err: any) {
         console.error('Error loading cycles history:', err);

@@ -135,11 +135,20 @@ export default function FinancePage() {
 
       if (!user) return;
 
-      const { data: plan } = await supabase
+      const lastResetAt =
+        user.user_metadata?.last_data_reset_at ||
+        (typeof window !== 'undefined' ? localStorage.getItem('bibo_last_reset_at') : null);
+
+      let planQuery = supabase
         .from('salary_distribution_plans')
         .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
+        .eq('user_id', user.id);
+
+      if (lastResetAt) {
+        planQuery = planQuery.gt('updated_at', lastResetAt);
+      }
+
+      const { data: plan } = await planQuery.maybeSingle();
 
       if (plan) {
         setSalaryPlan(plan as SalaryPlan);
@@ -147,12 +156,17 @@ export default function FinancePage() {
         setSalaryPlan(null);
       }
 
-      const { data: cycle } = await supabase
+      let cycleQuery = supabase
         .from('salary_distribution_cycles')
         .select('*')
         .eq('user_id', user.id)
-        .eq('status', 'in_progress')
-        .maybeSingle();
+        .eq('status', 'in_progress');
+
+      if (lastResetAt) {
+        cycleQuery = cycleQuery.gt('created_at', lastResetAt);
+      }
+
+      const { data: cycle } = await cycleQuery.maybeSingle();
 
       if (cycle) {
         setActiveSalaryCycle(cycle as SalaryCycle);

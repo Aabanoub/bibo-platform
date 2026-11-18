@@ -125,6 +125,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 9. Reset User Profile to factory defaults (focus durations, mobile nav slots)
+    const nowISO = new Date().toISOString();
     try {
       await client
         .from('profiles')
@@ -133,11 +134,20 @@ export async function POST(req: NextRequest) {
           short_break_duration: 5,
           long_break_duration: 15,
           nav_slots: ['notes', 'tasks', 'finance', 'chat'],
-          updated_at: new Date().toISOString(),
+          updated_at: nowISO,
         })
         .eq('id', user.id);
     } catch (profileErr) {
       console.warn('[/api/user/reset] Warning resetting profile defaults:', profileErr);
+    }
+
+    // 10. Record authoritative reset timestamp in user auth metadata
+    try {
+      await supabase.auth.updateUser({
+        data: { last_data_reset_at: nowISO },
+      });
+    } catch (metaErr) {
+      console.warn('[/api/user/reset] Warning updating user metadata:', metaErr);
     }
 
     return NextResponse.json({
