@@ -569,52 +569,16 @@ export default function FinancePage() {
           </div>
         </div>
 
-        {/* Metrics Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
-          {/* Income Card */}
-          <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800/80 shadow-sm relative overflow-hidden group">
+        {/* Metrics Cards Grid (Net Balance at the Top) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
+          {/* Net Balance Card (Top Priority - Full width on mobile, 1st on desktop) */}
+          <div className="col-span-2 sm:col-span-1 p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-slate-850 border border-slate-800/90 shadow-md relative overflow-hidden group">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="flex items-center gap-2 text-xs font-medium text-slate-400">
-                <TrendingUp className="w-4 h-4 text-emerald-400" /> Total Income
-              </span>
-              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 bg-slate-800/60 px-2 py-0.5 rounded-full">
-                {isAllTime ? 'All-Time' : 'Month'}
-              </span>
-            </div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-emerald-400 tracking-tight">
-              ${displayIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-            <p className="text-[11px] text-slate-500 mt-1">
-              {isAllTime ? 'Total earnings' : `Earned in ${currentMonthName}`}
-            </p>
-          </div>
-
-          {/* Expenses Card */}
-          <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800/80 shadow-sm relative overflow-hidden group">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="flex items-center gap-2 text-xs font-medium text-slate-400">
-                <TrendingDown className="w-4 h-4 text-rose-400" /> Total Expenses
-              </span>
-              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 bg-slate-800/60 px-2 py-0.5 rounded-full">
-                {isAllTime ? 'All-Time' : 'Month'}
-              </span>
-            </div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-rose-400 tracking-tight">
-              ${displayExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-            <p className="text-[11px] text-slate-500 mt-1">
-              {isAllTime ? 'Total spending' : `Spent in ${currentMonthName}`}
-            </p>
-          </div>
-
-          {/* Net Balance Card */}
-          <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800/80 shadow-sm relative overflow-hidden group">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="flex items-center gap-2 text-xs font-medium text-slate-400">
+              <span className="flex items-center gap-2 text-xs font-semibold text-slate-300">
                 <DollarSign className="w-4 h-4 text-blue-400" /> Net Balance
               </span>
-              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 bg-slate-800/60 px-2 py-0.5 rounded-full">
-                {isAllTime ? 'Net' : 'Cash Flow'}
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-full border border-slate-700/50">
+                {isAllTime ? 'Total Balance' : 'Cash Flow'}
               </span>
             </div>
             <p
@@ -632,6 +596,42 @@ export default function FinancePage() {
               {isAllTime
                 ? `Month cash flow: ${monthlyNet >= 0 ? '+' : '-'}$${Math.abs(monthlyNet).toFixed(2)}`
                 : `All-time balance: ${allTimeNetBalance >= 0 ? '+' : '-'}$${Math.abs(allTimeNetBalance).toFixed(2)}`}
+            </p>
+          </div>
+
+          {/* Income Card */}
+          <div className="col-span-1 p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800/80 shadow-sm relative overflow-hidden group">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="flex items-center gap-2 text-xs font-medium text-slate-400">
+                <TrendingUp className="w-4 h-4 text-emerald-400" /> Total Income
+              </span>
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 bg-slate-800/60 px-2 py-0.5 rounded-full">
+                {isAllTime ? 'All-Time' : 'Month'}
+              </span>
+            </div>
+            <p className="text-xl sm:text-3xl font-extrabold text-emerald-400 tracking-tight">
+              ${displayIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <p className="text-[11px] text-slate-500 mt-1 truncate">
+              {isAllTime ? 'Total earnings' : `Earned in ${currentMonthName}`}
+            </p>
+          </div>
+
+          {/* Expenses Card */}
+          <div className="col-span-1 p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800/80 shadow-sm relative overflow-hidden group">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="flex items-center gap-2 text-xs font-medium text-slate-400">
+                <TrendingDown className="w-4 h-4 text-rose-400" /> Total Expenses
+              </span>
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 bg-slate-800/60 px-2 py-0.5 rounded-full">
+                {isAllTime ? 'All-Time' : 'Month'}
+              </span>
+            </div>
+            <p className="text-xl sm:text-3xl font-extrabold text-rose-400 tracking-tight">
+              ${displayExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <p className="text-[11px] text-slate-500 mt-1 truncate">
+              {isAllTime ? 'Total spending' : `Spent in ${currentMonthName}`}
             </p>
           </div>
         </div>
