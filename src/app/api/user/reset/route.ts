@@ -166,12 +166,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. Update user auth metadata with reset timestamp and clean slate defaults
+    // 5. Update user auth metadata to clean slate defaults
     // Note: Email and password remain completely intact in auth.users
     try {
       await supabase.auth.updateUser({
         data: {
-          last_data_reset_at: nowISO,
+          last_data_reset_at: null,
           avatar_url: null,
           gender: 'default',
           theme: 'midnight-pulse',

@@ -78,61 +78,6 @@ export default function DashboardPage() {
         const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
         const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-        const lastResetAt =
-          user.user_metadata?.last_data_reset_at ||
-          (typeof window !== 'undefined' ? localStorage.getItem('bibo_last_reset_at') : null);
-
-        let openTasksQ = supabase
-          .from('tasks')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', user.id)
-          .neq('status', 'done');
-
-        let completedTasksQ = supabase
-          .from('tasks')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', user.id)
-          .eq('status', 'done')
-          .gte('updated_at', todayStart);
-
-        let transQ = supabase
-          .from('transactions')
-          .select('id, description, amount, type, date, created_at')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-
-        let habitsQ = supabase
-          .from('habits')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', user.id);
-
-        let habitLogsQ = supabase
-          .from('habit_logs')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', user.id)
-          .eq('completed_at', todayDateStr);
-
-        let notesQ = supabase
-          .from('notes')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', user.id);
-
-        let recentNotesQ = supabase
-          .from('notes')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', user.id)
-          .gte('updated_at', weekAgo);
-
-        if (lastResetAt) {
-          openTasksQ = openTasksQ.gt('created_at', lastResetAt);
-          completedTasksQ = completedTasksQ.gt('created_at', lastResetAt);
-          transQ = transQ.gt('created_at', lastResetAt);
-          habitsQ = habitsQ.gt('created_at', lastResetAt);
-          habitLogsQ = habitLogsQ.gt('created_at', lastResetAt);
-          notesQ = notesQ.gt('created_at', lastResetAt);
-          recentNotesQ = recentNotesQ.gt('created_at', lastResetAt);
-        }
-
         // Fetch all data in parallel
         const [
           tasksRes,
@@ -143,13 +88,40 @@ export default function DashboardPage() {
           notesRes,
           recentNotesRes,
         ] = await Promise.all([
-          openTasksQ,
-          completedTasksQ,
-          transQ,
-          habitsQ,
-          habitLogsQ,
-          notesQ,
-          recentNotesQ,
+          supabase
+            .from('tasks')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .neq('status', 'done'),
+          supabase
+            .from('tasks')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('status', 'done')
+            .gte('updated_at', todayStart),
+          supabase
+            .from('transactions')
+            .select('id, description, amount, type, date, created_at')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('habits')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id),
+          supabase
+            .from('habit_logs')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('completed_at', todayDateStr),
+          supabase
+            .from('notes')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id),
+          supabase
+            .from('notes')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .gte('updated_at', weekAgo),
         ]);
 
         // Calculate synchronized Net Balance and spending totals

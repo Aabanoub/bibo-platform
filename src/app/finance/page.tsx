@@ -135,20 +135,11 @@ export default function FinancePage() {
 
       if (!user) return;
 
-      const lastResetAt =
-        user.user_metadata?.last_data_reset_at ||
-        (typeof window !== 'undefined' ? localStorage.getItem('bibo_last_reset_at') : null);
-
-      let planQuery = supabase
+      const { data: plan } = await supabase
         .from('salary_distribution_plans')
         .select('*')
-        .eq('user_id', user.id);
-
-      if (lastResetAt) {
-        planQuery = planQuery.gt('updated_at', lastResetAt);
-      }
-
-      const { data: plan } = await planQuery.maybeSingle();
+        .eq('user_id', user.id)
+        .maybeSingle();
 
       if (plan) {
         setSalaryPlan(plan as SalaryPlan);
@@ -156,17 +147,12 @@ export default function FinancePage() {
         setSalaryPlan(null);
       }
 
-      let cycleQuery = supabase
+      const { data: cycle } = await supabase
         .from('salary_distribution_cycles')
         .select('*')
         .eq('user_id', user.id)
-        .eq('status', 'in_progress');
-
-      if (lastResetAt) {
-        cycleQuery = cycleQuery.gt('created_at', lastResetAt);
-      }
-
-      const { data: cycle } = await cycleQuery.maybeSingle();
+        .eq('status', 'in_progress')
+        .maybeSingle();
 
       if (cycle) {
         setActiveSalaryCycle(cycle as SalaryCycle);
@@ -191,20 +177,10 @@ export default function FinancePage() {
         return;
       }
 
-      const lastResetAt =
-        user.user_metadata?.last_data_reset_at ||
-        (typeof window !== 'undefined' ? localStorage.getItem('bibo_last_reset_at') : null);
-
-      let transQuery = supabase
+      const { data, error: err } = await supabase
         .from('transactions')
         .select('*')
-        .eq('user_id', user.id);
-
-      if (lastResetAt) {
-        transQuery = transQuery.gt('created_at', lastResetAt);
-      }
-
-      const { data, error: err } = await transQuery
+        .eq('user_id', user.id)
         .order('date', { ascending: false })
         .order('created_at', { ascending: false });
 

@@ -276,20 +276,10 @@ export default function TasksPage() {
         return;
       }
 
-      const lastResetAt =
-        user.user_metadata?.last_data_reset_at ||
-        (typeof window !== 'undefined' ? localStorage.getItem('bibo_last_reset_at') : null);
-
-      let query = supabase
+      const { data, error: err } = await supabase
         .from('tasks')
         .select('*')
-        .eq('user_id', user.id);
-
-      if (lastResetAt) {
-        query = query.gt('created_at', lastResetAt);
-      }
-
-      const { data, error: err } = await query
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       if (err) throw err;

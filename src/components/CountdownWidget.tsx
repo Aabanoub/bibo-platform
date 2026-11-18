@@ -168,20 +168,10 @@ export default function CountdownWidget() {
     // If authenticated, Supabase is the single source of truth for this user
     if (user) {
       try {
-        const lastResetAt =
-          user.user_metadata?.last_data_reset_at ||
-          (typeof window !== 'undefined' ? localStorage.getItem('bibo_last_reset_at') : null);
-
-        let query = supabase
+        const { data: dbEvents, error } = await supabase
           .from('countdown_events')
           .select('*')
-          .eq('user_id', user.id);
-
-        if (lastResetAt) {
-          query = query.gt('created_at', lastResetAt);
-        }
-
-        const { data: dbEvents, error } = await query
+          .eq('user_id', user.id)
           .order('target_date', { ascending: true });
 
         if (error) {

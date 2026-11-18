@@ -214,21 +214,12 @@ export default function FocusPage() {
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      const lastResetAt =
-        user.user_metadata?.last_data_reset_at ||
-        (typeof window !== 'undefined' ? localStorage.getItem('bibo_last_reset_at') : null);
-
-      let query = supabase
+      const { data } = await supabase
         .from('tasks')
         .select('*')
         .eq('user_id', user.id)
-        .neq('status', 'done');
-
-      if (lastResetAt) {
-        query = query.gt('created_at', lastResetAt);
-      }
-
-      const { data } = await query.order('priority', { ascending: false });
+        .neq('status', 'done')
+        .order('priority', { ascending: false });
 
       if (data) {
         setTasks(data);

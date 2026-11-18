@@ -104,20 +104,9 @@ export default function NotesPage() {
   const fetchNotes = useCallback(async () => {
     try {
       setError(null);
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      const lastResetAt =
-        user?.user_metadata?.last_data_reset_at ||
-        (typeof window !== 'undefined' ? localStorage.getItem('bibo_last_reset_at') : null);
-
-      let query = supabase.from('notes').select('*');
-      if (lastResetAt) {
-        query = query.gt('created_at', lastResetAt);
-      }
-
-      const { data, error: err } = await query
+      const { data, error: err } = await supabase
+        .from('notes')
+        .select('*')
         .order('is_pinned', { ascending: false })
         .order('updated_at', { ascending: false });
 
