@@ -1,8 +1,22 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Bell, Check, CheckCheck, Volume2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import {
+  Bell,
+  Check,
+  CheckCheck,
+  Trash2,
+  Sparkles,
+  Clock,
+  AlertTriangle,
+  CheckCircle2,
+  Info,
+  X,
+  Volume2,
+} from 'lucide-react';
 import { createClient } from '@/lib/supabase';
+import { requestNotificationPermission } from '@/lib/notifications';
 import type { Notification } from '@/types';
 
 interface NotificationBellProps {
@@ -10,11 +24,13 @@ interface NotificationBellProps {
 }
 
 export default function NotificationBell({ collapsed = false }: NotificationBellProps) {
+  const router = useRouter();
   const supabase = createClient();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const fetchNotifications = useCallback(async () => {
@@ -24,13 +40,14 @@ export default function NotificationBell({ collapsed = false }: NotificationBell
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
+      setCurrentUserId(user.id);
 
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(30);
 
       if (error) {
         console.error('Error fetching notifications:', error);
@@ -44,33 +61,39 @@ export default function NotificationBell({ collapsed = false }: NotificationBell
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     fetchNotifications();
 
-    // Subscribe to realtime notifications
-    try {
-      const channel = supabase
-        .channel('notifications-realtime')
+    let channel: any;
+
+    async function setupRealtime() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Filter Realtime strictly to the authenticated user's ID
+      channel = supabase
+        .channel(`notifications-user-${user.id}`)
         .on(
           'postgres_changes',
           {
             event: 'INSERT',
             schema: 'public',
             table: 'notifications',
+            filter: `user_id=eq.${user.id}`,
           },
           (payload: any) => {
             const newNotification = payload.new as Notification;
-            setNotifications((prev) => [newNotification, ...prev].slice(0, 20));
-            setUnreadCount((prev) => prev + 1);
-
-            // Show browser notification if permitted
-            if (typeof window !== 'undefined' && 'Notification' in window && window.Notification.permission === 'granted') {
-              new window.Notification('Evolve', {
-                body: newNotification.message || newNotification.title,
-                icon: '/logo.png',
-              });
+            setNotifications((prev) => {
+              // Deduplicate if already present in state
+              if (prev.some((n) => n.id === newNotification.id)) return prev;
+              return [newNotification, ...prev].slice(0, 30);
+            });
+            if (!newNotification.is_read) {
+              setUnreadCount((prev) => prev + 1);
             }
           }
         )
@@ -80,6 +103,7 @@ export default function NotificationBell({ collapsed = false }: NotificationBell
             event: 'UPDATE',
             schema: 'public',
             table: 'notifications',
+            filter: `user_id=eq.${user.id}`,
           },
           (payload: any) => {
             const updated = payload.new as Notification;
@@ -93,15 +117,32 @@ export default function NotificationBell({ collapsed = false }: NotificationBell
             });
           }
         )
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload: any) => {
+            const deletedId = payload.old?.id;
+            if (deletedId) {
+              setNotifications((prev) => prev.filter((n) => n.id !== deletedId));
+            }
+          }
+        )
         .subscribe();
+    }
 
-      return () => {
-        try {
-          supabase.removeChannel(channel);
-        } catch {}
-      };
-    } catch {}
-  }, [fetchNotifications]);
+    setupRealtime();
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [fetchNotifications, supabase]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -129,15 +170,12 @@ export default function NotificationBell({ collapsed = false }: NotificationBell
   }
 
   async function markAllAsRead() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!currentUserId) return;
 
     const { error } = await supabase
       .from('notifications')
       .update({ is_read: true })
-      .eq('user_id', user.id)
+      .eq('user_id', currentUserId)
       .eq('is_read', false);
 
     if (!error) {
@@ -146,20 +184,52 @@ export default function NotificationBell({ collapsed = false }: NotificationBell
     }
   }
 
-  function requestPushPermission() {
-    if (!('Notification' in window)) {
-      alert('This browser does not support push notifications.');
-      return;
+  async function deleteNotification(e: React.MouseEvent, notificationId: string) {
+    e.stopPropagation();
+    const target = notifications.find((n) => n.id === notificationId);
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('id', notificationId);
+
+    if (!error) {
+      setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+      if (target && !target.is_read) {
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+      }
     }
-    if (window.Notification.permission === 'default') {
-      window.Notification.requestPermission().then((permission) => {
-        if (permission === 'granted') {
-          new window.Notification('Evolve', {
-            body: 'Push notifications enabled!',
-            icon: '/logo.png',
-          });
-        }
-      });
+  }
+
+  async function clearAllNotifications() {
+    if (!currentUserId || notifications.length === 0) return;
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('user_id', currentUserId);
+
+    if (!error) {
+      setNotifications([]);
+      setUnreadCount(0);
+    }
+  }
+
+  async function handleEnablePush() {
+    await requestNotificationPermission(currentUserId || undefined);
+  }
+
+  function renderTypeIcon(type?: string | null) {
+    switch (type) {
+      case 'ai':
+        return <Sparkles size={14} className="text-purple-400" />;
+      case 'reminder':
+        return <Clock size={14} className="text-amber-400" />;
+      case 'success':
+        return <CheckCircle2 size={14} className="text-emerald-400" />;
+      case 'warning':
+      case 'error':
+        return <AlertTriangle size={14} className="text-rose-400" />;
+      default:
+        return <Info size={14} className="text-blue-400" />;
     }
   }
 
@@ -182,95 +252,138 @@ export default function NotificationBell({ collapsed = false }: NotificationBell
     <div ref={dropdownRef} className="relative">
       {/* Bell Button */}
       <button
+        type="button"
         onClick={() => setOpen(!open)}
         className={`relative flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 transition-all duration-150 hover:bg-slate-800 hover:text-slate-200 ${
           collapsed ? 'justify-center px-2.5' : 'w-full'
         }`}
         title="Notifications"
+        aria-label="View notifications"
       >
         <Bell size={20} className="flex-shrink-0" />
         {!collapsed && <span>Notifications</span>}
         {unreadCount > 0 && (
-          <span className="absolute right-2 top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-lg shadow-red-500/30">
+          <span className="absolute right-2 top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-lg shadow-red-500/30 animate-pulse">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
       </button>
 
-      {/* Dropdown */}
+      {/* Dropdown Notification Center */}
       {open && (
-        <div className="absolute bottom-full left-0 mb-2 w-80 animate-scale-in rounded-xl border border-slate-700 bg-slate-800 shadow-2xl shadow-black/40 lg:bottom-auto lg:left-full lg:top-0 lg:mb-0 lg:ml-2">
+        <div className="absolute bottom-full left-0 mb-2 w-80 sm:w-96 animate-scale-in rounded-2xl border border-slate-700/80 bg-slate-900/95 shadow-2xl shadow-black/60 backdrop-blur-xl lg:bottom-auto lg:left-full lg:top-0 lg:mb-0 lg:ml-2 z-50 overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
-            <h3 className="text-sm font-semibold text-slate-200">Notifications</h3>
-            <div className="flex items-center gap-1">
+          <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 bg-slate-950/60">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-white">Notifications</h3>
+              {unreadCount > 0 && (
+                <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] font-bold text-blue-300">
+                  {unreadCount} new
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5">
               <button
-                onClick={requestPushPermission}
-                className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-700 hover:text-slate-300"
-                title="Enable push notifications"
+                type="button"
+                onClick={handleEnablePush}
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white"
+                title="Enable / Refresh Push Permission"
               >
                 <Volume2 size={14} />
               </button>
+
               {unreadCount > 0 && (
                 <button
+                  type="button"
                   onClick={markAllAsRead}
-                  className="flex h-7 items-center gap-1 rounded-md px-2 text-xs text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-200"
+                  className="flex h-7 items-center gap-1 rounded-lg px-2 text-xs text-slate-400 transition hover:bg-slate-800 hover:text-white"
                   title="Mark all as read"
                 >
                   <CheckCheck size={14} />
-                  <span>All</span>
+                  <span>Read all</span>
+                </button>
+              )}
+
+              {notifications.length > 0 && (
+                <button
+                  type="button"
+                  onClick={clearAllNotifications}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 transition hover:bg-red-500/20 hover:text-red-400"
+                  title="Clear all notifications"
+                >
+                  <Trash2 size={13} />
                 </button>
               )}
             </div>
           </div>
 
-          {/* Notification List */}
-          <div className="max-h-80 overflow-y-auto">
+          {/* Notification Items List */}
+          <div className="max-h-96 overflow-y-auto divide-y divide-slate-800/60">
             {loading && notifications.length === 0 ? (
-              <div className="flex items-center justify-center py-8 text-sm text-slate-500">
-                Loading...
+              <div className="flex items-center justify-center py-10 text-xs text-slate-500">
+                Loading updates...
               </div>
             ) : notifications.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-slate-500">
-                <Bell size={28} className="mb-2 opacity-40" />
-                <p className="text-sm">No notifications yet</p>
+              <div className="flex flex-col items-center justify-center py-12 text-slate-500 space-y-2">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-800/50 text-slate-600">
+                  <Bell size={24} />
+                </div>
+                <p className="text-xs font-medium">All caught up!</p>
+                <p className="text-[11px] text-slate-600">No new notifications at this time.</p>
               </div>
             ) : (
-              notifications.map((notification) => (
-                <button
-                  key={notification.id}
+              notifications.map((item) => (
+                <div
+                  key={item.id}
                   onClick={() => {
-                    if (!notification.is_read) markAsRead(notification.id);
+                    if (!item.is_read) markAsRead(item.id);
+                    if (item.action_url) {
+                      setOpen(false);
+                      router.push(item.action_url);
+                    }
                   }}
-                  className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-700/50 ${
-                    !notification.is_read ? 'bg-blue-500/5' : ''
+                  className={`group flex items-start gap-3 p-3.5 text-left transition-colors cursor-pointer hover:bg-slate-800/60 ${
+                    !item.is_read ? 'bg-blue-500/[0.06]' : ''
                   }`}
                 >
-                  <div className="mt-0.5 flex-shrink-0">
-                    {!notification.is_read ? (
-                      <div className="h-2 w-2 rounded-full bg-blue-500 shadow-sm shadow-blue-500/50" />
-                    ) : (
-                      <Check size={12} className="text-slate-600" />
-                    )}
+                  {/* Category Indicator Icon */}
+                  <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-slate-800/80 border border-slate-700/50">
+                    {renderTypeIcon(item.type)}
                   </div>
+
+                  {/* Notification Content */}
                   <div className="flex-1 min-w-0">
-                    <p
-                      className={`text-sm leading-snug ${
-                        !notification.is_read ? 'font-medium text-slate-200' : 'text-slate-400'
-                      }`}
-                    >
-                      {notification.title}
-                    </p>
-                    {notification.message && (
-                      <p className="mt-0.5 truncate text-xs text-slate-500">
-                        {notification.message}
+                    <div className="flex items-center justify-between gap-1">
+                      <p
+                        className={`text-xs leading-snug truncate ${
+                          !item.is_read ? 'font-semibold text-white' : 'text-slate-300 font-normal'
+                        }`}
+                      >
+                        {item.title}
+                      </p>
+                      <span className="text-[10px] text-slate-500 shrink-0">
+                        {timeAgo(item.created_at)}
+                      </span>
+                    </div>
+
+                    {item.message && (
+                      <p className="mt-0.5 text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
+                        {item.message}
                       </p>
                     )}
-                    <p className="mt-1 text-[11px] text-slate-600">
-                      {timeAgo(notification.created_at)}
-                    </p>
                   </div>
-                </button>
+
+                  {/* Actions: Delete single item */}
+                  <button
+                    type="button"
+                    onClick={(e) => deleteNotification(e, item.id)}
+                    className="opacity-0 group-hover:opacity-100 flex h-6 w-6 items-center justify-center rounded text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition shrink-0"
+                    title="Delete notification"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
               ))
             )}
           </div>

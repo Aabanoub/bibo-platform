@@ -111,7 +111,45 @@ export interface Notification {
   type: string | null;
   is_read: boolean;
   action_url: string | null;
+  event_id?: string | null;
   created_at: string;
+}
+
+export interface NotificationPreference {
+  id?: string;
+  user_id: string;
+  in_app_enabled: boolean;
+  browser_enabled: boolean;
+  push_enabled: boolean;
+  task_reminders: boolean;
+  countdown_reminders: boolean;
+  finance_alerts: boolean;
+  salary_reminders: boolean;
+  habit_reminders: boolean;
+  ai_notifications: boolean;
+  quiet_hours_enabled: boolean;
+  quiet_hours_start: string;
+  quiet_hours_end: string;
+  timezone: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ScheduledNotification {
+  id?: string;
+  user_id: string;
+  idempotency_key: string;
+  title: string;
+  message: string;
+  category: 'task' | 'countdown' | 'salary' | 'habit' | 'finance' | 'ai' | 'reminder';
+  action_url?: string;
+  scheduled_for: string;
+  status: 'pending' | 'processing' | 'sent' | 'failed' | 'cancelled';
+  retry_count: number;
+  last_error?: string | null;
+  sent_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface PushSubscription {

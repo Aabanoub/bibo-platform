@@ -137,6 +137,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     type       TEXT,
     is_read    BOOLEAN NOT NULL DEFAULT false,
     action_url TEXT,
+    event_id   TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -145,7 +146,52 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
     id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id      UUID NOT NULL DEFAULT auth.uid() REFERENCES auth.users (id) ON DELETE CASCADE,
     subscription JSONB NOT NULL,
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Unique index to prevent duplicate push endpoints per user
+CREATE UNIQUE INDEX IF NOT EXISTS idx_push_subscriptions_user_endpoint 
+ON push_subscriptions (user_id, (subscription->>'endpoint'));
+
+-- 3.9b notification_preferences
+CREATE TABLE IF NOT EXISTS notification_preferences (
+    id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id                 UUID NOT NULL UNIQUE REFERENCES auth.users (id) ON DELETE CASCADE,
+    in_app_enabled          BOOLEAN NOT NULL DEFAULT true,
+    browser_enabled         BOOLEAN NOT NULL DEFAULT true,
+    push_enabled            BOOLEAN NOT NULL DEFAULT true,
+    task_reminders          BOOLEAN NOT NULL DEFAULT true,
+    countdown_reminders     BOOLEAN NOT NULL DEFAULT true,
+    finance_alerts          BOOLEAN NOT NULL DEFAULT true,
+    salary_reminders        BOOLEAN NOT NULL DEFAULT true,
+    habit_reminders         BOOLEAN NOT NULL DEFAULT true,
+    ai_notifications        BOOLEAN NOT NULL DEFAULT true,
+    quiet_hours_enabled     BOOLEAN NOT NULL DEFAULT false,
+    quiet_hours_start       TEXT NOT NULL DEFAULT '22:00',
+    quiet_hours_end         TEXT NOT NULL DEFAULT '08:00',
+    timezone                TEXT NOT NULL DEFAULT 'UTC',
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 3.9c scheduled_notifications
+CREATE TABLE IF NOT EXISTS scheduled_notifications (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id             UUID NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+    idempotency_key     TEXT NOT NULL,
+    title               TEXT NOT NULL,
+    message             TEXT NOT NULL,
+    category            TEXT NOT NULL DEFAULT 'reminder',
+    action_url          TEXT DEFAULT '/',
+    scheduled_for       TIMESTAMPTZ NOT NULL,
+    status              TEXT NOT NULL DEFAULT 'pending',
+    retry_count         INT NOT NULL DEFAULT 0,
+    last_error          TEXT,
+    sent_at             TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_scheduled_notifications_idempotency UNIQUE (user_id, idempotency_key)
 );
 
 -- 3.10 daily_summaries
@@ -210,10 +256,12 @@ ALTER TABLE transactions       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE habits             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE habit_logs         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_messages      ENABLE ROW LEVEL SECURITY;
-ALTER TABLE notifications      ENABLE ROW LEVEL SECURITY;
-ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE daily_summaries    ENABLE ROW LEVEL SECURITY;
-ALTER TABLE countdown_events   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications                ENABLE ROW LEVEL SECURITY;
+ALTER TABLE push_subscriptions           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notification_preferences     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE scheduled_notifications      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE daily_summaries              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE countdown_events             ENABLE ROW LEVEL SECURITY;
 
 -- Helper to safely drop old policies before creating new ones
 DO $$ BEGIN
@@ -313,6 +361,17 @@ CREATE POLICY "Users can delete their own notifications" ON notifications FOR DE
 -- Push Subscriptions Policies
 CREATE POLICY "Users can view their own subscriptions"   ON push_subscriptions FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can manage their own subscriptions" ON push_subscriptions FOR ALL    USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- Notification Preferences Policies
+CREATE POLICY "Users can view own notification preferences"   ON notification_preferences FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own notification preferences" ON notification_preferences FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update own notification preferences" ON notification_preferences FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- Scheduled Notifications Policies
+CREATE POLICY "Users can view own scheduled notifications"   ON scheduled_notifications FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own scheduled notifications" ON scheduled_notifications FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update own scheduled notifications" ON scheduled_notifications FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can delete own scheduled notifications" ON scheduled_notifications FOR DELETE USING (auth.uid() = user_id);
 
 -- Daily Summaries Policies
 CREATE POLICY "Users can view their own daily summaries"   ON daily_summaries FOR SELECT USING (auth.uid() = user_id);

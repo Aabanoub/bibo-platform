@@ -32,6 +32,7 @@ import {
   requestNotificationPermission,
   sendLocalNotification,
   createInAppNotification,
+  scheduleBackgroundNotification,
 } from '@/lib/notifications';
 
 // ---------------------------------------------------------------------------
@@ -327,12 +328,14 @@ export default function TasksPage() {
 
           if (user) {
             try {
+              const eventId = `task_reminder_${t.id}_${t.reminder_at}`;
               await createInAppNotification(
                 user.id,
                 `⏰ Task Reminder: ${t.title}`,
                 `Time to finish your task: "${t.title}". Scheduled finish reminder reached.`,
                 'reminder',
-                '/tasks'
+                '/tasks',
+                eventId
               );
 
               fetch('/api/notifications', {
@@ -395,6 +398,15 @@ export default function TasksPage() {
         .eq('id', task.id);
 
       if (err) throw err;
+
+      if (nextStatus === 'done') {
+        supabase
+          .from('scheduled_notifications')
+          .update({ status: 'delivered', updated_at: new Date().toISOString() })
+          .eq('status', 'pending')
+          .like('idempotency_key', `task_reminder_${task.id}_%`)
+          .then(null, () => {});
+      }
     } catch (e: unknown) {
       console.error('toggleTaskDone error:', e);
       // Rollback on error
@@ -470,6 +482,19 @@ export default function TasksPage() {
       const newTask = data as Task;
       setTasks((prev) => [newTask, ...prev]);
 
+      // If scheduled reminder is in the future, queue background notification
+      if (reminderDateISO && new Date(reminderDateISO).getTime() > Date.now()) {
+        scheduleBackgroundNotification({
+          userId: user.id,
+          idempotencyKey: `task_reminder_${newTask.id}_${reminderDateISO}`,
+          title: `⏰ Task Reminder: ${newTask.title}`,
+          message: `Time to finish your task: "${newTask.title}"! Priority: ${newTask.priority.toUpperCase()}`,
+          category: 'task',
+          actionUrl: '/tasks',
+          scheduledFor: new Date(reminderDateISO),
+        }).catch(() => {});
+      }
+
       // Reset Quick Add fields
       setQuickTitle('');
       setQuickDescription('');
@@ -511,6 +536,11 @@ export default function TasksPage() {
       setTasks((prev) => prev.filter((t) => t.id !== id));
       const { error: err } = await supabase.from('tasks').delete().eq('id', id);
       if (err) throw err;
+      supabase
+        .from('scheduled_notifications')
+        .delete()
+        .like('idempotency_key', `task_reminder_${id}_%`)
+        .then(null, () => {});
     } catch (e: unknown) {
       fetchTasks();
       setError(e instanceof Error ? e.message : 'Failed to delete task');
@@ -584,6 +614,23 @@ export default function TasksPage() {
         .eq('id', editingTask.id);
 
       if (err) throw err;
+
+      if (reminderDateISO && new Date(reminderDateISO).getTime() > Date.now()) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (user) {
+          scheduleBackgroundNotification({
+            userId: user.id,
+            idempotencyKey: `task_reminder_${editingTask.id}_${reminderDateISO}`,
+            title: `⏰ Task Reminder: ${editTitle.trim()}`,
+            message: `Time to finish your task: "${editTitle.trim()}"! Priority: ${editPriority.toUpperCase()}`,
+            category: 'task',
+            actionUrl: '/tasks',
+            scheduledFor: new Date(reminderDateISO),
+          }).catch(() => {});
+        }
+      }
 
       setTasks((prev) =>
         prev.map((t) =>

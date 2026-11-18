@@ -21,7 +21,11 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import CountdownModal, { REMINDER_OPTIONS } from '@/components/CountdownModal';
-import { sendLocalNotification, createInAppNotification } from '@/lib/notifications';
+import {
+  sendLocalNotification,
+  createInAppNotification,
+  scheduleBackgroundNotification,
+} from '@/lib/notifications';
 import { createClient } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
 import type { CountdownEvent, ReminderIntervalId } from '@/types';
@@ -355,7 +359,8 @@ export default function CountdownWidget() {
               // 2. If logged in, create in-app notification row (rings bell) and trigger server push
               if (currentUser?.id) {
                 try {
-                  await createInAppNotification(currentUser.id, notifTitle, notifMsg, 'reminder', '/');
+                  const eventId = `countdown_${ev.id}_${intervalId}`;
+                  await createInAppNotification(currentUser.id, notifTitle, notifMsg, 'reminder', '/', eventId);
                   // Trigger backend webpush to other registered devices
                   fetch('/api/notifications', {
                     method: 'PUT',
@@ -485,6 +490,33 @@ export default function CountdownWidget() {
           } else {
             console.log('[CountdownWidget] Updated countdown event in Supabase successfully.');
             setDbError(null);
+
+            // Schedule background notifications for pending intervals
+            if (data.reminder_intervals && data.reminder_intervals.length > 0) {
+              const targetTime = new Date(data.target_date).getTime();
+              data.reminder_intervals.forEach((intervalId) => {
+                const opt = REMINDER_OPTIONS.find((o) => o.id === intervalId);
+                if (!opt) return;
+                const triggerTime = targetTime - opt.minutes * 60 * 1000;
+                if (triggerTime > Date.now()) {
+                  const timeLabel = opt.minutes === 0 ? 'is happening NOW' : `is in ${opt.label.replace(' before', '')}`;
+                  const notifTitle = `⏰ ${data.emoji || '🎉'} ${data.title}`;
+                  const notifMsg = `Reminder: "${data.title}" ${timeLabel}! Target: ${new Date(
+                    data.target_date
+                  ).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`;
+
+                  scheduleBackgroundNotification({
+                    userId: user.id,
+                    idempotencyKey: `countdown_${existingId}_${intervalId}`,
+                    title: notifTitle,
+                    message: notifMsg,
+                    category: 'countdown',
+                    actionUrl: '/',
+                    scheduledFor: new Date(triggerTime),
+                  }).catch(() => {});
+                }
+              });
+            }
           }
         } catch (err: any) {
           console.error('[CountdownWidget] Supabase update failed:', err);
@@ -555,6 +587,33 @@ export default function CountdownWidget() {
           } else {
             console.log('[CountdownWidget] Inserted countdown event to Supabase successfully:', newEvent.id);
             setDbError(null);
+
+            // Schedule background notifications for pending intervals
+            if (newEvent.reminder_intervals && newEvent.reminder_intervals.length > 0) {
+              const targetTime = new Date(newEvent.target_date).getTime();
+              newEvent.reminder_intervals.forEach((intervalId) => {
+                const opt = REMINDER_OPTIONS.find((o) => o.id === intervalId);
+                if (!opt) return;
+                const triggerTime = targetTime - opt.minutes * 60 * 1000;
+                if (triggerTime > Date.now()) {
+                  const timeLabel = opt.minutes === 0 ? 'is happening NOW' : `is in ${opt.label.replace(' before', '')}`;
+                  const notifTitle = `⏰ ${newEvent.emoji || '🎉'} ${newEvent.title}`;
+                  const notifMsg = `Reminder: "${newEvent.title}" ${timeLabel}! Target: ${new Date(
+                    newEvent.target_date
+                  ).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`;
+
+                  scheduleBackgroundNotification({
+                    userId: user.id,
+                    idempotencyKey: `countdown_${newEvent.id}_${intervalId}`,
+                    title: notifTitle,
+                    message: notifMsg,
+                    category: 'countdown',
+                    actionUrl: '/',
+                    scheduledFor: new Date(triggerTime),
+                  }).catch(() => {});
+                }
+              });
+            }
           }
         } catch (err: any) {
           console.error('[CountdownWidget] Supabase insert failed:', err);
@@ -598,6 +657,13 @@ export default function CountdownWidget() {
           console.error('[CountdownWidget] Error deleting countdown from Supabase:', delErr.message);
         } else {
           console.log('[CountdownWidget] Deleted countdown event from Supabase successfully:', id);
+          // Clean up any pending scheduled background notifications
+          supabase
+            .from('scheduled_notifications')
+            .delete()
+            .eq('user_id', user.id)
+            .like('idempotency_key', `countdown_${id}_%`)
+            .then(null, () => {});
         }
       } catch (err: any) {
         console.error('[CountdownWidget] Supabase delete failed:', err);

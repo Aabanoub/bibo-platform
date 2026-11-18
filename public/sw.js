@@ -1,14 +1,14 @@
 /// <reference lib="webworker" />
-// Service Worker Version: 2.0.0-evolve-logo
+// Service Worker Version: 2.1.0-notifications-hardened
 
 // ── Install — claim immediately on all platforms ───────────────────────────
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
 // ── Activate — claim clients immediately ────────────────────────────────────
 self.addEventListener('activate', (event) => {
-  event.waitUntil(clients.claim());
+  event.waitUntil(self.clients.claim());
 });
 
 // ── Push Event ──────────────────────────────────────────────────────────────
@@ -16,7 +16,12 @@ self.addEventListener('push', (event) => {
   /** @type {PushEvent} */
   const pushEvent = event;
 
-  let data = { title: 'Evolve', body: 'You have a new notification', url: '/' };
+  let data = {
+    title: 'Evolve',
+    body: 'You have a new update in your Life OS.',
+    url: '/',
+    tag: 'evolve-notification',
+  };
 
   if (pushEvent.data) {
     try {
@@ -26,23 +31,28 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  // Mobile-safe notification options (using raster PNG to support Android & iOS)
+  // Mobile & desktop compliant notification options using verified raster PNG assets
   const options = {
     body: data.body,
     icon: '/icon-192.png',
     badge: '/favicon-32x32.png',
-    tag: 'evolve-notification',
+    tag: data.tag || 'evolve-notification',
     renotify: true,
-    data: { url: data.url || '/' },
+    vibrate: [100, 50, 100],
+    data: {
+      url: data.url || '/',
+      timestamp: data.timestamp || Date.now(),
+    },
   };
 
   try {
     pushEvent.waitUntil(self.registration.showNotification(data.title, options));
   } catch (err) {
-    // Ultra-safe fallback for older mobile engines
+    // Ultra-safe fallback for older engines
     pushEvent.waitUntil(
       self.registration.showNotification(data.title, {
         body: data.body,
+        icon: '/icon-192.png',
       })
     );
   }
@@ -60,19 +70,28 @@ self.addEventListener('notificationclick', (event) => {
   const targetUrl = clickEvent.notification.data?.url || '/';
 
   clickEvent.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // If a window with the target URL is already open, focus it
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      // 1. If an exact matching window is already open, focus it
       for (const client of windowClients) {
         if (client.url.includes(targetUrl) && 'focus' in client) {
           return client.focus();
         }
       }
-      // If any app window is open, navigate it
+
+      // 2. If any Evolve tab is open, navigate it to target and focus
       if (windowClients.length > 0 && 'navigate' in windowClients[0]) {
-        return windowClients[0].navigate(targetUrl).then((client) => client?.focus());
+        return windowClients[0].navigate(targetUrl).then((c) => c?.focus());
       }
-      // Otherwise open a new window
-      return clients.openWindow(targetUrl);
+
+      // 3. Otherwise open a new window
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
     })
   );
+});
+
+// ── Notification Close (Optional Analytics / Clean-up) ──────────────────────
+self.addEventListener('notificationclose', () => {
+  // Gracefully handled
 });
