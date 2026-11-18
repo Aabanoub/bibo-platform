@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+// Service Worker Version: 2.0.0-evolve-logo
 
 // ── Install — claim immediately on all platforms ───────────────────────────
 self.addEventListener('install', (event) => {
@@ -28,7 +29,8 @@ self.addEventListener('push', (event) => {
   // Mobile-safe notification options (using raster PNG to support Android & iOS)
   const options = {
     body: data.body,
-    icon: '/logo.png',
+    icon: '/icon-192.png',
+    badge: '/favicon-32x32.png',
     tag: 'evolve-notification',
     renotify: true,
     data: { url: data.url || '/' },
