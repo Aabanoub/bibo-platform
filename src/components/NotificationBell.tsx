@@ -42,10 +42,20 @@ export default function NotificationBell({ collapsed = false }: NotificationBell
       if (!user) return;
       setCurrentUserId(user.id);
 
-      const { data, error } = await supabase
+      const lastResetAt =
+        user.user_metadata?.last_data_reset_at ||
+        (typeof window !== 'undefined' ? localStorage.getItem('bibo_last_reset_at') : null);
+
+      let query = supabase
         .from('notifications')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', user.id);
+
+      if (lastResetAt) {
+        query = query.gt('created_at', lastResetAt);
+      }
+
+      const { data, error } = await query
         .order('created_at', { ascending: false })
         .limit(30);
 

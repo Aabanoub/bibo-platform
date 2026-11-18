@@ -17,17 +17,17 @@ export const metadata: Metadata = {
   title: 'Evolve - Personal AI Platform',
   description:
     'Your personal AI-powered life operating system for notes, tasks, finance, habits, and focus.',
-  manifest: '/manifest.json',
+  manifest: '/manifest.json?v=2',
   icons: {
     icon: [
-      { url: '/favicon.ico', sizes: 'any' },
-      { url: '/icon-192.png', type: 'image/png', sizes: '192x192' },
-      { url: '/icon-512.png', type: 'image/png', sizes: '512x512' },
+      { url: '/favicon.ico?v=2', sizes: 'any' },
+      { url: '/icon-192.png?v=2', type: 'image/png', sizes: '192x192' },
+      { url: '/icon-512.png?v=2', type: 'image/png', sizes: '512x512' },
     ],
-    shortcut: '/icon-192.png',
+    shortcut: '/icon-192.png?v=2',
     apple: [
-      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
-      { url: '/apple-touch-icon-precomposed.png', sizes: '180x180', type: 'image/png' },
+      { url: '/apple-touch-icon.png?v=2', sizes: '180x180', type: 'image/png' },
+      { url: '/apple-touch-icon-precomposed.png?v=2', sizes: '180x180', type: 'image/png' },
     ],
   },
   appleWebApp: {
@@ -52,13 +52,13 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} dark`} suppressHydrationWarning>
       <head>
-        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-        <link rel="apple-touch-icon-precomposed" sizes="180x180" href="/apple-touch-icon.png" />
-        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-        <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
-        <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
-        <link rel="manifest" href="/manifest.json" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2" />
+        <link rel="apple-touch-icon-precomposed" sizes="180x180" href="/apple-touch-icon.png?v=2" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=2" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=2" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png?v=2" />
+        <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png?v=2" />
+        <link rel="manifest" href="/manifest.json?v=2" />
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var t=localStorage.getItem('bibo_user_theme');var g=localStorage.getItem('bibo_user_gender');if(!t){t=(g==='female')?'rose-aura':'midnight-pulse';}var m={'midnight-pulse':'theme-midnight','forest-gravity':'theme-forest','violet-dream':'theme-violet','rose-aura':'theme-rose'};var c=m[t]||'theme-midnight';document.documentElement.classList.add(c);document.documentElement.setAttribute('data-theme',t);if(t==='violet-dream'||t==='rose-aura'||g==='female'){document.documentElement.classList.add('theme-female');}}catch(e){}})();`,

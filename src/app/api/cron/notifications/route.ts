@@ -9,10 +9,16 @@ export const maxDuration = 60;
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) {
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const key =
+    serviceKey && serviceKey.startsWith('eyJ') && serviceKey !== 'placeholder-service-key'
+      ? serviceKey
+      : anonKey;
+
+  if (!url || !key) {
     throw new Error('Missing Supabase admin environment variables.');
   }
-  return createClient(url, serviceKey);
+  return createClient(url, key);
 }
 
 // ---------------------------------------------------------------------------

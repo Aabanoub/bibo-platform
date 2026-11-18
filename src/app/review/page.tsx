@@ -180,13 +180,22 @@ export default function WeeklyReviewPage() {
       const sevenDaysAgoStr = sevenDaysAgo.toISOString();
       const sevenDaysAgoDate = sevenDaysAgo.toISOString().split('T')[0];
 
+      const lastResetAt =
+        user.user_metadata?.last_data_reset_at ||
+        (typeof window !== 'undefined' ? localStorage.getItem('bibo_last_reset_at') : null);
+
       // 1. Transactions past 7 days
-      const { data: transactions } = await supabase
+      let transQ = supabase
         .from('transactions')
         .select('*')
         .eq('user_id', user.id)
-        .gte('date', sevenDaysAgoDate)
-        .order('date', { ascending: false });
+        .gte('date', sevenDaysAgoDate);
+
+      if (lastResetAt) {
+        transQ = transQ.gt('created_at', lastResetAt);
+      }
+
+      const { data: transactions } = await transQ.order('date', { ascending: false });
 
       setWeeklyTransactions(transactions || []);
 
@@ -201,10 +210,16 @@ export default function WeeklyReviewPage() {
       const savingsRate = income > 0 ? Math.round((netSavings / income) * 100) : 0;
 
       // 2. Tasks
-      const { data: allTasks } = await supabase
+      let tasksQ = supabase
         .from('tasks')
         .select('*')
         .eq('user_id', user.id);
+
+      if (lastResetAt) {
+        tasksQ = tasksQ.gt('created_at', lastResetAt);
+      }
+
+      const { data: allTasks } = await tasksQ;
 
       const recentTasks = (allTasks || []).filter(
         (t: any) => t.created_at >= sevenDaysAgoStr || t.status === 'done'
@@ -215,23 +230,37 @@ export default function WeeklyReviewPage() {
         totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 100;
 
       // 3. Habits
-      const { data: habits } = await supabase
+      let habitsQ = supabase
         .from('habits')
         .select('*')
         .eq('user_id', user.id);
 
-      const { data: habitLogs } = await supabase
+      let habitLogsQ = supabase
         .from('habit_logs')
         .select('*')
         .eq('user_id', user.id)
         .gte('completed_at', sevenDaysAgoStr);
 
+      if (lastResetAt) {
+        habitsQ = habitsQ.gt('created_at', lastResetAt);
+        habitLogsQ = habitLogsQ.gt('created_at', lastResetAt);
+      }
+
+      const { data: habits } = await habitsQ;
+      const { data: habitLogs } = await habitLogsQ;
+
       // 4. Notes
-      const { data: notes } = await supabase
+      let notesQ = supabase
         .from('notes')
         .select('*')
         .eq('user_id', user.id)
         .gte('created_at', sevenDaysAgoStr);
+
+      if (lastResetAt) {
+        notesQ = notesQ.gt('created_at', lastResetAt);
+      }
+
+      const { data: notes } = await notesQ;
 
       setStats({
         income,

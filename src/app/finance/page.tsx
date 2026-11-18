@@ -191,10 +191,20 @@ export default function FinancePage() {
         return;
       }
 
-      const { data, error: err } = await supabase
+      const lastResetAt =
+        user.user_metadata?.last_data_reset_at ||
+        (typeof window !== 'undefined' ? localStorage.getItem('bibo_last_reset_at') : null);
+
+      let transQuery = supabase
         .from('transactions')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', user.id);
+
+      if (lastResetAt) {
+        transQuery = transQuery.gt('created_at', lastResetAt);
+      }
+
+      const { data, error: err } = await transQuery
         .order('date', { ascending: false })
         .order('created_at', { ascending: false });
 

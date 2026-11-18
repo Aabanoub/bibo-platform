@@ -140,14 +140,27 @@ export default function HabitsPage() {
   const fetchData = useCallback(async () => {
     try {
       setError(null);
-      const [habitsRes, logsRes] = await Promise.all([
-        supabase.from('habits').select('*').order('created_at', { ascending: true }),
-        supabase
-          .from('habit_logs')
-          .select('*')
-          .gte('completed_at', getDayStr(-30))
-          .order('completed_at', { ascending: false }),
-      ]);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const lastResetAt =
+        user?.user_metadata?.last_data_reset_at ||
+        (typeof window !== 'undefined' ? localStorage.getItem('bibo_last_reset_at') : null);
+
+      let habitsQ = supabase.from('habits').select('*').order('created_at', { ascending: true });
+      let logsQ = supabase
+        .from('habit_logs')
+        .select('*')
+        .gte('completed_at', getDayStr(-30))
+        .order('completed_at', { ascending: false });
+
+      if (lastResetAt) {
+        habitsQ = habitsQ.gt('created_at', lastResetAt);
+        logsQ = logsQ.gt('created_at', lastResetAt);
+      }
+
+      const [habitsRes, logsRes] = await Promise.all([habitsQ, logsQ]);
       if (habitsRes.error) throw habitsRes.error;
       if (logsRes.error) throw logsRes.error;
       setHabits((habitsRes.data as Habit[]) ?? []);

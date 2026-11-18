@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
 
     // Handle commands
     if (text === '/start') {
-      const welcome = `👋 Hello ${senderName}!\n\nWelcome to your **Bibo Platform Assistant**.\n\nYou can chat with me or send commands:\n- /balance — Check your current net balance\n- /tasks — View your open tasks\n- Or simply type: *"Spent $15 on lunch"* or *"Add task to call doctor"* and I will automatically update your platform database!`;
+      const welcome = `👋 Hello ${senderName}!\n\nWelcome to your **EVOLVE Life OS Assistant**.\n\nYou can chat with me or send commands:\n- /balance — Check your current net balance\n- /tasks — View your open tasks\n- Or simply type: *"Spent $15 on lunch"* or *"Add task to call doctor"* and I will automatically update your platform database!`;
       await sendTelegramMessage(token, chatId, welcome);
       return NextResponse.json({ status: 'ok' });
     }
