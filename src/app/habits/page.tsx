@@ -134,6 +134,7 @@ export default function HabitsPage() {
 
   // view
   const [view, setView] = useState<'today' | 'week'>('today');
+  const [togglingKeys, setTogglingKeys] = useState<Set<string>>(new Set());
 
   // ---- fetch data ---------------------------------------------------------
   const fetchData = useCallback(async () => {
@@ -230,9 +231,15 @@ export default function HabitsPage() {
   };
 
   // ---- toggle habit -------------------------------------------------------
-  const toggleHabit = async (habit: Habit, date: string) => {
+  const toggleHabit = async (habit: Habit, rawDate: string) => {
+    const date = rawDate.slice(0, 10);
+    const toggleKey = `${habit.id}_${date}`;
+    if (togglingKeys.has(toggleKey)) return;
+
+    setTogglingKeys((prev) => new Set(prev).add(toggleKey));
+
     const existing = logs.find(
-      (l) => l.habit_id === habit.id && l.completed_at.startsWith(date),
+      (l) => l.habit_id === habit.id && l.completed_at.slice(0, 10) === date,
     );
 
     try {
@@ -247,21 +254,68 @@ export default function HabitsPage() {
       }
 
       if (existing) {
-        const { error: err } = await supabase.from('habit_logs').delete().eq('id', existing.id);
-        if (err) throw err;
-        setLogs((prev) => prev.filter((l) => l.id !== existing.id));
+        // Optimistically remove from logs
+        setLogs((prev) =>
+          prev.filter((l) => !(l.habit_id === habit.id && l.completed_at.slice(0, 10) === date))
+        );
+
+        const { error: err } = await supabase
+          .from('habit_logs')
+          .delete()
+          .eq('habit_id', habit.id)
+          .eq('completed_at', date);
+
+        if (err) {
+          // Rollback on failure
+          setLogs((prev) => [...prev, existing]);
+          throw err;
+        }
       } else {
+        // Upsert handles race conditions & duplicate key constraint gracefully
         const { data, error: err } = await supabase
           .from('habit_logs')
-          .insert({
-            user_id: user.id,
-            habit_id: habit.id,
-            completed_at: date,
-          })
+          .upsert(
+            {
+              user_id: user.id,
+              habit_id: habit.id,
+              completed_at: date,
+            },
+            { onConflict: 'habit_id,completed_at' }
+          )
           .select()
           .single();
-        if (err) throw err;
-        setLogs((prev) => [data as HabitLog, ...prev]);
+
+        if (err) {
+          // If a unique constraint violation occurs anyway, fetch the existing log rather than throwing
+          if (err.code === '23505' || err.message?.includes('habit_logs_habit_id_completed_at_key')) {
+            const { data: fetchedLog } = await supabase
+              .from('habit_logs')
+              .select('*')
+              .eq('habit_id', habit.id)
+              .eq('completed_at', date)
+              .maybeSingle();
+
+            if (fetchedLog) {
+              setLogs((prev) => [
+                fetchedLog as HabitLog,
+                ...prev.filter(
+                  (l) => !(l.habit_id === habit.id && l.completed_at.slice(0, 10) === date)
+                ),
+              ]);
+              return;
+            }
+          }
+          throw err;
+        }
+
+        if (data) {
+          setLogs((prev) => [
+            data as HabitLog,
+            ...prev.filter(
+              (l) => !(l.habit_id === habit.id && l.completed_at.slice(0, 10) === date)
+            ),
+          ]);
+        }
 
         // create notification on completion
         try {
@@ -277,8 +331,20 @@ export default function HabitsPage() {
       }
     } catch (e: any) {
       console.error('toggleHabit error:', e);
-      const msg = e?.message || e?.error_description || (e instanceof Error ? e.message : 'Failed to update habit log');
-      setError(msg);
+      if (e?.code === '23505' || e?.message?.includes('habit_logs_habit_id_completed_at_key')) {
+        // Silently recover by refreshing data
+        fetchData();
+      } else {
+        const msg =
+          e?.message || e?.error_description || (e instanceof Error ? e.message : 'Failed to update habit log');
+        setError(msg);
+      }
+    } finally {
+      setTogglingKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(toggleKey);
+        return next;
+      });
     }
   };
 
@@ -287,7 +353,7 @@ export default function HabitsPage() {
   const weekDays = useMemo(() => getWeekDays(), []);
 
   const isCompletedOn = (habitId: string, date: string): boolean =>
-    logs.some((l) => l.habit_id === habitId && l.completed_at.startsWith(date));
+    logs.some((l) => l.habit_id === habitId && l.completed_at.slice(0, 10) === date.slice(0, 10));
 
   const habitLogs = (habitId: string) => logs.filter((l) => l.habit_id === habitId);
 
@@ -482,7 +548,8 @@ export default function HabitsPage() {
                     {/* Toggle */}
                     <button
                       onClick={() => toggleHabit(habit, today)}
-                      className="flex-shrink-0 transition-transform hover:scale-110"
+                      disabled={togglingKeys.has(`${habit.id}_${today.slice(0, 10)}`)}
+                      className="flex-shrink-0 transition-transform hover:scale-110 disabled:opacity-50"
                     >
                       {done ? (
                         <CheckCircle2 className="w-7 h-7" style={{ color: habit.color ?? '#6366f1' }} />
@@ -571,7 +638,8 @@ export default function HabitsPage() {
                       <div key={d.date} className="flex justify-center">
                         <button
                           onClick={() => toggleHabit(habit, d.date)}
-                          className="w-7 h-7 rounded-full flex items-center justify-center transition-all hover:scale-110"
+                          disabled={togglingKeys.has(`${habit.id}_${d.date.slice(0, 10)}`)}
+                          className="w-7 h-7 rounded-full flex items-center justify-center transition-all hover:scale-110 disabled:opacity-50"
                           style={{
                             backgroundColor: done ? (habit.color ?? '#6366f1') : 'transparent',
                             border: done ? 'none' : '2px solid rgb(51 65 85)',

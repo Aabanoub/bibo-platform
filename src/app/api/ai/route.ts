@@ -214,14 +214,18 @@ async function executeAction(
         habitId = newHabit.id;
       }
 
+      const todayDate = new Date().toISOString().split('T')[0];
       const { data, error } = await supabase
         .from('habit_logs')
-        .insert({
-          user_id: userId,
-          habit_id: habitId,
-          completed_at: new Date().toISOString(),
-          notes: 'Logged via AI Chat',
-        })
+        .upsert(
+          {
+            user_id: userId,
+            habit_id: habitId,
+            completed_at: todayDate,
+            notes: 'Logged via AI Chat',
+          },
+          { onConflict: 'habit_id,completed_at' }
+        )
         .select()
         .single();
 
