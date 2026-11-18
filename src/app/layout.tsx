@@ -61,7 +61,7 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var g=localStorage.getItem('bibo_user_gender');if(g==='female'){document.documentElement.classList.add('theme-female');document.documentElement.setAttribute('data-theme','female');}}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem('bibo_user_theme');var g=localStorage.getItem('bibo_user_gender');if(!t){t=(g==='female')?'rose-aura':'midnight-pulse';}var m={'midnight-pulse':'theme-midnight','forest-gravity':'theme-forest','violet-dream':'theme-violet','rose-aura':'theme-rose'};var c=m[t]||'theme-midnight';document.documentElement.classList.add(c);document.documentElement.setAttribute('data-theme',t);if(t==='violet-dream'||t==='rose-aura'||g==='female'){document.documentElement.classList.add('theme-female');}}catch(e){}})();`,
           }}
         />
       </head>

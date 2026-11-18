@@ -3,80 +3,249 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
 
+export type ThemeId = 'midnight-pulse' | 'forest-gravity' | 'violet-dream' | 'rose-aura';
+export type GenderCategory = 'male' | 'female';
 export type GenderTheme = 'female' | 'male' | 'default';
+
+export interface ThemeColors {
+  background: string;
+  secondaryBg: string;
+  primaryAccent: string;
+  secondaryAccent: string;
+  text: string;
+}
+
+export interface ThemeConfig {
+  id: ThemeId;
+  name: string;
+  category: GenderCategory;
+  categoryLabel: string;
+  subtitle: string;
+  style: string;
+  colors: ThemeColors;
+  gradient: string;
+  accentGradient: string;
+  badgeBg: string;
+  badgeText: string;
+  borderColor: string;
+}
+
+export const THEMES: Record<ThemeId, ThemeConfig> = {
+  'midnight-pulse': {
+    id: 'midnight-pulse',
+    name: 'Midnight Pulse',
+    category: 'male',
+    categoryLabel: '⚡ Boy / Cool',
+    subtitle: 'Futuristic, bold & technological',
+    style: 'Electric Blue & Cyan',
+    colors: {
+      background: '#080E1C',
+      secondaryBg: '#14213A',
+      primaryAccent: '#2563EB',
+      secondaryAccent: '#06B6D4',
+      text: '#EAF2FF',
+    },
+    gradient: 'from-[#080E1C] via-[#14213A] to-[#1e345e]',
+    accentGradient: 'from-[#2563EB] to-[#06B6D4]',
+    badgeBg: 'bg-blue-500/20',
+    badgeText: 'text-blue-300',
+    borderColor: 'border-blue-500/40',
+  },
+  'forest-gravity': {
+    id: 'forest-gravity',
+    name: 'Forest Gravity',
+    category: 'male',
+    categoryLabel: '⚡ Boy / Cool',
+    subtitle: 'Natural, sophisticated & confident',
+    style: 'Emerald Green & Cyber Lime',
+    colors: {
+      background: '#09140F',
+      secondaryBg: '#15291E',
+      primaryAccent: '#16A36A',
+      secondaryAccent: '#A3E635',
+      text: '#F4F7E9',
+    },
+    gradient: 'from-[#09140F] via-[#15291E] to-[#1e442f]',
+    accentGradient: 'from-[#16A36A] to-[#A3E635]',
+    badgeBg: 'bg-emerald-500/20',
+    badgeText: 'text-emerald-300',
+    borderColor: 'border-emerald-500/40',
+  },
+  'violet-dream': {
+    id: 'violet-dream',
+    name: 'Violet Dream',
+    category: 'female',
+    categoryLabel: '🌸 Girl / Warm',
+    subtitle: 'Creative, vibrant & elegant',
+    style: 'Deep Violet & Neon Magenta',
+    colors: {
+      background: '#130D20',
+      secondaryBg: '#281637',
+      primaryAccent: '#9333EA',
+      secondaryAccent: '#EC4899',
+      text: '#F8EFFF',
+    },
+    gradient: 'from-[#130D20] via-[#281637] to-[#401c59]',
+    accentGradient: 'from-[#9333EA] to-[#EC4899]',
+    badgeBg: 'bg-purple-500/20',
+    badgeText: 'text-purple-300',
+    borderColor: 'border-purple-500/40',
+  },
+  'rose-aura': {
+    id: 'rose-aura',
+    name: 'Rose Aura',
+    category: 'female',
+    categoryLabel: '🌸 Girl / Warm',
+    subtitle: 'Warm, elegant & soft luxury',
+    style: 'Rose Crimson & Soft Peach',
+    colors: {
+      background: '#190D16',
+      secondaryBg: '#321725',
+      primaryAccent: '#E84A75',
+      secondaryAccent: '#FB9A8D',
+      text: '#FFF0E9',
+    },
+    gradient: 'from-[#190D16] via-[#321725] to-[#4c1d37]',
+    accentGradient: 'from-[#E84A75] to-[#FB9A8D]',
+    badgeBg: 'bg-rose-500/20',
+    badgeText: 'text-rose-300',
+    borderColor: 'border-rose-500/40',
+  },
+};
 
 interface ThemeContextType {
   gender: GenderTheme;
   setGender: (gender: GenderTheme) => Promise<void>;
+  theme: ThemeId;
+  setTheme: (theme: ThemeId) => Promise<void>;
   isGirly: boolean;
+  activeThemeConfig: ThemeConfig;
 }
 
 const ThemeContext = createContext<ThemeContextType>({
   gender: 'default',
   setGender: async () => {},
+  theme: 'midnight-pulse',
+  setTheme: async () => {},
   isGirly: false,
+  activeThemeConfig: THEMES['midnight-pulse'],
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setThemeState] = useState<ThemeId>('midnight-pulse');
   const [gender, setGenderState] = useState<GenderTheme>('default');
   const supabase = createClient();
 
-  // Apply CSS class to document root
-  const applyThemeClass = (theme: GenderTheme) => {
+  // Apply CSS classes to document root
+  const applyThemeClass = (targetTheme: ThemeId, targetGender: GenderTheme) => {
     if (typeof document === 'undefined') return;
     const root = document.documentElement;
-    if (theme === 'female') {
+
+    // Clean any previous theme classes
+    root.classList.remove('theme-midnight', 'theme-forest', 'theme-violet', 'theme-rose', 'theme-female');
+
+    const classMap: Record<ThemeId, string> = {
+      'midnight-pulse': 'theme-midnight',
+      'forest-gravity': 'theme-forest',
+      'violet-dream': 'theme-violet',
+      'rose-aura': 'theme-rose',
+    };
+
+    const targetClass = classMap[targetTheme] || 'theme-midnight';
+    root.classList.add(targetClass);
+    root.setAttribute('data-theme', targetTheme);
+
+    // Keep theme-female active for warm/girl themes for deep backward compatibility
+    const isGirl = targetTheme === 'violet-dream' || targetTheme === 'rose-aura' || targetGender === 'female';
+    if (isGirl) {
       root.classList.add('theme-female');
-      root.setAttribute('data-theme', 'female');
-    } else {
-      root.classList.remove('theme-female');
-      root.removeAttribute('data-theme');
     }
   };
 
   useEffect(() => {
     // 1. Initial quick check from localStorage (instant, zero delay)
     if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('bibo_user_gender') as GenderTheme;
-      if (stored === 'female' || stored === 'male') {
-        setGenderState(stored);
-        applyThemeClass(stored);
+      const storedTheme = localStorage.getItem('bibo_user_theme') as ThemeId;
+      const storedGender = localStorage.getItem('bibo_user_gender') as GenderTheme;
+
+      let resolvedTheme: ThemeId = 'midnight-pulse';
+      let resolvedGender: GenderTheme = storedGender || 'default';
+
+      if (storedTheme && THEMES[storedTheme]) {
+        resolvedTheme = storedTheme;
+        resolvedGender = THEMES[storedTheme].category;
+      } else if (storedGender === 'female') {
+        resolvedTheme = 'rose-aura';
+        resolvedGender = 'female';
+      } else if (storedGender === 'male') {
+        resolvedTheme = 'midnight-pulse';
+        resolvedGender = 'male';
       }
+
+      setThemeState(resolvedTheme);
+      setGenderState(resolvedGender);
+      applyThemeClass(resolvedTheme, resolvedGender);
     }
 
     // 2. Fetch authenticated user profile preference from Supabase
-    async function syncUserGender() {
+    async function syncUserTheme() {
       try {
         const {
           data: { user },
         } = await supabase.auth.getUser();
 
         if (user) {
+          const userTheme = user.user_metadata?.theme as ThemeId;
           const userGender = (user.user_metadata?.gender || 'default') as GenderTheme;
-          if (userGender && (userGender === 'female' || userGender === 'male')) {
-            setGenderState(userGender);
-            localStorage.setItem('bibo_user_gender', userGender);
-            applyThemeClass(userGender);
+
+          let resolvedTheme = theme;
+          let resolvedGender = userGender;
+
+          if (userTheme && THEMES[userTheme]) {
+            resolvedTheme = userTheme;
+            resolvedGender = THEMES[userTheme].category;
+          } else if (userGender === 'female') {
+            resolvedTheme = 'rose-aura';
+          } else if (userGender === 'male') {
+            resolvedTheme = 'midnight-pulse';
           }
+
+          setThemeState(resolvedTheme);
+          setGenderState(resolvedGender);
+          localStorage.setItem('bibo_user_theme', resolvedTheme);
+          localStorage.setItem('bibo_user_gender', resolvedGender);
+          applyThemeClass(resolvedTheme, resolvedGender);
         }
       } catch (err) {
-        console.error('Error syncing user gender theme:', err);
+        console.error('Error syncing user theme:', err);
       }
     }
 
-    syncUserGender();
+    syncUserTheme();
 
     // 3. Listen to auth state changes (e.g. login/logout)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
+        const userTheme = session.user.user_metadata?.theme as ThemeId;
         const userGender = (session.user.user_metadata?.gender || 'default') as GenderTheme;
-        if (userGender && (userGender === 'female' || userGender === 'male')) {
-          setGenderState(userGender);
-          localStorage.setItem('bibo_user_gender', userGender);
-          applyThemeClass(userGender);
+
+        let resolvedTheme: ThemeId = 'midnight-pulse';
+        let resolvedGender: GenderTheme = userGender;
+
+        if (userTheme && THEMES[userTheme]) {
+          resolvedTheme = userTheme;
+          resolvedGender = THEMES[userTheme].category;
+        } else if (userGender === 'female') {
+          resolvedTheme = 'rose-aura';
         }
+
+        setThemeState(resolvedTheme);
+        setGenderState(resolvedGender);
+        localStorage.setItem('bibo_user_theme', resolvedTheme);
+        localStorage.setItem('bibo_user_gender', resolvedGender);
+        applyThemeClass(resolvedTheme, resolvedGender);
       }
     });
 
@@ -85,11 +254,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     };
   }, [supabase]);
 
-  const setGender = async (newGender: GenderTheme) => {
-    setGenderState(newGender);
+  // Set Theme explicitly
+  const setTheme = async (newTheme: ThemeId) => {
+    if (!THEMES[newTheme]) return;
+    const category = THEMES[newTheme].category;
+
+    setThemeState(newTheme);
+    setGenderState(category);
+
     if (typeof window !== 'undefined') {
-      localStorage.setItem('bibo_user_gender', newGender);
-      applyThemeClass(newGender);
+      localStorage.setItem('bibo_user_theme', newTheme);
+      localStorage.setItem('bibo_user_gender', category);
+      applyThemeClass(newTheme, category);
     }
 
     try {
@@ -99,10 +275,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
       if (user) {
         await supabase.auth.updateUser({
-          data: { gender: newGender },
+          data: { theme: newTheme, gender: category },
         });
 
-        // Also upsert profile row
+        // Also update profiles table for redundancy
         try {
           await supabase.from('profiles').upsert(
             {
@@ -115,12 +291,69 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         } catch {}
       }
     } catch (err) {
-      console.error('Failed to persist gender theme:', err);
+      console.error('Failed to persist theme:', err);
     }
   };
 
+  // Set Gender category (switches to default theme for that category if needed)
+  const setGender = async (newGender: GenderTheme) => {
+    setGenderState(newGender);
+
+    let targetTheme: ThemeId = theme;
+    if (newGender === 'female' && (theme === 'midnight-pulse' || theme === 'forest-gravity')) {
+      targetTheme = 'rose-aura';
+      setThemeState('rose-aura');
+    } else if ((newGender === 'male' || newGender === 'default') && (theme === 'violet-dream' || theme === 'rose-aura')) {
+      targetTheme = 'midnight-pulse';
+      setThemeState('midnight-pulse');
+    }
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bibo_user_gender', newGender);
+      localStorage.setItem('bibo_user_theme', targetTheme);
+      applyThemeClass(targetTheme, newGender);
+    }
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        await supabase.auth.updateUser({
+          data: { gender: newGender, theme: targetTheme },
+        });
+
+        try {
+          await supabase.from('profiles').upsert(
+            {
+              id: user.id,
+              full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'id' }
+          );
+        } catch {}
+      }
+    } catch (err) {
+      console.error('Failed to persist gender preference:', err);
+    }
+  };
+
+  const isGirly = theme === 'violet-dream' || theme === 'rose-aura' || gender === 'female';
+  const activeThemeConfig = THEMES[theme] || THEMES['midnight-pulse'];
+
   return (
-    <ThemeContext.Provider value={{ gender, setGender, isGirly: gender === 'female' }}>
+    <ThemeContext.Provider
+      value={{
+        gender,
+        setGender,
+        theme,
+        setTheme,
+        isGirly,
+        activeThemeConfig,
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );

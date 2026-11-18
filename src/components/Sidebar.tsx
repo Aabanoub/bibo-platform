@@ -47,7 +47,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
-  const { isGirly } = useTheme();
+  const { isGirly, theme } = useTheme();
 
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -119,9 +119,13 @@ export default function Sidebar() {
             </div>
             <span
               className={`text-lg font-extrabold tracking-wider bg-clip-text text-transparent bg-gradient-to-r transition-all ${
-                isGirly
-                  ? 'from-pink-400 via-rose-300 to-purple-400'
-                  : 'from-violet-400 via-pink-300 to-cyan-400'
+                theme === 'forest-gravity'
+                  ? 'from-emerald-400 via-teal-300 to-lime-400'
+                  : theme === 'violet-dream'
+                  ? 'from-purple-400 via-fuchsia-300 to-pink-400'
+                  : theme === 'rose-aura'
+                  ? 'from-rose-400 via-pink-300 to-amber-200'
+                  : 'from-blue-400 via-cyan-300 to-indigo-400'
               }`}
             >
               Evolve

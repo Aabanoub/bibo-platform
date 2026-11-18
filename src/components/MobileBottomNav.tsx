@@ -8,7 +8,7 @@ import { useNavigation, NAV_OPTIONS_MAP } from '@/context/NavigationContext';
 
 export default function MobileBottomNav() {
   const pathname = usePathname();
-  const { isGirly } = useTheme();
+  const { isGirly, theme } = useTheme();
   const { slots } = useNavigation();
 
   if (pathname === '/login' || pathname === '/maintenance') return null;
@@ -43,8 +43,12 @@ export default function MobileBottomNav() {
               <div
                 className={`flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-all duration-200 ring-4 ring-slate-900 ${
                   isActive
-                    ? isGirly
-                      ? 'bg-gradient-to-tr from-pink-600 to-rose-500 text-white shadow-pink-500/35 scale-105'
+                    ? theme === 'forest-gravity'
+                      ? 'bg-gradient-to-tr from-emerald-600 to-lime-500 text-white shadow-emerald-500/35 scale-105'
+                      : theme === 'violet-dream'
+                      ? 'bg-gradient-to-tr from-purple-600 to-pink-500 text-white shadow-purple-500/35 scale-105'
+                      : theme === 'rose-aura'
+                      ? 'bg-gradient-to-tr from-rose-600 to-orange-400 text-white shadow-rose-500/35 scale-105'
                       : 'bg-gradient-to-tr from-blue-600 to-cyan-500 text-white shadow-blue-500/35 scale-105'
                     : isGirly
                     ? 'bg-slate-800 text-pink-300 hover:bg-slate-700'
