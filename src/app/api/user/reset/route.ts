@@ -58,25 +58,55 @@ export async function POST(req: NextRequest) {
       : supabase;
 
     // Password verified! Delete all user-scoped data across ALL platform tables in safe dependency order:
+    
+    // Dedicated Salary Distribution purge:
+    // First, delete in-progress active cycles (always allowed by database policies)
+    try {
+      await client
+        .from('salary_distribution_cycles')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('status', 'in_progress');
+    } catch (e) {
+      console.warn('[/api/user/reset] Error deleting in_progress salary cycles:', e);
+    }
+
+    // Next, delete all remaining salary cycles (completed, archived, dismissed)
+    try {
+      await client
+        .from('salary_distribution_cycles')
+        .delete()
+        .eq('user_id', user.id);
+    } catch (e) {
+      console.warn('[/api/user/reset] Error deleting salary cycles:', e);
+    }
+
+    // Delete the salary distribution plan definition
+    try {
+      await client
+        .from('salary_distribution_plans')
+        .delete()
+        .eq('user_id', user.id);
+    } catch (e) {
+      console.warn('[/api/user/reset] Error deleting salary plan:', e);
+    }
+
     const tablesToWipe = [
       // 1. Habits & Habit consistency logs
       'habit_logs',
       'habits',
       // 2. Tasks & Deadlines
       'tasks',
-      // 3. Salary Distribution Cycles & Plans
-      'salary_distribution_cycles',
-      'salary_distribution_plans',
-      // 4. Financial Transactions
+      // 3. Financial Transactions
       'transactions',
-      // 5. Notes & Scanned Documents
+      // 4. Notes & Scanned Documents
       'notes',
-      // 6. AI Chat Messages & Summaries
+      // 5. AI Chat Messages & Summaries
       'chat_messages',
       'daily_summaries',
-      // 7. Countdowns & Milestones
+      // 6. Countdowns & Milestones
       'countdown_events',
-      // 8. Notifications, Scheduled Reminders, Subscriptions & Preferences
+      // 7. Notifications, Scheduled Reminders, Subscriptions & Preferences
       'notifications',
       'scheduled_notifications',
       'push_subscriptions',

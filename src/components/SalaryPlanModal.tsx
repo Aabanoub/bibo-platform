@@ -75,7 +75,7 @@ export default function SalaryPlanModal({
   const [planId, setPlanId] = useState<string | null>(null);
 
   // Configuration Fields
-  const [salaryAmount, setSalaryAmount] = useState<number | ''>(80000);
+  const [salaryAmount, setSalaryAmount] = useState<number | ''>('');
   const [currency, setCurrency] = useState<string>('EGP');
   const [frequency, setFrequency] = useState<SalaryFrequency>('monthly');
   const [dayOfMonth, setDayOfMonth] = useState<number>(25);
@@ -133,21 +133,27 @@ export default function SalaryPlanModal({
           console.error('Error fetching salary plan:', fetchErr);
         }
 
-        if (isMounted && data) {
-          setPlanId(data.id);
-          setSalaryAmount(Number(data.salary_amount));
-          setCurrency(data.currency || 'EGP');
-          setFrequency(data.frequency || 'monthly');
-          setUserTimezone(data.timezone || userTimezone);
+        if (isMounted) {
+          if (data) {
+            setPlanId(data.id);
+            setSalaryAmount(Number(data.salary_amount));
+            setCurrency(data.currency || 'EGP');
+            setFrequency(data.frequency || 'monthly');
+            setUserTimezone(data.timezone || userTimezone);
 
-          const cfg = data.schedule_config || {};
-          setDayOfMonth(cfg.day_of_month || 25);
-          setIsEndOfMonth(Boolean(cfg.is_end_of_month));
-          setDayOfWeek(cfg.day_of_week ?? 5);
-          setAnchorDate(cfg.anchor_date || new Date().toISOString().split('T')[0]);
+            const cfg = data.schedule_config || {};
+            setDayOfMonth(cfg.day_of_month || 25);
+            setIsEndOfMonth(Boolean(cfg.is_end_of_month));
+            setDayOfWeek(cfg.day_of_week ?? 5);
+            setAnchorDate(cfg.anchor_date || new Date().toISOString().split('T')[0]);
 
-          if (Array.isArray(data.allocations) && data.allocations.length > 0) {
-            setAllocations(data.allocations);
+            if (Array.isArray(data.allocations) && data.allocations.length > 0) {
+              setAllocations(data.allocations);
+            }
+          } else {
+            setPlanId(null);
+            setSalaryAmount('');
+            setAllocations(DEFAULT_PLAN_ALLOCATIONS);
           }
         }
       } catch (err: any) {

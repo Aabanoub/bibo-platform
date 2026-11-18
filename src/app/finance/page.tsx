@@ -143,6 +143,8 @@ export default function FinancePage() {
 
       if (plan) {
         setSalaryPlan(plan as SalaryPlan);
+      } else {
+        setSalaryPlan(null);
       }
 
       const { data: cycle } = await supabase
