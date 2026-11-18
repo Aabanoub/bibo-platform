@@ -177,8 +177,8 @@ export async function sendLocalNotification(title: string, body: string): Promis
       const registration = await navigator.serviceWorker.ready;
       await registration.showNotification(title, {
         body,
-        icon: '/icon.svg',
-        tag: 'abanoubapp-local',
+        icon: '/logo.png',
+        tag: 'evolve-local',
         renotify: true,
       } as NotificationOptions);
       return;

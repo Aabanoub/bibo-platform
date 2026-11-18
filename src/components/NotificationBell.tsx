@@ -67,9 +67,9 @@ export default function NotificationBell({ collapsed = false }: NotificationBell
 
             // Show browser notification if permitted
             if (typeof window !== 'undefined' && 'Notification' in window && window.Notification.permission === 'granted') {
-              new window.Notification('AbanoubApp', {
+              new window.Notification('Evolve', {
                 body: newNotification.message || newNotification.title,
-                icon: '/icon.svg',
+                icon: '/logo.png',
               });
             }
           }
@@ -154,9 +154,9 @@ export default function NotificationBell({ collapsed = false }: NotificationBell
     if (window.Notification.permission === 'default') {
       window.Notification.requestPermission().then((permission) => {
         if (permission === 'granted') {
-          new window.Notification('AbanoubApp', {
+          new window.Notification('Evolve', {
             body: 'Push notifications enabled!',
-            icon: '/favicon.ico',
+            icon: '/logo.png',
           });
         }
       });

@@ -249,7 +249,7 @@ export default function SettingsPage() {
       }
 
       await sendLocalNotification(
-        '🔔 Test Alert — AbanoubApp',
+        '🔔 Test Alert — Evolve',
         `Browser notification dispatched at ${new Date().toLocaleTimeString()}! Your system push alerts are active.`
       );
 
@@ -993,7 +993,7 @@ export default function SettingsPage() {
                       </div>
                       <div className="flex items-center gap-2.5">
                         <span className="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 flex items-center justify-center font-bold text-[10px] shrink-0">3</span>
-                        <span>Open <strong>AbanoubApp</strong> from your Home Screen icon and click &quot;Enable Now&quot;!</span>
+                        <span>Open <strong>Evolve</strong> from your Home Screen icon and click &quot;Enable Now&quot;!</span>
                       </div>
                     </div>
                   </div>

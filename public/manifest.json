@@ -1,18 +1,24 @@
 {
-  "name": "AbanoubApp - Personal AI Platform",
-  "short_name": "AbanoubApp",
-  "description": "Your personal AI-powered productivity platform",
+  "name": "Evolve - Personal AI Platform",
+  "short_name": "Evolve",
+  "description": "Your personal AI-powered life operating system for tasks, finance, habits, and focus.",
   "start_url": "/",
   "id": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "theme_color": "#0f172a",
-  "background_color": "#0f172a",
+  "theme_color": "#0a0f1d",
+  "background_color": "#0a0f1d",
   "icons": [
     {
-      "src": "/icon.svg",
-      "sizes": "192x192 512x512 any",
-      "type": "image/svg+xml",
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]

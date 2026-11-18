@@ -4,6 +4,7 @@ import './globals.css';
 import Sidebar from '@/components/Sidebar';
 import MobileBottomNav from '@/components/MobileBottomNav';
 import PwaRegister from '@/components/PwaRegister';
+import AppSplashLoader from '@/components/AppSplashLoader';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { NavigationProvider } from '@/context/NavigationContext';
 
@@ -13,23 +14,24 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'AbanoubApp - Personal AI Platform',
+  title: 'Evolve - Personal AI Platform',
   description:
-    'Your personal AI-powered productivity platform for notes, tasks, finance, habits, and more.',
+    'Your personal AI-powered life operating system for notes, tasks, finance, habits, and focus.',
   manifest: '/manifest.json',
   icons: {
-    icon: '/icon.svg',
-    apple: '/icon.svg',
+    icon: '/logo.png',
+    shortcut: '/logo.png',
+    apple: '/logo.png',
   },
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'default',
-    title: 'AbanoubApp',
+    statusBarStyle: 'black-translucent',
+    title: 'Evolve',
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0f172a',
+  themeColor: '#070b14',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
@@ -51,6 +53,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen bg-[#0f172a] font-sans text-slate-200 antialiased">
         <PwaRegister />
+        <AppSplashLoader />
         <ThemeProvider>
           <NavigationProvider>
             <div className="flex h-screen overflow-hidden flex-col lg:flex-row">

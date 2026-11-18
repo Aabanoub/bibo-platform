@@ -293,25 +293,19 @@ export default function LoginPage() {
       <div className="relative w-full max-w-md animate-fade-in">
         {/* Logo & Title */}
         <div className="mb-6 text-center">
-          <div
-            className={`mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl shadow-lg transition-all duration-300 ${
-              gender === 'female'
-                ? 'bg-gradient-to-br from-pink-500 to-rose-500 shadow-pink-500/30'
-                : 'bg-gradient-to-br from-blue-500 to-cyan-500 shadow-blue-500/25'
-            }`}
-          >
-            <Sparkles size={28} className="text-white" />
+          <div className="relative mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl overflow-hidden shadow-xl shadow-purple-500/25 border border-purple-500/30 bg-[#0f172a] animate-evolve-float">
+            <img src="/logo.png" alt="Evolve" className="w-full h-full object-cover" />
           </div>
-          <h1 className="text-2xl font-bold text-white">
+          <h1 className="text-2xl font-black tracking-wider text-white">
             Welcome to{' '}
             <span
               className={`bg-clip-text text-transparent bg-gradient-to-r transition-all duration-300 ${
                 gender === 'female'
                   ? 'from-pink-400 via-rose-300 to-purple-400'
-                  : 'from-blue-400 to-cyan-400'
+                  : 'from-violet-400 via-pink-300 to-cyan-400'
               }`}
             >
-              AbanoubApp
+              Evolve
             </span>
           </h1>
           <p className="mt-1 text-sm text-slate-400">
@@ -319,7 +313,7 @@ export default function LoginPage() {
               ? 'Create a new account with your preferred styling'
               : mode === 'forgot_password'
               ? 'Reset your account password'
-              : 'Sign in to your personal AI platform'}
+              : 'Sign in to your personal operating system'}
           </p>
         </div>
 

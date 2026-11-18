@@ -334,6 +334,62 @@ html.theme-female *::-webkit-scrollbar-thumb:hover {
   }
 }
 
+/* Evolve Splash Screen Futuristic Animations */
+@keyframes evolveFloat {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-8px) scale(1.02);
+  }
+}
+
+@keyframes evolvePulseGlow {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes evolveOrbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes evolveShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-evolve-float {
+  animation: evolveFloat 3s ease-in-out infinite;
+}
+
+.animate-evolve-glow {
+  animation: evolvePulseGlow 2.5s ease-in-out infinite;
+}
+
+.animate-evolve-orbit {
+  animation: evolveOrbit 8s linear infinite;
+}
+
+.animate-evolve-shimmer {
+  background-size: 200% 100%;
+  animation: evolveShimmer 2.5s infinite linear;
+}
+
 /* Prevent iOS Safari auto-zoom on inputs & enhance touch targets */
 @media screen and (max-width: 768px) {
   input[type="text"],

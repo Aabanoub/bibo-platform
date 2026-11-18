@@ -15,7 +15,7 @@ self.addEventListener('push', (event) => {
   /** @type {PushEvent} */
   const pushEvent = event;
 
-  let data = { title: 'AbanoubApp', body: 'You have a new notification', url: '/' };
+  let data = { title: 'Evolve', body: 'You have a new notification', url: '/' };
 
   if (pushEvent.data) {
     try {
@@ -25,11 +25,11 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  // Mobile-safe notification options (avoid SVG badge which crashes Android NotificationManager)
+  // Mobile-safe notification options (using raster PNG to support Android & iOS)
   const options = {
     body: data.body,
-    icon: '/icon.svg',
-    tag: 'abanoubapp-notification',
+    icon: '/logo.png',
+    tag: 'evolve-notification',
     renotify: true,
     data: { url: data.url || '/' },
   };

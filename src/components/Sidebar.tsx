@@ -114,35 +114,23 @@ export default function Sidebar() {
       <div className="flex h-16 items-center justify-between px-4 border-b border-slate-800">
         {!collapsed && (
           <Link href="/" className="flex items-center gap-2.5">
-            <div
-              className={`flex h-8 w-8 items-center justify-center rounded-lg shadow-md transition-all ${
-                isGirly
-                  ? 'bg-gradient-to-br from-pink-500 to-rose-500 shadow-pink-500/20'
-                  : 'bg-gradient-to-br from-blue-500 to-cyan-500 shadow-blue-500/20'
-              }`}
-            >
-              <Sparkles size={18} className="text-white" />
+            <div className="relative flex h-8 w-8 items-center justify-center rounded-xl overflow-hidden shadow-md shadow-purple-500/20 border border-purple-500/30 bg-[#0f172a]">
+              <img src="/logo.png" alt="Evolve" className="w-full h-full object-cover" />
             </div>
             <span
-              className={`text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r transition-all ${
+              className={`text-lg font-extrabold tracking-wider bg-clip-text text-transparent bg-gradient-to-r transition-all ${
                 isGirly
                   ? 'from-pink-400 via-rose-300 to-purple-400'
-                  : 'from-blue-400 to-cyan-400'
+                  : 'from-violet-400 via-pink-300 to-cyan-400'
               }`}
             >
-              AbanoubApp
+              Evolve
             </span>
           </Link>
         )}
         {collapsed && (
-          <div
-            className={`mx-auto flex h-8 w-8 items-center justify-center rounded-lg shadow-md transition-all ${
-              isGirly
-                ? 'bg-gradient-to-br from-pink-500 to-rose-500 shadow-pink-500/20'
-                : 'bg-gradient-to-br from-blue-500 to-cyan-500 shadow-blue-500/20'
-            }`}
-          >
-            <Sparkles size={18} className="text-white" />
+          <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-xl overflow-hidden shadow-md shadow-purple-500/20 border border-purple-500/30 bg-[#0f172a]">
+            <img src="/logo.png" alt="Evolve" className="w-full h-full object-cover" />
           </div>
         )}
         <button
@@ -261,23 +249,17 @@ export default function Sidebar() {
             <Menu size={20} />
           </button>
           <Link href="/" className="flex items-center gap-2">
-            <div
-              className={`flex h-7 w-7 items-center justify-center rounded-lg text-white shadow-sm transition-all ${
-                isGirly
-                  ? 'bg-gradient-to-br from-pink-500 to-rose-500 shadow-pink-500/20'
-                  : 'bg-gradient-to-br from-blue-500 to-cyan-500 shadow-blue-500/20'
-              }`}
-            >
-              <Sparkles size={14} />
+            <div className="relative flex h-7 w-7 items-center justify-center rounded-lg overflow-hidden shadow-sm shadow-purple-500/20 border border-purple-500/30 bg-[#0f172a]">
+              <img src="/logo.png" alt="Evolve" className="w-full h-full object-cover" />
             </div>
             <span
-              className={`font-bold text-sm bg-clip-text text-transparent bg-gradient-to-r transition-all ${
+              className={`font-extrabold text-sm tracking-wide bg-clip-text text-transparent bg-gradient-to-r transition-all ${
                 isGirly
                   ? 'from-pink-400 via-rose-300 to-purple-400'
-                  : 'from-blue-400 to-cyan-400'
+                  : 'from-violet-400 via-pink-300 to-cyan-400'
               }`}
             >
-              AbanoubApp
+              Evolve
             </span>
           </Link>
         </div>

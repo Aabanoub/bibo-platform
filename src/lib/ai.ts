@@ -124,7 +124,7 @@ export async function generateDailySummary(data: DailySummaryData): Promise<stri
     );
   }
 
-  const prompt = `You are a friendly, motivational personal AI assistant for the app "AbanoubApp".
+  const prompt = `You are a friendly, motivational personal AI assistant for the app "Evolve".
 Given the following daily activity data, write a concise daily summary in Markdown.
 Include:
 1. A brief greeting.
