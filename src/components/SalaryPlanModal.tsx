@@ -24,6 +24,8 @@ import {
   SalaryFrequency,
   ScheduleConfig,
   DEFAULT_PLAN_ALLOCATIONS,
+  STATIC_MY_MONEY_CATEGORY,
+  ensureStaticMyMoneyCategory,
   calculateExactAllocations,
   formatCurrency,
   SalaryCycle,
@@ -148,7 +150,9 @@ export default function SalaryPlanModal({
             setAnchorDate(cfg.anchor_date || new Date().toISOString().split('T')[0]);
 
             if (Array.isArray(data.allocations) && data.allocations.length > 0) {
-              setAllocations(data.allocations);
+              setAllocations(ensureStaticMyMoneyCategory(data.allocations));
+            } else {
+              setAllocations(DEFAULT_PLAN_ALLOCATIONS);
             }
           } else {
             setPlanId(null);
@@ -267,6 +271,10 @@ export default function SalaryPlanModal({
   };
 
   const handleRemoveCategory = (id: string) => {
+    const target = allocations.find((cat) => cat.id === id);
+    if (target?.is_static || target?.id === 'my_money') {
+      return; // Static category cannot be removed
+    }
     if (allocations.length <= 1) return;
     setAllocations((prev) => prev.filter((cat) => cat.id !== id));
   };
@@ -310,6 +318,8 @@ export default function SalaryPlanModal({
         anchor_date: anchorDate,
       };
 
+      const safeAllocations = ensureStaticMyMoneyCategory(allocations);
+
       const payload = {
         user_id: user.id,
         salary_amount: numSalary,
@@ -318,7 +328,7 @@ export default function SalaryPlanModal({
         schedule_config: scheduleConfig,
         timezone: userTimezone,
         is_active: true,
-        allocations,
+        allocations: safeAllocations,
         updated_at: new Date().toISOString(),
       };
 
@@ -682,7 +692,7 @@ export default function SalaryPlanModal({
                         </div>
 
                         {/* Category Name Input */}
-                        <div className="flex-1 min-w-[140px]">
+                        <div className="flex-1 min-w-[140px] flex items-center gap-2">
                           <input
                             type="text"
                             value={cat.name}
@@ -690,6 +700,14 @@ export default function SalaryPlanModal({
                             placeholder="Category name..."
                             className="w-full bg-slate-900/80 border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-white font-medium outline-none focus:border-emerald-500"
                           />
+                          {(cat.is_static || cat.id === 'my_money') && (
+                            <span
+                              className="shrink-0 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                              title="Mandatory static category automatically included in all salary plans"
+                            >
+                              Static
+                            </span>
+                          )}
                         </div>
 
                         {/* Percentage Controls */}
@@ -739,10 +757,10 @@ export default function SalaryPlanModal({
                         {/* Delete Button */}
                         <button
                           type="button"
-                          disabled={allocations.length <= 1}
+                          disabled={Boolean(cat.is_static || cat.id === 'my_money' || allocations.length <= 1)}
                           onClick={() => handleRemoveCategory(cat.id)}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
-                          title="Remove category"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors disabled:opacity-20 disabled:hover:bg-transparent"
+                          title={cat.is_static || cat.id === 'my_money' ? "Static category (cannot be removed)" : "Remove category"}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>

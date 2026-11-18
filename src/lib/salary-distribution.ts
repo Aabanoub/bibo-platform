@@ -11,6 +11,7 @@ export interface SalaryCategoryAllocation {
   name: string;
   emoji: string;
   percentage: number;
+  is_static?: boolean;
 }
 
 export interface ScheduleConfig {
@@ -63,14 +64,55 @@ export interface SalaryCycle {
   completed_at: string | null;
 }
 
-// Default category distribution template for fresh setups
+// Static mandatory category automatically included in all salary plans
+export const STATIC_MY_MONEY_CATEGORY: SalaryCategoryAllocation = {
+  id: 'my_money',
+  name: 'My Money',
+  emoji: '💵',
+  percentage: 20,
+  is_static: true,
+};
+
+// Default category distribution template for fresh setups (sums to exactly 100%)
 export const DEFAULT_PLAN_ALLOCATIONS: SalaryCategoryAllocation[] = [
+  STATIC_MY_MONEY_CATEGORY,
   { id: 'giving', name: 'Giving / Charity', emoji: '🤝', percentage: 10 },
-  { id: 'food', name: 'Food & Groceries', emoji: '🍔', percentage: 30 },
-  { id: 'entertainment', name: 'Entertainment & Outings', emoji: '🎬', percentage: 20 },
+  { id: 'food', name: 'Food & Groceries', emoji: '🍔', percentage: 25 },
   { id: 'bills', name: 'Bills & Utilities', emoji: '📄', percentage: 20 },
-  { id: 'other', name: 'Savings & Other', emoji: '📦', percentage: 20 },
+  { id: 'entertainment', name: 'Entertainment & Outings', emoji: '🎬', percentage: 15 },
+  { id: 'other', name: 'Savings & Other', emoji: '📦', percentage: 10 },
 ];
+
+/**
+ * Ensures the static 'My Money' category is always present in any salary plan allocation list.
+ */
+export function ensureStaticMyMoneyCategory(
+  allocations?: SalaryCategoryAllocation[] | null
+): SalaryCategoryAllocation[] {
+  if (!Array.isArray(allocations) || allocations.length === 0) {
+    return [...DEFAULT_PLAN_ALLOCATIONS];
+  }
+
+  const hasMyMoney = allocations.some(
+    (a) => a.id === 'my_money' || a.name?.toLowerCase().trim() === 'my money'
+  );
+
+  if (!hasMyMoney) {
+    return [
+      STATIC_MY_MONEY_CATEGORY,
+      ...allocations.map((a) => ({
+        ...a,
+        is_static: a.id === 'my_money' ? true : Boolean(a.is_static),
+      })),
+    ];
+  }
+
+  return allocations.map((a) =>
+    a.id === 'my_money' || a.name?.toLowerCase().trim() === 'my money'
+      ? { ...a, id: 'my_money', name: a.name || 'My Money', is_static: true }
+      : a
+  );
+}
 
 /**
  * Largest Remainder (Hamilton-Hare) Allocation Algorithm
