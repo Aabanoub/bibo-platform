@@ -91,6 +91,13 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
+// ── Periodic Background Sync (Free PWA Background Dispatch) ─────────────────
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === 'evolve-notifications-check') {
+    event.waitUntil(fetch('/api/cron/notifications').catch(() => {}));
+  }
+});
+
 // ── Notification Close (Optional Analytics / Clean-up) ──────────────────────
 self.addEventListener('notificationclose', () => {
   // Gracefully handled
