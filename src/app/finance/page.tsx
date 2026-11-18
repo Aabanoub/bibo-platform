@@ -489,19 +489,8 @@ export default function FinancePage() {
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-colors border ${
-                showFilters || filterType || filterCategory || filterDateFrom || filterDateTo || searchQuery
-                  ? 'bg-emerald-600 border-emerald-500 text-white shadow-sm'
-                  : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              <Filter className="w-3.5 h-3.5" /> Filters
-            </button>
-
+          {/* Action Buttons: Scan Receipt & Add Transaction */}
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setScannerOpen(true)}
               className="px-3 py-2 rounded-xl text-xs font-medium bg-slate-900 border border-emerald-500/30 text-emerald-300 hover:bg-slate-800 transition-colors flex items-center gap-1.5 active:scale-95 shadow-sm"
@@ -534,8 +523,8 @@ export default function FinancePage() {
           </div>
         )}
 
-        {/* Summary Scope Selector */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+        {/* Summary Scope Selector & Filters */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
           <div className="text-xs font-medium text-slate-400">
             {isAllTime ? (
               <span>Showing <strong>All-Time</strong> financial balance across all entries</span>
@@ -543,102 +532,55 @@ export default function FinancePage() {
               <span>Showing <strong>{currentMonthName}</strong> cash flow</span>
             )}
           </div>
-          <div className="inline-flex self-start sm:self-auto items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
+
+          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+            {/* Scope Toggle: All Time / This Month */}
+            <div className="inline-flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs shadow-sm">
+              <button
+                type="button"
+                onClick={() => setSummaryScope('all')}
+                className={`px-3 py-1 rounded-lg font-medium transition ${
+                  isAllTime
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                All Time
+              </button>
+              <button
+                type="button"
+                onClick={() => setSummaryScope('month')}
+                className={`px-3 py-1 rounded-lg font-medium transition ${
+                  !isAllTime
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                This Month
+              </button>
+            </div>
+
+            {/* Filters Button next to (All Time & This Month) */}
             <button
-              type="button"
-              onClick={() => setSummaryScope('all')}
-              className={`px-3 py-1 rounded-lg font-medium transition ${
-                isAllTime
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+              onClick={() => setShowFilters(!showFilters)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-colors border shadow-sm ${
+                showFilters || filterType || filterCategory || filterDateFrom || filterDateTo || searchQuery
+                  ? 'bg-emerald-600 border-emerald-500 text-white shadow-emerald-900/30'
+                  : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
               }`}
             >
-              All Time
-            </button>
-            <button
-              type="button"
-              onClick={() => setSummaryScope('month')}
-              className={`px-3 py-1 rounded-lg font-medium transition ${
-                !isAllTime
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              This Month
+              <Filter className="w-3.5 h-3.5" />
+              <span>Filters</span>
+              {(filterType || filterCategory || filterDateFrom || filterDateTo || searchQuery) && (
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+              )}
             </button>
           </div>
         </div>
 
-        {/* Metrics Cards Grid (Net Balance at the Top) */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
-          {/* Net Balance Card (Top Priority - Full width on mobile, 1st on desktop) */}
-          <div className="col-span-2 sm:col-span-1 p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-slate-850 border border-slate-800/90 shadow-md relative overflow-hidden group">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="flex items-center gap-2 text-xs font-semibold text-slate-300">
-                <DollarSign className="w-4 h-4 text-blue-400" /> Net Balance
-              </span>
-              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-full border border-slate-700/50">
-                {isAllTime ? 'Total Balance' : 'Cash Flow'}
-              </span>
-            </div>
-            <p
-              className={`text-2xl sm:text-3xl font-extrabold tracking-tight ${
-                displayNet >= 0 ? 'text-emerald-400' : 'text-rose-400'
-              }`}
-            >
-              {displayNet >= 0 ? '+' : '-'}$
-              {Math.abs(displayNet).toLocaleString('en-US', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </p>
-            <p className="text-[11px] text-slate-500 mt-1">
-              {isAllTime
-                ? `Month cash flow: ${monthlyNet >= 0 ? '+' : '-'}$${Math.abs(monthlyNet).toFixed(2)}`
-                : `All-time balance: ${allTimeNetBalance >= 0 ? '+' : '-'}$${Math.abs(allTimeNetBalance).toFixed(2)}`}
-            </p>
-          </div>
-
-          {/* Income Card */}
-          <div className="col-span-1 p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800/80 shadow-sm relative overflow-hidden group">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="flex items-center gap-2 text-xs font-medium text-slate-400">
-                <TrendingUp className="w-4 h-4 text-emerald-400" /> Total Income
-              </span>
-              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 bg-slate-800/60 px-2 py-0.5 rounded-full">
-                {isAllTime ? 'All-Time' : 'Month'}
-              </span>
-            </div>
-            <p className="text-xl sm:text-3xl font-extrabold text-emerald-400 tracking-tight">
-              ${displayIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-            <p className="text-[11px] text-slate-500 mt-1 truncate">
-              {isAllTime ? 'Total earnings' : `Earned in ${currentMonthName}`}
-            </p>
-          </div>
-
-          {/* Expenses Card */}
-          <div className="col-span-1 p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800/80 shadow-sm relative overflow-hidden group">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="flex items-center gap-2 text-xs font-medium text-slate-400">
-                <TrendingDown className="w-4 h-4 text-rose-400" /> Total Expenses
-              </span>
-              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 bg-slate-800/60 px-2 py-0.5 rounded-full">
-                {isAllTime ? 'All-Time' : 'Month'}
-              </span>
-            </div>
-            <p className="text-xl sm:text-3xl font-extrabold text-rose-400 tracking-tight">
-              ${displayExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-            <p className="text-[11px] text-slate-500 mt-1 truncate">
-              {isAllTime ? 'Total spending' : `Spent in ${currentMonthName}`}
-            </p>
-          </div>
-        </div>
-
-        {/* Filters Bar */}
+        {/* Filters Bar: Opens directly below the Scope & Filters bar */}
         {showFilters && (
-          <div className="mb-6 p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3 animate-in fade-in duration-150">
+          <div className="mb-4 p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3 animate-in fade-in duration-150 shadow-md">
             <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
               <span className="flex items-center gap-1.5">
                 <Filter className="w-3.5 h-3.5 text-emerald-400" /> Filter Transactions
@@ -727,6 +669,73 @@ export default function FinancePage() {
             </div>
           </div>
         )}
+
+        {/* Metrics Cards Grid (Net Balance at the Top) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
+          {/* Net Balance Card (Top Priority - Full width on mobile, 1st on desktop) */}
+          <div className="col-span-2 sm:col-span-1 p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-slate-850 border border-slate-800/90 shadow-md relative overflow-hidden group">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="flex items-center gap-2 text-xs font-semibold text-slate-300">
+                <DollarSign className="w-4 h-4 text-blue-400" /> Net Balance
+              </span>
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-full border border-slate-700/50">
+                {isAllTime ? 'Total Balance' : 'Cash Flow'}
+              </span>
+            </div>
+            <p
+              className={`text-2xl sm:text-3xl font-extrabold tracking-tight ${
+                displayNet >= 0 ? 'text-emerald-400' : 'text-rose-400'
+              }`}
+            >
+              {displayNet >= 0 ? '+' : '-'}$
+              {Math.abs(displayNet).toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </p>
+            <p className="text-[11px] text-slate-500 mt-1">
+              {isAllTime
+                ? `Month cash flow: ${monthlyNet >= 0 ? '+' : '-'}$${Math.abs(monthlyNet).toFixed(2)}`
+                : `All-time balance: ${allTimeNetBalance >= 0 ? '+' : '-'}$${Math.abs(allTimeNetBalance).toFixed(2)}`}
+            </p>
+          </div>
+
+          {/* Income Card */}
+          <div className="col-span-1 p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800/80 shadow-sm relative overflow-hidden group">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="flex items-center gap-2 text-xs font-medium text-slate-400">
+                <TrendingUp className="w-4 h-4 text-emerald-400" /> Total Income
+              </span>
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 bg-slate-800/60 px-2 py-0.5 rounded-full">
+                {isAllTime ? 'All-Time' : 'Month'}
+              </span>
+            </div>
+            <p className="text-xl sm:text-3xl font-extrabold text-emerald-400 tracking-tight">
+              ${displayIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <p className="text-[11px] text-slate-500 mt-1 truncate">
+              {isAllTime ? 'Total earnings' : `Earned in ${currentMonthName}`}
+            </p>
+          </div>
+
+          {/* Expenses Card */}
+          <div className="col-span-1 p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800/80 shadow-sm relative overflow-hidden group">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="flex items-center gap-2 text-xs font-medium text-slate-400">
+                <TrendingDown className="w-4 h-4 text-rose-400" /> Total Expenses
+              </span>
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 bg-slate-800/60 px-2 py-0.5 rounded-full">
+                {isAllTime ? 'All-Time' : 'Month'}
+              </span>
+            </div>
+            <p className="text-xl sm:text-3xl font-extrabold text-rose-400 tracking-tight">
+              ${displayExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <p className="text-[11px] text-slate-500 mt-1 truncate">
+              {isAllTime ? 'Total spending' : `Spent in ${currentMonthName}`}
+            </p>
+          </div>
+        </div>
 
         {/* Daily Spending Graph */}
         <div className="mb-6 p-4 rounded-2xl bg-slate-900/80 border border-slate-800">
