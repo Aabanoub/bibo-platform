@@ -11,6 +11,8 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
+  X,
   List,
   AlertCircle,
   Flame,
@@ -612,6 +614,20 @@ export default function CountdownWidget() {
     setShowEventList(false);
   };
 
+  const handlePrevEvent = () => {
+    if (!events.length || !activeEvent) return;
+    const currentIndex = events.findIndex((e) => e.id === activeEvent.id);
+    const prevIndex = (currentIndex - 1 + events.length) % events.length;
+    handleSelectActive(events[prevIndex].id);
+  };
+
+  const handleNextEvent = () => {
+    if (!events.length || !activeEvent) return;
+    const currentIndex = events.findIndex((e) => e.id === activeEvent.id);
+    const nextIndex = (currentIndex + 1) % events.length;
+    handleSelectActive(events[nextIndex].id);
+  };
+
   const colorStyle = activeEvent ? COLOR_CLASSES[activeEvent.color] || COLOR_CLASSES.blue : COLOR_CLASSES.blue;
 
   // Format target date for display
@@ -780,53 +796,38 @@ export default function CountdownWidget() {
                 {isSyncing ? 'Syncing...' : dbError ? 'DB Pending' : currentUser ? 'Cloud Synced' : 'Local Cache'}
               </span>
             </button>
-            {/* Multiple events selector */}
+            {/* Multiple events selector with 1-tap prev/next chevrons */}
             {events.length > 1 && (
-              <div className="relative">
+              <div className="flex items-center rounded-xl border border-slate-700/80 bg-slate-800/70 overflow-hidden shadow-sm">
                 <button
                   type="button"
-                  onClick={() => setShowEventList(!showEventList)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-700/80 bg-slate-800/70 hover:bg-slate-700/80 text-xs font-medium text-slate-300 transition"
-                  title="Switch Active Countdown"
+                  onClick={handlePrevEvent}
+                  className="px-2 py-1.5 hover:bg-slate-700 text-slate-300 hover:text-white transition active:scale-90"
+                  title="Previous countdown"
                 >
-                  <List size={13} />
+                  <ChevronLeft size={13} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowEventList(true)}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition flex items-center gap-1.5 border-x border-slate-700/60 active:scale-95"
+                  title="View all countdowns"
+                >
+                  <List size={12} className="text-slate-400" />
                   <span>
                     {events.findIndex((e) => e.id === activeEvent.id) + 1} of {events.length}
                   </span>
-                  <ChevronDown size={13} className={showEventList ? 'rotate-180 transition' : 'transition'} />
                 </button>
 
-                {/* Dropdown list of events */}
-                {showEventList && (
-                  <div className="absolute right-0 mt-1 w-64 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl p-1.5 z-40 animate-fade-in">
-                    <p className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                      Your Countdowns
-                    </p>
-                    <div className="max-h-48 overflow-y-auto space-y-1">
-                      {events.map((ev) => (
-                        <button
-                          key={ev.id}
-                          onClick={() => handleSelectActive(ev.id)}
-                          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition text-left ${
-                            ev.id === activeEvent.id
-                              ? isGirly
-                                ? 'bg-pink-500/20 text-pink-300 font-bold'
-                                : 'bg-blue-600/20 text-blue-300 font-bold'
-                              : 'text-slate-300 hover:bg-slate-800'
-                          }`}
-                        >
-                          <span className="truncate flex items-center gap-1.5">
-                            <span>{ev.emoji}</span>
-                            <span className="truncate">{ev.title}</span>
-                          </span>
-                          <span className="text-[10px] text-slate-500">
-                            {new Date(ev.target_date).toLocaleDateString([], { month: 'numeric', day: 'numeric' })}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <button
+                  type="button"
+                  onClick={handleNextEvent}
+                  className="px-2 py-1.5 hover:bg-slate-700 text-slate-300 hover:text-white transition active:scale-90"
+                  title="Next countdown"
+                >
+                  <ChevronRight size={13} />
+                </button>
               </div>
             )}
 
@@ -967,6 +968,148 @@ export default function CountdownWidget() {
           </p>
         )}
       </section>
+
+      {/* ── COUNTDOWNS LIST MODAL / BOTTOM SHEET ── */}
+      {showEventList && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setShowEventList(false)}
+        >
+          <div
+            className="w-full sm:max-w-md bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl p-5 overflow-hidden animate-in slide-in-from-bottom-4 duration-200 max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3.5 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={`p-2 rounded-xl border ${
+                    isGirly
+                      ? 'bg-pink-500/15 border-pink-500/30 text-pink-400'
+                      : 'bg-blue-500/15 border-blue-500/30 text-blue-400'
+                  }`}
+                >
+                  <List size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    Your Countdowns
+                    <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded-full text-slate-400 border border-slate-700/60 font-semibold">
+                      {events.length}
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Tap any event to set it as active
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowEventList(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Event Cards List */}
+            <div className="overflow-y-auto py-3 space-y-2 flex-1">
+              {events.map((ev) => {
+                const isActive = ev.id === activeEvent?.id;
+                const isPassed = new Date(ev.target_date).getTime() <= Date.now();
+                const daysDiff = Math.ceil(
+                  (new Date(ev.target_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+                );
+
+                return (
+                  <button
+                    key={ev.id}
+                    type="button"
+                    onClick={() => {
+                      handleSelectActive(ev.id);
+                      setShowEventList(false);
+                    }}
+                    className={`w-full flex items-center justify-between p-3.5 rounded-2xl border transition-all text-left ${
+                      isActive
+                        ? isGirly
+                          ? 'bg-pink-500/15 border-pink-500/50 shadow-md shadow-pink-500/10'
+                          : 'bg-blue-600/15 border-blue-500/50 shadow-md shadow-blue-500/10'
+                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 hover:bg-slate-850'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-2xl flex-shrink-0">{ev.emoji}</span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-xs sm:text-sm font-bold truncate ${
+                              isActive ? 'text-white' : 'text-slate-200'
+                            }`}
+                          >
+                            {ev.title}
+                          </span>
+                          <span className="text-[10px] capitalize px-2 py-0.5 rounded-full bg-slate-800/80 text-slate-400 border border-slate-700/50 flex-shrink-0">
+                            {ev.category}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1.5">
+                          <Calendar size={11} className="text-slate-500" />
+                          <span>
+                            {new Date(ev.target_date).toLocaleDateString([], {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-end flex-shrink-0 ml-2">
+                      {isActive && (
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full mb-1 ${
+                            isGirly
+                              ? 'bg-pink-500/20 text-pink-300'
+                              : 'bg-blue-500/20 text-blue-300'
+                          }`}
+                        >
+                          Active ✓
+                        </span>
+                      )}
+                      <span className="text-[11px] font-semibold text-slate-400">
+                        {isPassed ? 'Passed' : daysDiff === 0 ? 'Today' : `${daysDiff}d left`}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Footer: Create New Countdown button */}
+            <div className="pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEventList(false);
+                  setEditingEvent(null);
+                  setIsModalOpen(true);
+                }}
+                className={`w-full py-2.5 rounded-xl text-xs font-semibold text-white transition flex items-center justify-center gap-1.5 shadow-md ${
+                  isGirly
+                    ? 'bg-gradient-to-r from-pink-600 to-rose-500 hover:from-pink-500 hover:to-rose-400'
+                    : 'bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400'
+                }`}
+              >
+                <Plus size={14} />
+                <span>Create New Countdown</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal for Creating or Editing */}
       <CountdownModal
