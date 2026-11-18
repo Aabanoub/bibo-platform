@@ -22,10 +22,6 @@ import {
   CheckCircle2,
   Bell,
   BellRing,
-  Radio,
-  Volume2,
-  Send,
-  Timer,
   Loader2,
   Share2,
   RefreshCw,
@@ -39,9 +35,6 @@ import {
   inspectNotificationCapabilities,
   requestNotificationPermission,
   unsubscribePushNotifications,
-  sendLocalNotification,
-  createInAppNotification,
-  scheduleBackgroundNotification,
   fetchNotificationPreferences,
   updateNotificationPreferences,
   DeviceDiagnostics,
@@ -88,14 +81,7 @@ export default function SettingsPage() {
   const [savingPref, setSavingPref] = useState(false);
   const [diagnostics, setDiagnostics] = useState<DeviceDiagnostics | null>(null);
   const [serverVapid, setServerVapid] = useState<{ isConfigured: boolean; publicKey?: string } | null>(null);
-  const [testingChannel, setTestingChannel] = useState<'inapp' | 'desktop' | 'webpush' | 'delayed' | 'perm' | null>(null);
-  const [delayedCountdown, setDelayedCountdown] = useState<number | null>(null);
-  const [testResult, setTestResult] = useState<{
-    type: 'success' | 'error' | 'info';
-    message: string;
-    details?: string;
-    latency?: number;
-  } | null>(null);
+  const [requestingPerm, setRequestingPerm] = useState(false);
 
   // Refresh live device & server diagnostics
   const refreshDiagnostics = async () => {
@@ -166,169 +152,16 @@ export default function SettingsPage() {
   };
 
   const handleRequestPermission = async () => {
-    setTestingChannel('perm');
+    setRequestingPerm(true);
     try {
       const sub = await requestNotificationPermission(user?.id);
       await refreshDiagnostics();
       if (sub && user?.id) {
         await updateNotificationPreferences(user.id, { push_enabled: true, browser_enabled: true });
         setNotifPrefs((prev) => (prev ? { ...prev, push_enabled: true, browser_enabled: true } : null));
-        setTestResult({
-          type: 'success',
-          message: '🔔 Notifications & WebPush enabled successfully!',
-          details: 'Your device is now registered to receive alerts and background reminders.',
-        });
-      } else {
-        setTestResult({
-          type: 'error',
-          message: 'Permission was not granted or subscription was blocked.',
-          details: 'Check your browser address bar settings to allow notifications for this site.',
-        });
       }
     } finally {
-      setTestingChannel(null);
-    }
-  };
-
-  const handleTestInAppNotification = async () => {
-    if (!user?.id) return;
-    setTestingChannel('inapp');
-    const start = Date.now();
-    try {
-      const notif = await createInAppNotification(
-        user.id,
-        '🧪 In-App Notification Verified',
-        'Supabase Realtime and in-app bell counter updated live!',
-        'success',
-        '/settings'
-      );
-      const latency = Date.now() - start;
-      if (notif) {
-        setTestResult({
-          type: 'success',
-          message: '✅ In-App Bell Notification Dispatched!',
-          details: `Row persisted to Supabase and live counter incremented in ${latency}ms.`,
-          latency,
-        });
-      } else {
-        setTestResult({
-          type: 'error',
-          message: 'Failed to insert in-app notification.',
-          details: 'Check Supabase table RLS permissions on notifications.',
-        });
-      }
-    } catch (err: any) {
-      setTestResult({ type: 'error', message: 'In-app notification test error', details: err?.message });
-    } finally {
-      setTestingChannel(null);
-    }
-  };
-
-  const handleTestDesktopPush = async () => {
-    setTestingChannel('desktop');
-    const start = Date.now();
-    try {
-      await sendLocalNotification(
-        '🚀 Evolve Desktop Alert',
-        'Native browser notification delivered via active Service Worker!',
-        'evolve-test-desktop',
-        '/settings'
-      );
-      const latency = Date.now() - start;
-      setTestResult({
-        type: 'success',
-        message: '✅ Native Browser Notification Triggered!',
-        details: `Dispatched through Service Worker showNotification in ${latency}ms.`,
-        latency,
-      });
-    } catch (err: any) {
-      setTestResult({
-        type: 'error',
-        message: 'Native browser notification failed.',
-        details: err?.message || 'Ensure notifications are allowed in browser settings.',
-      });
-    } finally {
-      setTestingChannel(null);
-    }
-  };
-
-  const handleTestWebPush = async () => {
-    if (!user?.id) return;
-    setTestingChannel('webpush');
-    const start = Date.now();
-    try {
-      const res = await fetch('/api/notifications/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          title: '⚡ Web Push Verified',
-          message: 'Server-to-client VAPID push delivered across your registered devices!',
-        }),
-      });
-      const data = await res.json();
-      const latency = Date.now() - start;
-      if (res.ok && data.success) {
-        setTestResult({
-          type: 'success',
-          message: `✅ Web Push Delivered to ${data.sent} device(s)!`,
-          details: `VAPID cryptographic payload dispatched via server in ${data.latencyMs || latency}ms.`,
-          latency: data.latencyMs || latency,
-        });
-      } else {
-        setTestResult({
-          type: 'error',
-          message: 'Web Push dispatch failed.',
-          details: data.error || 'Check server VAPID configuration or ensure device is registered.',
-        });
-      }
-    } catch (err: any) {
-      setTestResult({ type: 'error', message: 'Network error calling test endpoint', details: err?.message });
-    } finally {
-      setTestingChannel(null);
-    }
-  };
-
-  const handleTestDelayedReminder = async () => {
-    if (!user?.id || delayedCountdown !== null) return;
-    setTestingChannel('delayed');
-    setDelayedCountdown(5);
-
-    try {
-      const dueTime = new Date(Date.now() + 5000);
-      await scheduleBackgroundNotification({
-        userId: user.id,
-        title: '⏰ 5-Second Reminder Fired!',
-        message: 'Background scheduler verified! This was processed from the scheduled queue.',
-        category: 'reminder',
-        scheduledFor: dueTime,
-        idempotencyKey: `test_delayed_${Date.now()}`,
-        actionUrl: '/settings',
-      });
-
-      setTestResult({
-        type: 'info',
-        message: '⏳ 5-Second Test Queued in Background!',
-        details: 'Stored in scheduled_notifications queue. Switch tabs to test background delivery!',
-      });
-
-      const timer = setInterval(() => {
-        setDelayedCountdown((prev) => {
-          if (prev === null || prev <= 1) {
-            clearInterval(timer);
-            // Trigger processing check
-            fetch('/api/cron/notifications').catch(() => {});
-            sendLocalNotification('⏰ 5-Second Test Fired!', 'Your scheduled test reminder has fired successfully!').catch(() => {});
-            return null;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } catch (err: any) {
-      setTestResult({ type: 'error', message: 'Failed to queue delayed reminder', details: err?.message });
-      setDelayedCountdown(null);
-    } finally {
-      setTestingChannel(null);
+      setRequestingPerm(false);
     }
   };
 
@@ -1242,10 +1075,10 @@ export default function SettingsPage() {
                         <button
                           type="button"
                           onClick={handleRequestPermission}
-                          disabled={testingChannel === 'perm'}
+                          disabled={requestingPerm}
                           className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-semibold py-1 transition disabled:opacity-50"
                         >
-                          {testingChannel === 'perm' ? <Loader2 size={12} className="animate-spin" /> : <Bell size={12} />}
+                          {requestingPerm ? <Loader2 size={12} className="animate-spin" /> : <Bell size={12} />}
                           <span>Enable Now</span>
                         </button>
                       )}
@@ -1340,137 +1173,6 @@ export default function SettingsPage() {
                       <span>Running in standalone Home Screen App mode — Mobile WebPush fully supported.</span>
                     </div>
                   )}
-                </div>
-
-                {/* 3. Interactive Diagnostics Test Bench */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
-                      <Radio size={14} className="text-blue-400" />
-                      <span>Interactive Diagnostic Test Bench (4 Triggers)</span>
-                    </span>
-                    <span className="text-[10px] text-zinc-500">
-                      Real-time delivery verification
-                    </span>
-                  </div>
-
-                  {/* Live Feedback Alert Box */}
-                  {testResult && (
-                    <div
-                      className={`p-3.5 rounded-xl border text-xs flex items-start gap-2.5 animate-fade-in ${
-                        testResult.type === 'success'
-                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                          : testResult.type === 'error'
-                          ? 'bg-red-500/10 border-red-500/30 text-red-300'
-                          : 'bg-blue-500/10 border-blue-500/30 text-blue-300'
-                      }`}
-                    >
-                      <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-                      <div className="space-y-0.5 flex-1 min-w-0">
-                        <div className="font-semibold">{testResult.message}</div>
-                        {testResult.details && (
-                          <div className="text-[11px] opacity-90 leading-relaxed">{testResult.details}</div>
-                        )}
-                        {testResult.latency !== undefined && (
-                          <div className="text-[10px] opacity-75 font-mono pt-0.5">
-                            Round-trip latency: {testResult.latency}ms
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {/* Test 1: In-App Bell */}
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 flex flex-col justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2 text-white font-semibold text-xs">
-                          <BellRing className="w-4 h-4 text-indigo-400" />
-                          <span>1. Test In-App Notification Bell</span>
-                        </div>
-                        <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">
-                          Inserts a test row into Supabase to increment the bell badge counter in real-time via Realtime subscription.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleTestInAppNotification}
-                        disabled={testingChannel === 'inapp'}
-                        className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium py-1.5 text-xs transition"
-                      >
-                        {testingChannel === 'inapp' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bell className="w-3.5 h-3.5" />}
-                        <span>Send In-App Bell Notice</span>
-                      </button>
-                    </div>
-
-                    {/* Test 2: Desktop / Browser Alert */}
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 flex flex-col justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2 text-white font-semibold text-xs">
-                          <Volume2 className="w-4 h-4 text-blue-400" />
-                          <span>2. Test Desktop Push Alert</span>
-                        </div>
-                        <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">
-                          Triggers a native system banner and alert sound through the registered Service Worker.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleTestDesktopPush}
-                        disabled={testingChannel === 'desktop'}
-                        className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium py-1.5 text-xs transition"
-                      >
-                        {testingChannel === 'desktop' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Volume2 className="w-3.5 h-3.5" />}
-                        <span>Send Desktop Alert</span>
-                      </button>
-                    </div>
-
-                    {/* Test 3: WebPush API */}
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 flex flex-col justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2 text-white font-semibold text-xs">
-                          <Send className="w-4 h-4 text-purple-400" />
-                          <span>3. Test Backend WebPush (VAPID)</span>
-                        </div>
-                        <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">
-                          Performs real server-to-client push routing via /api/notifications/test across all your registered devices.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleTestWebPush}
-                        disabled={testingChannel === 'webpush'}
-                        className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-medium py-1.5 text-xs transition"
-                      >
-                        {testingChannel === 'webpush' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                        <span>Test WebPush API</span>
-                      </button>
-                    </div>
-
-                    {/* Test 4: 5-Second Delayed Reminder */}
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 flex flex-col justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2 text-white font-semibold text-xs">
-                          <Timer className="w-4 h-4 text-amber-400" />
-                          <span>4. Test 5s Delayed Scheduler</span>
-                        </div>
-                        <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">
-                          Queues a background reminder in scheduled_notifications to verify free server scheduler execution.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleTestDelayedReminder}
-                        disabled={delayedCountdown !== null}
-                        className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-medium py-1.5 text-xs transition"
-                      >
-                        <Timer className="w-3.5 h-3.5" />
-                        <span>
-                          {delayedCountdown !== null ? `Firing in ${delayedCountdown}s...` : 'Start 5s Delayed Test'}
-                        </span>
-                      </button>
-                    </div>
-                  </div>
                 </div>
               </div>
             )}
