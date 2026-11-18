@@ -67,8 +67,8 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen bg-[#0f172a] font-sans text-slate-200 antialiased">
         <PwaRegister />
-        <AppSplashLoader />
         <ThemeProvider>
+          <AppSplashLoader />
           <NavigationProvider>
             <div className="flex h-screen overflow-hidden flex-col lg:flex-row">
               <Sidebar />
