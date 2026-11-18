@@ -24,8 +24,17 @@ import {
   Tag,
   Receipt,
   Sparkles,
+  Sliders,
 } from 'lucide-react';
 import ReceiptScannerModal from '@/components/ReceiptScannerModal';
+import SalaryPlanModal from '@/components/SalaryPlanModal';
+import PaydayChecklistCard from '@/components/PaydayChecklistCard';
+import PaydayConfirmationDialog from '@/components/PaydayConfirmationDialog';
+import {
+  SalaryPlan,
+  SalaryCycle,
+  isPaydayDue,
+} from '@/lib/salary-distribution';
 
 // ---------------------------------------------------------------------------
 // Constants & Categories
@@ -101,11 +110,57 @@ export default function FinancePage() {
   // Summary scope: 'all' (All-Time total balance) or 'month' (This Month's cash flow)
   const [summaryScope, setSummaryScope] = useState<'all' | 'month'>('all');
 
+  // Salary Distribution System State
+  const [salaryPlan, setSalaryPlan] = useState<SalaryPlan | null>(null);
+  const [activeSalaryCycle, setActiveSalaryCycle] = useState<SalaryCycle | null>(null);
+  const [salaryPlanModalOpen, setSalaryPlanModalOpen] = useState(false);
+  const [paydayConfirmationOpen, setPaydayConfirmationOpen] = useState(false);
+  const [paydayTriggerInfo, setPaydayTriggerInfo] = useState<{
+    triggerType: 'schedule' | 'income';
+    detectedAmount?: number;
+    sourceTransactionId?: string;
+  }>({ triggerType: 'schedule' });
+
   const amountInputRef = useRef<HTMLInputElement>(null);
 
   // ---------------------------------------------------------------------------
   // Data Fetching
   // ---------------------------------------------------------------------------
+
+  const fetchSalaryData = useCallback(async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      const { data: plan } = await supabase
+        .from('salary_distribution_plans')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (plan) {
+        setSalaryPlan(plan as SalaryPlan);
+      }
+
+      const { data: cycle } = await supabase
+        .from('salary_distribution_cycles')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'in_progress')
+        .maybeSingle();
+
+      if (cycle) {
+        setActiveSalaryCycle(cycle as SalaryCycle);
+      } else {
+        setActiveSalaryCycle(null);
+      }
+    } catch (e) {
+      console.error('fetchSalaryData error:', e);
+    }
+  }, [supabase]);
 
   const fetchTransactions = useCallback(async () => {
     try {
@@ -142,7 +197,38 @@ export default function FinancePage() {
 
   useEffect(() => {
     fetchTransactions();
-  }, [fetchTransactions]);
+    fetchSalaryData();
+  }, [fetchTransactions, fetchSalaryData]);
+
+  // Scheduled Payday Detection with Idempotency & Duplicate Prevention
+  useEffect(() => {
+    if (!salaryPlan || activeSalaryCycle) return;
+
+    const { isDue, occurrenceKey } = isPaydayDue(salaryPlan);
+    if (!isDue) return;
+
+    // Check if dismissed in this browser session
+    const dismissedKey = `dismissed_payday_${occurrenceKey}`;
+    if (typeof window !== 'undefined' && sessionStorage.getItem(dismissedKey)) {
+      return;
+    }
+
+    // Check database to ensure no cycle already exists for this occurrenceKey
+    supabase
+      .from('salary_distribution_cycles')
+      .select('id')
+      .eq('occurrence_key', occurrenceKey)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) {
+          setPaydayTriggerInfo({
+            triggerType: 'schedule',
+            detectedAmount: Number(salaryPlan.salary_amount),
+          });
+          setPaydayConfirmationOpen(true);
+        }
+      });
+  }, [salaryPlan, activeSalaryCycle, supabase]);
 
   // Focus amount input when modal opens
   useEffect(() => {
@@ -297,6 +383,21 @@ export default function FinancePage() {
             action_url: '/finance',
           });
         } catch {}
+
+        // Check if this newly recorded income matches salary distribution trigger
+        if (
+          formType === 'income' &&
+          salaryPlan &&
+          (formCategory.toLowerCase() === 'salary' ||
+            amount >= Number(salaryPlan.salary_amount) * 0.7)
+        ) {
+          setPaydayTriggerInfo({
+            triggerType: 'income',
+            detectedAmount: amount,
+            sourceTransactionId: newRow.id,
+          });
+          setPaydayConfirmationOpen(true);
+        }
       }
 
       closeModal();
@@ -575,6 +676,23 @@ export default function FinancePage() {
                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
               )}
             </button>
+
+            {/* Salary Plan Discreet Trigger */}
+            <button
+              onClick={() => setSalaryPlanModalOpen(true)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-colors border shadow-sm ${
+                activeSalaryCycle
+                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                  : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+              }`}
+              title="Configure your salary distribution plan"
+            >
+              <Sliders className="w-3.5 h-3.5" />
+              <span>Salary Plan</span>
+              {activeSalaryCycle && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              )}
+            </button>
           </div>
         </div>
 
@@ -668,6 +786,20 @@ export default function FinancePage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* ACTIVE PAYDAY DISTRIBUTION CHECKLIST (Visible only during active distribution) */}
+        {activeSalaryCycle && (
+          <PaydayChecklistCard
+            cycle={activeSalaryCycle}
+            currency={salaryPlan?.currency || 'EGP'}
+            onCycleUpdated={(updated) => setActiveSalaryCycle(updated)}
+            onCycleCompleted={() => {
+              setActiveSalaryCycle(null);
+              fetchSalaryData();
+            }}
+            onOpenSettings={() => setSalaryPlanModalOpen(true)}
+          />
         )}
 
         {/* Metrics Cards Grid (Net Balance at the Top) */}
@@ -1167,6 +1299,51 @@ export default function FinancePage() {
         onClose={() => setScannerOpen(false)}
         onSaveTransaction={handleSaveScannedTransaction}
       />
+
+      {/* ── SALARY DISTRIBUTION PLAN MODAL ── */}
+      <SalaryPlanModal
+        isOpen={salaryPlanModalOpen}
+        onClose={() => setSalaryPlanModalOpen(false)}
+        onPlanSaved={(plan) => {
+          setSalaryPlan(plan);
+          fetchSalaryData();
+        }}
+        onStartCycleManually={(amount) => {
+          setPaydayTriggerInfo({
+            triggerType: 'income',
+            detectedAmount: amount,
+          });
+          setPaydayConfirmationOpen(true);
+        }}
+        activeCycle={activeSalaryCycle}
+      />
+
+      {/* ── PAYDAY CONFIRMATION DIALOG ── */}
+      {salaryPlan && (
+        <PaydayConfirmationDialog
+          isOpen={paydayConfirmationOpen}
+          onClose={() => {
+            setPaydayConfirmationOpen(false);
+            if (salaryPlan) {
+              const { occurrenceKey } = isPaydayDue(salaryPlan);
+              if (occurrenceKey && typeof window !== 'undefined') {
+                sessionStorage.setItem(`dismissed_payday_${occurrenceKey}`, 'true');
+              }
+            }
+          }}
+          plan={salaryPlan}
+          activeCycle={activeSalaryCycle}
+          triggerType={paydayTriggerInfo.triggerType}
+          detectedAmount={paydayTriggerInfo.detectedAmount}
+          sourceTransactionId={paydayTriggerInfo.sourceTransactionId}
+          onCycleCreated={(newCycle) => {
+            setActiveSalaryCycle(newCycle);
+          }}
+          onResumeActiveCycle={() => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
+      )}
     </div>
   );
 }
