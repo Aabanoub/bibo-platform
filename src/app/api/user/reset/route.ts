@@ -51,100 +51,131 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Use service role admin client if available (bypasses RLS & immutability triggers for clean administrative purge)
-    // or fall back to authenticated server client
-    const client = supabaseServiceKey
-      ? createSupabaseClient(supabaseUrl, supabaseServiceKey)
+    // Password verified!
+    // Check if the service role key is a genuine JWT key (starts with eyJ and not placeholder)
+    const isServiceRoleKeyValid =
+      Boolean(supabaseServiceKey) &&
+      typeof supabaseServiceKey === 'string' &&
+      supabaseServiceKey.startsWith('eyJ') &&
+      supabaseServiceKey !== 'placeholder-service-key';
+
+    const client = isServiceRoleKeyValid
+      ? createSupabaseClient(supabaseUrl, supabaseServiceKey!)
       : supabase;
 
-    // Password verified! Delete all user-scoped data across ALL platform tables in safe dependency order:
-    
-    // Dedicated Salary Distribution purge:
-    // First, delete in-progress active cycles (always allowed by database policies)
+    const nowISO = new Date().toISOString();
+
+    // Strategy 1: Attempt atomic wipe via PostgreSQL SECURITY DEFINER RPC
+    let rpcSucceeded = false;
     try {
-      await client
-        .from('salary_distribution_cycles')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('status', 'in_progress');
-    } catch (e) {
-      console.warn('[/api/user/reset] Error deleting in_progress salary cycles:', e);
+      const { data: rpcData, error: rpcError } = await client.rpc('reset_user_data', {
+        user_id_to_reset: user.id,
+      });
+
+      if (!rpcError && (rpcData as any)?.success) {
+        rpcSucceeded = true;
+      } else if (rpcError) {
+        console.warn('[/api/user/reset] reset_user_data RPC notice (using fallback):', rpcError.message);
+      }
+    } catch (rpcErr) {
+      console.warn('[/api/user/reset] RPC call exception (using fallback):', rpcErr);
     }
 
-    // Next, delete all remaining salary cycles (completed, archived, dismissed)
-    try {
-      await client
-        .from('salary_distribution_cycles')
-        .delete()
-        .eq('user_id', user.id);
-    } catch (e) {
-      console.warn('[/api/user/reset] Error deleting salary cycles:', e);
-    }
-
-    // Delete the salary distribution plan definition
-    try {
-      await client
-        .from('salary_distribution_plans')
-        .delete()
-        .eq('user_id', user.id);
-    } catch (e) {
-      console.warn('[/api/user/reset] Error deleting salary plan:', e);
-    }
-
-    const tablesToWipe = [
-      // 1. Habits & Habit consistency logs
-      'habit_logs',
-      'habits',
-      // 2. Tasks & Deadlines
-      'tasks',
-      // 3. Financial Transactions
-      'transactions',
-      // 4. Notes & Scanned Documents
-      'notes',
-      // 5. AI Chat Messages & Summaries
-      'chat_messages',
-      'daily_summaries',
-      // 6. Countdowns & Milestones
-      'countdown_events',
-      // 7. Notifications, Scheduled Reminders, Subscriptions & Preferences
-      'notifications',
-      'scheduled_notifications',
-      'push_subscriptions',
-      'notification_preferences',
-    ];
-
-    for (const table of tablesToWipe) {
+    // Strategy 2: If RPC is not installed yet, perform direct table-by-table deletions
+    if (!rpcSucceeded) {
+      // 1. Delete Salary Distribution Cycles (in-progress first, then all remaining)
       try {
-        const { error } = await client.from(table).delete().eq('user_id', user.id);
-        if (error) {
-          console.warn(`[/api/user/reset] Warning clearing table "${table}":`, error.message);
+        await client
+          .from('salary_distribution_cycles')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('status', 'in_progress');
+      } catch (e) {
+        console.warn('[/api/user/reset] Error clearing in_progress salary cycles:', e);
+      }
+
+      try {
+        const { error: cycleErr } = await client
+          .from('salary_distribution_cycles')
+          .delete()
+          .eq('user_id', user.id);
+        if (cycleErr) {
+          console.warn('[/api/user/reset] Warning clearing salary_distribution_cycles:', cycleErr.message);
         }
-      } catch (tableErr) {
-        console.warn(`[/api/user/reset] Exception clearing table "${table}":`, tableErr);
+      } catch (e) {
+        console.warn('[/api/user/reset] Exception clearing salary_distribution_cycles:', e);
+      }
+
+      // 2. Delete Salary Distribution Plans
+      try {
+        const { error: planErr } = await client
+          .from('salary_distribution_plans')
+          .delete()
+          .eq('user_id', user.id);
+        if (planErr) {
+          console.warn('[/api/user/reset] Warning clearing salary_distribution_plans:', planErr.message);
+        }
+      } catch (e) {
+        console.warn('[/api/user/reset] Exception clearing salary_distribution_plans:', e);
+      }
+
+      // 3. Child tables and remaining platform tables in dependency order
+      const tablesToWipe = [
+        'habit_logs',
+        'habits',
+        'tasks',
+        'transactions',
+        'notes',
+        'chat_messages',
+        'daily_summaries',
+        'countdown_events',
+        'notifications',
+        'scheduled_notifications',
+        'push_subscriptions',
+        'notification_preferences',
+      ];
+
+      for (const table of tablesToWipe) {
+        try {
+          const { error } = await client.from(table).delete().eq('user_id', user.id);
+          if (error) {
+            console.warn(`[/api/user/reset] Warning clearing table "${table}":`, error.message);
+          }
+        } catch (tableErr) {
+          console.warn(`[/api/user/reset] Exception clearing table "${table}":`, tableErr);
+        }
+      }
+
+      // 4. Reset User Profile to factory defaults
+      try {
+        await client
+          .from('profiles')
+          .update({
+            avatar_url: null,
+            gender: 'default',
+            is_locked: false,
+            focus_duration: 25,
+            short_break_duration: 5,
+            long_break_duration: 15,
+            nav_slots: ['notes', 'tasks', 'finance', 'chat'],
+            updated_at: nowISO,
+          })
+          .eq('id', user.id);
+      } catch (profileErr) {
+        console.warn('[/api/user/reset] Warning resetting profile defaults:', profileErr);
       }
     }
 
-    // 9. Reset User Profile to factory defaults (focus durations, mobile nav slots)
-    const nowISO = new Date().toISOString();
-    try {
-      await client
-        .from('profiles')
-        .update({
-          focus_duration: 25,
-          short_break_duration: 5,
-          long_break_duration: 15,
-          nav_slots: ['notes', 'tasks', 'finance', 'chat'],
-          updated_at: nowISO,
-        })
-        .eq('id', user.id);
-    } catch (profileErr) {
-      console.warn('[/api/user/reset] Warning resetting profile defaults:', profileErr);
-    }
-
-    // 10. Record authoritative reset timestamp in user auth metadata
+    // 5. Update user auth metadata with reset timestamp and clean slate defaults
+    // Note: Email and password remain completely intact in auth.users
     try {
       await supabase.auth.updateUser({
-        data: { last_data_reset_at: nowISO },
+        data: {
+          last_data_reset_at: nowISO,
+          avatar_url: null,
+          gender: 'default',
+          theme: 'midnight-pulse',
+        },
       });
     } catch (metaErr) {
       console.warn('[/api/user/reset] Warning updating user metadata:', metaErr);
@@ -152,7 +183,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'All platform data has been securely reset.',
+      message: 'All user data in the database has been completely erased, keeping your email and password.',
     });
   } catch (err: unknown) {
     console.error('[/api/user/reset] Error:', err);

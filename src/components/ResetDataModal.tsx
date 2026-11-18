@@ -60,8 +60,7 @@ export default function ResetDataModal({
           if (
             key &&
             key.startsWith('bibo_') &&
-            key !== 'bibo_user_theme' &&
-            key !== 'bibo_user_gender'
+            key !== 'bibo_user_theme'
           ) {
             keysToRemove.push(key);
           }
