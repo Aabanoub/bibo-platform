@@ -32,6 +32,7 @@ interface DashboardData {
   totalExpenses: number;
   habitsCompletedToday: number;
   totalHabits: number;
+  habitsLeftToday: number;
   totalNotes: number;
   recentlyUpdatedNotes: number;
 }
@@ -46,6 +47,7 @@ const defaultData: DashboardData = {
   totalExpenses: 0,
   habitsCompletedToday: 0,
   totalHabits: 0,
+  habitsLeftToday: 0,
   totalNotes: 0,
   recentlyUpdatedNotes: 0,
 };
@@ -152,6 +154,9 @@ export default function DashboardPage() {
         }
 
         const netBalance = totalIncome - totalExpenses;
+        const habitsCompletedToday = habitLogsRes.count || 0;
+        const totalHabits = habitsRes.count || 0;
+        const habitsLeftToday = Math.max(0, totalHabits - habitsCompletedToday);
 
         setData({
           openTasks: tasksRes.count || 0,
@@ -161,8 +166,9 @@ export default function DashboardPage() {
           totalExpenses,
           todaySpending,
           monthlySpending,
-          habitsCompletedToday: habitLogsRes.count || 0,
-          totalHabits: habitsRes.count || 0,
+          habitsCompletedToday,
+          totalHabits,
+          habitsLeftToday,
           totalNotes: notesRes.count || 0,
           recentlyUpdatedNotes: recentNotesRes.count || 0,
         });
@@ -218,12 +224,15 @@ export default function DashboardPage() {
     {
       title: 'Habits',
       icon: <Activity size={22} />,
-      value: data.habitsCompletedToday,
-      label: 'completed today',
-      sub: `${data.totalHabits} total habits`,
+      value: data.habitsLeftToday,
+      label: 'habits left today',
+      sub:
+        data.totalHabits > 0 && data.habitsLeftToday === 0
+          ? `All ${data.totalHabits} completed today! 🎉`
+          : `${data.habitsCompletedToday} of ${data.totalHabits} completed today`,
       gradient: 'from-purple-500/20 to-purple-600/5',
       border: 'border-purple-500/20',
-      iconColor: 'text-purple-400',
+      iconColor: data.totalHabits > 0 && data.habitsLeftToday === 0 ? 'text-emerald-400' : 'text-purple-400',
       href: '/habits',
     },
     {
