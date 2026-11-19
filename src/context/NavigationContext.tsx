@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { createClient } from '@/lib/supabase';
 import {
   StickyNote,
   CheckSquare,
@@ -59,6 +60,7 @@ const NavigationContext = createContext<NavigationContextType>({
 
 export function NavigationProvider({ children }: { children: React.ReactNode }) {
   const [slots, setSlots] = useState<[string, string, string, string]>(DEFAULT_NAV_SLOTS);
+  const supabase = createClient();
 
   useEffect(() => {
     try {
@@ -76,25 +78,92 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
     } catch (e) {
       console.warn('Could not load mobile nav slots:', e);
     }
-  }, []);
 
-  const updateSlot = (slotIndex: 0 | 1 | 2 | 3, itemId: string) => {
-    if (!NAV_OPTIONS_MAP[itemId]) return;
-    setSlots((prev) => {
-      const updated: [string, string, string, string] = [...prev];
-      updated[slotIndex] = itemId;
+    async function syncNavSlots() {
       try {
-        localStorage.setItem('bibo_mobile_nav_slots', JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('nav_slots')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (profile?.nav_slots && Array.isArray(profile.nav_slots) && profile.nav_slots.length === 4) {
+            if (profile.nav_slots.every((id: string) => NAV_OPTIONS_MAP[id])) {
+              const remoteSlots: [string, string, string, string] = [
+                profile.nav_slots[0],
+                profile.nav_slots[1],
+                profile.nav_slots[2],
+                profile.nav_slots[3],
+              ];
+              setSlots(remoteSlots);
+              localStorage.setItem('bibo_mobile_nav_slots', JSON.stringify(remoteSlots));
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Could not sync nav slots from database:', err);
+      }
+    }
+
+    syncNavSlots();
+  }, [supabase]);
+
+  const updateSlot = async (slotIndex: 0 | 1 | 2 | 3, itemId: string) => {
+    if (!NAV_OPTIONS_MAP[itemId]) return;
+    const updated: [string, string, string, string] = [...slots];
+    updated[slotIndex] = itemId;
+    setSlots(updated);
+
+    try {
+      localStorage.setItem('bibo_mobile_nav_slots', JSON.stringify(updated));
+    } catch {}
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('profiles').upsert(
+          {
+            id: user.id,
+            nav_slots: updated,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'id' }
+        );
+      }
+    } catch (err) {
+      console.warn('Failed to persist nav slots to database:', err);
+    }
   };
 
-  const resetSlots = () => {
+  const resetSlots = async () => {
     setSlots(DEFAULT_NAV_SLOTS);
     try {
       localStorage.setItem('bibo_mobile_nav_slots', JSON.stringify(DEFAULT_NAV_SLOTS));
     } catch {}
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('profiles').upsert(
+          {
+            id: user.id,
+            nav_slots: DEFAULT_NAV_SLOTS,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'id' }
+        );
+      }
+    } catch (err) {
+      console.warn('Failed to reset nav slots in database:', err);
+    }
   };
 
   return (

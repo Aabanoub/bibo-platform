@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS profiles (
     full_name             TEXT,
     avatar_url            TEXT,
     gender                TEXT NOT NULL DEFAULT 'default',
+    theme                 TEXT NOT NULL DEFAULT 'ios-glass',
     is_locked             BOOLEAN NOT NULL DEFAULT false,
     focus_duration        INT NOT NULL DEFAULT 25,
     short_break_duration  INT NOT NULL DEFAULT 5,

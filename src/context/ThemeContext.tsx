@@ -222,8 +222,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         } = await supabase.auth.getUser();
 
         if (user) {
-          const userTheme = user.user_metadata?.theme as ThemeId;
-          const userGender = (user.user_metadata?.gender || 'default') as GenderTheme;
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('theme, gender')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          const userTheme = (profile?.theme || user.user_metadata?.theme) as ThemeId;
+          const userGender = (profile?.gender || user.user_metadata?.gender || 'default') as GenderTheme;
 
           let resolvedTheme = theme;
           let resolvedGender = userGender;
@@ -307,12 +313,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           data: { theme: newTheme, gender: category },
         });
 
-        // Also update profiles table for redundancy
+        // Also update profiles table for redundancy and cross-device persistence
         try {
           await supabase.from('profiles').upsert(
             {
               id: user.id,
               full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+              theme: newTheme,
+              gender: category,
               updated_at: new Date().toISOString(),
             },
             { onConflict: 'id' }
@@ -358,6 +366,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             {
               id: user.id,
               full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+              theme: targetTheme,
+              gender: newGender,
               updated_at: new Date().toISOString(),
             },
             { onConflict: 'id' }
