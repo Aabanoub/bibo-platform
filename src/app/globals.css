@@ -710,7 +710,7 @@ html.theme-female *::-webkit-scrollbar-thumb:hover {
 }
 
 
-/* ── Theme 5: iPhone Glass UI (Apple Liquid Frosted Glassmorphism) ── */
+/* ── Theme 5: Glass UI (Liquid Frosted Glassmorphism) ── */
 html.theme-glass body,
 html.theme-glass .bg-\[\#0f172a\] {
   background-color: #070b16 !important;

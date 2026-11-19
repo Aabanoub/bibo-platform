@@ -35,7 +35,7 @@ export const THEMES: Record<ThemeId, ThemeConfig> = {
     id: 'midnight-pulse',
     name: 'Midnight Pulse',
     category: 'male',
-    categoryLabel: '⚡ Boy / Cool',
+    categoryLabel: '⚡ Male',
     subtitle: 'Futuristic, bold & technological',
     style: 'Electric Blue & Cyan',
     colors: {
@@ -55,7 +55,7 @@ export const THEMES: Record<ThemeId, ThemeConfig> = {
     id: 'forest-gravity',
     name: 'Forest Gravity',
     category: 'male',
-    categoryLabel: '⚡ Boy / Cool',
+    categoryLabel: '⚡ Male',
     subtitle: 'Natural, sophisticated & confident',
     style: 'Emerald Green & Cyber Lime',
     colors: {
@@ -75,7 +75,7 @@ export const THEMES: Record<ThemeId, ThemeConfig> = {
     id: 'violet-dream',
     name: 'Violet Dream',
     category: 'female',
-    categoryLabel: '🌸 Girl / Warm',
+    categoryLabel: '🌸 Female',
     subtitle: 'Creative, vibrant & elegant',
     style: 'Deep Violet & Neon Magenta',
     colors: {
@@ -95,7 +95,7 @@ export const THEMES: Record<ThemeId, ThemeConfig> = {
     id: 'rose-aura',
     name: 'Rose Aura',
     category: 'female',
-    categoryLabel: '🌸 Girl / Warm',
+    categoryLabel: '🌸 Female',
     subtitle: 'Warm, elegant & soft luxury',
     style: 'Rose Crimson & Soft Peach',
     colors: {
@@ -113,9 +113,9 @@ export const THEMES: Record<ThemeId, ThemeConfig> = {
   },
   'ios-glass': {
     id: 'ios-glass',
-    name: 'iPhone Glass UI',
+    name: 'Glass UI',
     category: 'male',
-    categoryLabel: '💎 Liquid Glass',
+    categoryLabel: '💎 Glass UI',
     subtitle: 'Apple frosted glass, specular highlights & dynamic glow',
     style: 'iOS Translucent Glass & Liquid Blue',
     colors: {
@@ -194,7 +194,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       let resolvedGender: GenderTheme = storedGender || 'default';
 
       if (!glassTrialActivated) {
-        // Automatically activate iPhone Glass UI trial as requested
+        // Automatically activate Glass UI trial as requested
         resolvedTheme = 'ios-glass';
         localStorage.setItem('bibo_glass_trial_v1', 'true');
         localStorage.setItem('bibo_user_theme', 'ios-glass');
