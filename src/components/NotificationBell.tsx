@@ -422,10 +422,10 @@ export default function NotificationBell({
                   <button
                     type="button"
                     onClick={(e) => deleteNotification(e, item.id)}
-                    className="opacity-0 group-hover:opacity-100 flex h-6 w-6 items-center justify-center rounded text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition shrink-0"
+                    className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 active:scale-90 transition shrink-0"
                     title="Delete notification"
                   >
-                    <X size={12} />
+                    <X size={13} />
                   </button>
                 </div>
               ))

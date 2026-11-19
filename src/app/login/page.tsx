@@ -420,16 +420,13 @@ export default function LoginPage() {
                 {/* Gender / Theme Selection */}
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-slate-300">
-                    Your Gender / Theme{' '}
-                    <span className="text-xs text-slate-400 font-normal">
-                      (Sets colors & design)
-                    </span>
+                    Aesthetic Preference
                   </label>
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
                       onClick={() => handleGenderSelect('female')}
-                      className={`flex items-center gap-2.5 rounded-xl border p-3 text-left transition-all ${
+                      className={`flex items-center gap-2.5 rounded-xl border p-3 text-left transition-all active:scale-95 ${
                         gender === 'female'
                           ? 'border-pink-500 bg-pink-500/20 text-pink-200 shadow-lg shadow-pink-500/25 ring-2 ring-pink-500/40'
                           : 'border-slate-700 bg-slate-900/60 text-slate-400 hover:border-pink-500/50 hover:text-pink-300'
@@ -437,15 +434,15 @@ export default function LoginPage() {
                     >
                       <span className="text-2xl">🌸</span>
                       <div>
-                        <div className="text-xs font-bold text-white">Girl / Female</div>
-                        <div className="text-[10px] text-pink-300/80">Soft Pink & Rose state</div>
+                        <div className="text-xs font-bold text-white">Female</div>
+                        <div className="text-[10px] text-pink-300/80">Soft Rose & Violet</div>
                       </div>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => handleGenderSelect('male')}
-                      className={`flex items-center gap-2.5 rounded-xl border p-3 text-left transition-all ${
+                      className={`flex items-center gap-2.5 rounded-xl border p-3 text-left transition-all active:scale-95 ${
                         gender === 'male'
                           ? 'border-blue-500 bg-blue-500/20 text-blue-200 shadow-lg shadow-blue-500/25 ring-2 ring-blue-500/40'
                           : 'border-slate-700 bg-slate-900/60 text-slate-400 hover:border-blue-500/50 hover:text-blue-300'
@@ -453,8 +450,8 @@ export default function LoginPage() {
                     >
                       <span className="text-2xl">⚡</span>
                       <div>
-                        <div className="text-xs font-bold text-white">Boy / Male</div>
-                        <div className="text-[10px] text-blue-300/80">Electric Blue & Slate</div>
+                        <div className="text-xs font-bold text-white">Male</div>
+                        <div className="text-[10px] text-blue-300/80">Glass UI & Slate</div>
                       </div>
                     </button>
                   </div>
@@ -576,10 +573,16 @@ export default function LoginPage() {
           )}
         </div>
 
-        {/* Footer */}
-        <p className="mt-6 text-center text-xs text-slate-500">
-          Personal AI Platform • Powered by Next.js & Supabase
-        </p>
+        {/* Footer with Security & Credibility Reassurance */}
+        <div className="mt-6 text-center space-y-1">
+          <p className="text-xs text-slate-400 font-medium flex items-center justify-center gap-1.5">
+            <Lock size={12} className="text-emerald-400" />
+            <span>Private & User-Isolated • Supabase RLS Encryption</span>
+          </p>
+          <p className="text-[11px] text-slate-500">
+            Personal Productivity & Finance OS
+          </p>
+        </div>
       </div>
     </div>
   );

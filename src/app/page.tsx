@@ -344,7 +344,7 @@ export default function DashboardPage() {
           <Link
             key={card.title}
             href={card.href}
-            className={`group relative overflow-hidden rounded-xl border ${card.border} bg-gradient-to-br ${card.gradient} p-5 transition-all duration-200 hover:scale-[1.02] hover:shadow-lg hover:shadow-black/20`}
+            className={`group relative overflow-hidden rounded-xl border ${card.border} bg-gradient-to-br ${card.gradient} p-5 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] hover:shadow-lg hover:shadow-black/20`}
           >
             <div className="flex items-start justify-between">
               <div>
@@ -389,7 +389,7 @@ export default function DashboardPage() {
               <Link
                 key={tool.title}
                 href={tool.href}
-                className={`group relative overflow-hidden rounded-2xl border ${tool.border} bg-gradient-to-br ${tool.gradient} p-4 transition hover:border-opacity-60 hover:scale-[1.01]`}
+                className={`group relative overflow-hidden rounded-2xl border ${tool.border} bg-gradient-to-br ${tool.gradient} p-4 transition hover:border-opacity-60 hover:scale-[1.01] active:scale-[0.98]`}
               >
                 <div className="flex items-center gap-3 mb-2">
                   <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${tool.iconBg}`}>
@@ -416,7 +416,7 @@ export default function DashboardPage() {
               <Link
                 key={action.label}
                 href={action.href}
-                className="group flex items-center gap-3 rounded-xl border border-slate-700/50 bg-slate-800/40 px-4 py-3.5 transition-all duration-200 hover:border-slate-600 hover:bg-slate-800/70"
+                className="group flex items-center gap-3 rounded-xl border border-slate-700/50 bg-slate-800/40 px-4 py-3.5 transition-all duration-200 hover:border-slate-600 hover:bg-slate-800/70 active:scale-95"
               >
                 <span className={`${action.color} transition-transform duration-200 group-hover:scale-110`}>
                   {action.icon}

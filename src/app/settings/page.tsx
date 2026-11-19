@@ -743,8 +743,8 @@ export default function SettingsPage() {
               <div className="px-5 sm:px-6 pb-6 pt-2 space-y-6 border-t border-zinc-800/80 animate-fade-in">
                 {/* Intro summary */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <p className="text-xs text-zinc-400 leading-relaxed max-w-xl">
-                    Configure multi-channel notifications and verify hardware capabilities. EVOLVE uses 100% free web standards (Web Push API, VAPID, Service Worker, and Supabase Realtime) without paid third-party dependencies.
+                  <p className="text-xs text-zinc-400">
+                    Manage push alerts, task reminders, and sound settings.
                   </p>
                   <button
                     type="button"
