@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import {
+  SalaryPlan,
   SalaryCycle,
   ChecklistItem,
   formatCurrency,
@@ -21,6 +22,7 @@ import {
 
 interface PaydayChecklistCardProps {
   cycle: SalaryCycle;
+  plan?: SalaryPlan | null;
   currency?: string;
   onCycleUpdated: (updated: SalaryCycle) => void;
   onCycleCompleted: () => void;
@@ -29,6 +31,7 @@ interface PaydayChecklistCardProps {
 
 export default function PaydayChecklistCard({
   cycle,
+  plan,
   currency = 'EGP',
   onCycleUpdated,
   onCycleCompleted,
@@ -62,6 +65,34 @@ export default function PaydayChecklistCard({
     }, [checklist, cycle.salary_amount]);
 
   const percentageDone = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+  // Locate and extract "My Money" envelope amount
+  const myMoneyItem = useMemo(() => {
+    return checklist.find(
+      (item) =>
+        item.id === 'my_money' ||
+        item.name?.toLowerCase().trim() === 'my money' ||
+        item.name?.toLowerCase().includes('my money')
+    );
+  }, [checklist]);
+
+  const myMoneyAllocatedAmount = useMemo(() => {
+    if (myMoneyItem) {
+      return Number(myMoneyItem.allocated_amount) || 0;
+    }
+    if (plan?.allocations) {
+      const planAlloc = plan.allocations.find(
+        (a) =>
+          a.id === 'my_money' ||
+          a.name?.toLowerCase().trim() === 'my money' ||
+          a.name?.toLowerCase().includes('my money')
+      );
+      if (planAlloc) {
+        return Math.round((Number(cycle.salary_amount) * (Number(planAlloc.percentage) || 20)) / 100);
+      }
+    }
+    return 0;
+  }, [myMoneyItem, plan, cycle.salary_amount]);
 
   // Toggle item checkmark
   const handleToggleItem = async (itemId: string) => {
@@ -102,10 +133,63 @@ export default function PaydayChecklistCard({
     }
   };
 
-  // Complete and Archive Cycle
+  // Complete and Archive Cycle (Adds "My Money" envelope to user balance)
   const handleFinishAndArchive = async () => {
     setFinishing(true);
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        throw new Error('User session not found. Please log in again.');
+      }
+
+      // 1. Credit "My Money" allocation to user balance (transactions)
+      if (myMoneyAllocatedAmount > 0) {
+        const description = `${cycle.cycle_label || 'Salary Distribution'} - My Money`;
+        const txDate = cycle.cycle_date || new Date().toISOString().split('T')[0];
+
+        // Idempotency: avoid duplicate transactions if already credited
+        const { data: existingTx, error: checkErr } = await supabase
+          .from('transactions')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('category', 'My Money')
+          .eq('description', description)
+          .maybeSingle();
+
+        if (!existingTx && !checkErr) {
+          const { error: txErr } = await supabase.from('transactions').insert({
+            user_id: user.id,
+            amount: myMoneyAllocatedAmount,
+            type: 'income',
+            category: 'My Money',
+            description,
+            date: txDate,
+          });
+
+          if (txErr) {
+            console.error('Failed to credit My Money balance transaction:', txErr);
+          } else {
+            // In-app notification
+            try {
+              await supabase.from('notifications').insert({
+                user_id: user.id,
+                title: '💵 My Money Added to Balance',
+                message: `${formatCurrency(myMoneyAllocatedAmount, currency)} from ${cycle.cycle_label} has been added to your balance.`,
+                type: 'success',
+                is_read: false,
+                action_url: '/finance',
+              });
+            } catch (notifErr) {
+              console.warn('Failed to insert notification:', notifErr);
+            }
+          }
+        }
+      }
+
+      // 2. Mark cycle as completed in Supabase
       const now = new Date().toISOString();
       const { error } = await supabase
         .from('salary_distribution_cycles')
@@ -298,7 +382,9 @@ export default function PaydayChecklistCard({
                     All {totalCount} Envelopes Successfully Distributed!
                   </h4>
                   <p className="text-[11px] text-emerald-400/80">
-                    Total {formatCurrency(Number(cycle.salary_amount), currency)} fully allocated.
+                    Total {formatCurrency(Number(cycle.salary_amount), currency)} fully allocated
+                    {myMoneyAllocatedAmount > 0 &&
+                      ` • ${formatCurrency(myMoneyAllocatedAmount, currency)} (My Money) will be credited to your balance`}
                   </p>
                 </div>
               </div>

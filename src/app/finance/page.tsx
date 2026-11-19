@@ -51,6 +51,7 @@ const CATEGORIES = [
   'Salary',
   'Freelance',
   'Investment',
+  'My Money',
   'Other',
 ] as const;
 
@@ -65,6 +66,7 @@ const CATEGORY_EMOJI: Record<string, string> = {
   Salary: '💰',
   Freelance: '💻',
   Investment: '📈',
+  'My Money': '💵',
   Other: '📦',
 };
 
@@ -794,11 +796,13 @@ export default function FinancePage() {
         {activeSalaryCycle && (
           <PaydayChecklistCard
             cycle={activeSalaryCycle}
+            plan={salaryPlan}
             currency={salaryPlan?.currency || 'EGP'}
             onCycleUpdated={(updated) => setActiveSalaryCycle(updated)}
             onCycleCompleted={() => {
               setActiveSalaryCycle(null);
               fetchSalaryData();
+              fetchTransactions();
             }}
             onOpenSettings={() => setSalaryPlanModalOpen(true)}
           />
