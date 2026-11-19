@@ -303,14 +303,15 @@ export default function NotificationBell({
       {/* Dropdown Notification Center */}
       {open && (
         <div
-          className={
+          className={`notification-dropdown ${
             placement === 'top'
-              ? 'fixed top-14 inset-x-3 sm:inset-x-auto sm:absolute sm:top-full sm:right-0 sm:mt-2 sm:w-96 sm:max-w-sm rounded-2xl border border-slate-700/80 bg-slate-900/95 shadow-2xl shadow-black/90 backdrop-blur-xl z-50 overflow-hidden flex flex-col max-h-[calc(100dvh-5.5rem)] animate-in fade-in slide-in-from-top-2 duration-150'
-              : 'absolute bottom-full left-0 mb-2 w-80 sm:w-96 rounded-2xl border border-slate-700/80 bg-slate-900/95 shadow-2xl shadow-black/80 backdrop-blur-xl lg:bottom-0 lg:left-full lg:top-auto lg:mb-0 lg:ml-2 z-[60] overflow-hidden flex flex-col max-h-[calc(100vh-6rem)] animate-in fade-in duration-150'
-          }
+              ? 'fixed top-14 inset-x-3 sm:inset-x-auto sm:absolute sm:top-full sm:right-0 sm:mt-2 sm:w-96 sm:max-w-sm rounded-2xl border border-slate-700/80 bg-[#060913] shadow-2xl shadow-black backdrop-blur-2xl z-50 overflow-hidden flex flex-col max-h-[calc(100dvh-5.5rem)] animate-in fade-in slide-in-from-top-2 duration-150'
+              : 'absolute bottom-full left-0 mb-2 w-80 sm:w-96 rounded-2xl border border-slate-700/80 bg-[#060913] shadow-2xl shadow-black backdrop-blur-2xl lg:bottom-0 lg:left-full lg:top-auto lg:mb-0 lg:ml-2 z-[60] overflow-hidden flex flex-col max-h-[calc(100vh-6rem)] animate-in fade-in duration-150'
+          }`}
+          style={{ backgroundColor: '#060913' }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 bg-slate-950/60 shrink-0">
+          <div className="flex items-center justify-between border-b border-slate-800/80 px-4 py-3 bg-[#03060c] shrink-0">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold text-white">Notifications</h3>
               {unreadCount > 0 && (
@@ -324,7 +325,7 @@ export default function NotificationBell({
               <button
                 type="button"
                 onClick={handleEnablePush}
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white"
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800/80 hover:text-white"
                 title="Enable / Refresh Push Permission"
               >
                 <Volume2 size={14} />
@@ -334,7 +335,7 @@ export default function NotificationBell({
                 <button
                   type="button"
                   onClick={markAllAsRead}
-                  className="flex h-7 items-center gap-1 rounded-lg px-2 text-xs text-slate-400 transition hover:bg-slate-800 hover:text-white"
+                  className="flex h-7 items-center gap-1 rounded-lg px-2 text-xs text-slate-400 transition hover:bg-slate-800/80 hover:text-white"
                   title="Mark all as read"
                 >
                   <CheckCheck size={14} />
@@ -356,7 +357,7 @@ export default function NotificationBell({
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white ml-0.5"
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800/80 hover:text-white ml-0.5"
                 title="Close notifications"
               >
                 <X size={14} />
@@ -365,7 +366,7 @@ export default function NotificationBell({
           </div>
 
           {/* Notification Items List */}
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60 overscroll-contain">
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60 overscroll-contain bg-[#060913]">
             {loading && notifications.length === 0 ? (
               <div className="flex items-center justify-center py-10 text-xs text-slate-500">
                 Loading updates...
@@ -389,12 +390,12 @@ export default function NotificationBell({
                       router.push(item.action_url);
                     }
                   }}
-                  className={`group flex items-start gap-3 p-3.5 text-left transition-colors cursor-pointer hover:bg-slate-800/60 ${
-                    !item.is_read ? 'bg-blue-500/[0.06]' : ''
+                  className={`group flex items-start gap-3 p-3.5 text-left transition-colors cursor-pointer hover:bg-slate-800/70 ${
+                    !item.is_read ? 'bg-blue-600/[0.08]' : 'bg-[#060913]'
                   }`}
                 >
                   {/* Category Indicator Icon */}
-                  <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-slate-800/80 border border-slate-700/50">
+                  <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-slate-900 border border-slate-800">
                     {renderTypeIcon(item.type)}
                   </div>
 
