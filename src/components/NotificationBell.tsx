@@ -290,10 +290,12 @@ export default function NotificationBell({
         )}
       </button>
 
-      {/* Mobile backdrop for outside tap */}
-      {open && placement === 'top' && (
+      {/* Backdrop for outside tap/click */}
+      {open && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px] sm:hidden"
+          className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] ${
+            placement === 'top' ? 'sm:hidden' : 'lg:hidden'
+          }`}
           onClick={() => setOpen(false)}
         />
       )}
@@ -304,7 +306,7 @@ export default function NotificationBell({
           className={
             placement === 'top'
               ? 'fixed top-14 inset-x-3 sm:inset-x-auto sm:absolute sm:top-full sm:right-0 sm:mt-2 sm:w-96 sm:max-w-sm rounded-2xl border border-slate-700/80 bg-slate-900/95 shadow-2xl shadow-black/90 backdrop-blur-xl z-50 overflow-hidden flex flex-col max-h-[calc(100dvh-5.5rem)] animate-in fade-in slide-in-from-top-2 duration-150'
-              : 'absolute bottom-full left-0 mb-2 w-80 sm:w-96 rounded-2xl border border-slate-700/80 bg-slate-900/95 shadow-2xl shadow-black/60 backdrop-blur-xl lg:bottom-0 lg:left-full lg:top-auto lg:mb-0 lg:ml-2 z-50 overflow-hidden flex flex-col max-h-[80vh] animate-in fade-in duration-150'
+              : 'absolute bottom-full left-0 mb-2 w-80 sm:w-96 rounded-2xl border border-slate-700/80 bg-slate-900/95 shadow-2xl shadow-black/80 backdrop-blur-xl lg:bottom-0 lg:left-full lg:top-auto lg:mb-0 lg:ml-2 z-[60] overflow-hidden flex flex-col max-h-[calc(100vh-6rem)] animate-in fade-in duration-150'
           }
         >
           {/* Header */}
