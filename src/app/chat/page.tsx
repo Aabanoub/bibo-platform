@@ -509,7 +509,7 @@ export default function ChatPage() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type or speak a message (e.g. 'Add task to review finances')..."
+            placeholder="Type or speak a message..."
             rows={1}
             className="max-h-32 min-h-[44px] flex-1 resize-none rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 outline-none transition focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
             disabled={loading}
