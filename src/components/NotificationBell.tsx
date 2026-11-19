@@ -290,17 +290,25 @@ export default function NotificationBell({
         )}
       </button>
 
+      {/* Mobile backdrop for outside tap */}
+      {open && placement === 'top' && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px] sm:hidden"
+          onClick={() => setOpen(false)}
+        />
+      )}
+
       {/* Dropdown Notification Center */}
       {open && (
         <div
           className={
             placement === 'top'
-              ? 'absolute top-full right-0 mt-2 w-[calc(100vw-1.5rem)] sm:w-96 max-w-sm rounded-2xl border border-slate-700/80 bg-slate-900/95 shadow-2xl shadow-black/80 backdrop-blur-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150'
-              : 'absolute bottom-full left-0 mb-2 w-80 sm:w-96 rounded-2xl border border-slate-700/80 bg-slate-900/95 shadow-2xl shadow-black/60 backdrop-blur-xl lg:bottom-0 lg:left-full lg:top-auto lg:mb-0 lg:ml-2 z-50 overflow-hidden animate-in fade-in duration-150'
+              ? 'fixed top-14 inset-x-3 sm:inset-x-auto sm:absolute sm:top-full sm:right-0 sm:mt-2 sm:w-96 sm:max-w-sm rounded-2xl border border-slate-700/80 bg-slate-900/95 shadow-2xl shadow-black/90 backdrop-blur-xl z-50 overflow-hidden flex flex-col max-h-[calc(100dvh-5.5rem)] animate-in fade-in slide-in-from-top-2 duration-150'
+              : 'absolute bottom-full left-0 mb-2 w-80 sm:w-96 rounded-2xl border border-slate-700/80 bg-slate-900/95 shadow-2xl shadow-black/60 backdrop-blur-xl lg:bottom-0 lg:left-full lg:top-auto lg:mb-0 lg:ml-2 z-50 overflow-hidden flex flex-col max-h-[80vh] animate-in fade-in duration-150'
           }
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 bg-slate-950/60">
+          <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 bg-slate-950/60 shrink-0">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold text-white">Notifications</h3>
               {unreadCount > 0 && (
@@ -355,7 +363,7 @@ export default function NotificationBell({
           </div>
 
           {/* Notification Items List */}
-          <div className="max-h-96 overflow-y-auto divide-y divide-slate-800/60">
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60 overscroll-contain">
             {loading && notifications.length === 0 ? (
               <div className="flex items-center justify-center py-10 text-xs text-slate-500">
                 Loading updates...
