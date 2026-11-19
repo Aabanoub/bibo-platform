@@ -9,23 +9,12 @@ import {
   Trash2,
   Bot,
   User,
-  ChevronDown,
   Sparkles,
-  Code2,
-  Lightbulb,
-  Target,
   CheckCircle2,
 } from 'lucide-react';
 import VoiceRecorderButton from '@/components/VoiceRecorderButton';
 
-const PERSONAS = [
-  { id: 'executive-assistant', label: 'Executive Assistant', icon: Sparkles },
-  { id: 'code-reviewer', label: 'Code Reviewer', icon: Code2 },
-  { id: 'creative-brainstormer', label: 'Creative Brainstormer', icon: Lightbulb },
-  { id: 'accountability-coach', label: 'Accountability Coach', icon: Target },
-] as const;
-
-type Persona = (typeof PERSONAS)[number]['id'];
+type Persona = 'executive-assistant' | 'code-reviewer' | 'creative-brainstormer' | 'accountability-coach';
 
 // ---------------------------------------------------------------------------
 // Minimal markdown renderer – handles bold, inline code, fenced code blocks,
@@ -185,24 +174,11 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [persona, setPersona] = useState<Persona>('executive-assistant');
-  const [personaOpen, setPersonaOpen] = useState(false);
+  const [persona] = useState<Persona>('executive-assistant');
   const [initialLoading, setInitialLoading] = useState(true);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Close persona dropdown on outside click
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setPersonaOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   // Auto-scroll on new messages / loading change
   useEffect(() => {
@@ -404,9 +380,6 @@ export default function ChatPage() {
     }
   };
 
-  const activePersona = PERSONAS.find((p) => p.id === persona) ?? PERSONAS[0];
-  const ActiveIcon = activePersona.icon;
-
   // ------ render ------
 
   return (
@@ -417,55 +390,20 @@ export default function ChatPage() {
           <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-sm">
             <Bot size={18} />
           </div>
-          <h1 className="text-base sm:text-lg font-semibold tracking-tight">AI Chat</h1>
+          <div>
+            <h1 className="text-base sm:text-lg font-semibold tracking-tight">AI Chat</h1>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Persona selector */}
-          <div className="relative" ref={dropdownRef}>
-            <button
-              onClick={() => setPersonaOpen((v) => !v)}
-              className="flex items-center gap-1.5 sm:gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs sm:text-sm transition hover:border-zinc-600 hover:bg-zinc-800"
-            >
-              <ActiveIcon size={14} className="text-blue-400" />
-              <span className="inline">{activePersona.label}</span>
-              <ChevronDown
-                size={14}
-                className={`text-zinc-400 transition-transform ${personaOpen ? 'rotate-180' : ''}`}
-              />
-            </button>
-
-            {personaOpen && (
-              <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl z-30">
-                {PERSONAS.map((p) => {
-                  const Icon = p.icon;
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => {
-                        setPersona(p.id);
-                        setPersonaOpen(false);
-                      }}
-                      className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition hover:bg-zinc-800 ${
-                        persona === p.id ? 'bg-zinc-800 text-blue-400' : 'text-zinc-300'
-                      }`}
-                    >
-                      <Icon size={16} />
-                      {p.label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
           {/* Clear chat */}
           <button
             onClick={handleClearChat}
             title="Clear chat"
-            className="rounded-lg p-2 text-zinc-400 transition hover:bg-zinc-800 hover:text-red-400"
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/80 px-2.5 py-1.5 text-xs text-zinc-400 transition hover:bg-zinc-800 hover:text-red-400 hover:border-zinc-700"
           >
-            <Trash2 size={16} />
+            <Trash2 size={14} />
+            <span className="hidden sm:inline">Clear Chat</span>
           </button>
         </div>
       </header>
@@ -486,7 +424,7 @@ export default function ChatPage() {
                 Start a conversation
               </p>
               <p className="max-w-sm text-sm">
-                Select a persona and type a message below to chat with your AI assistant.
+                Type a message below to chat with your personal AI assistant.
               </p>
             </div>
           ) : (
