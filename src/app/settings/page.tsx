@@ -516,10 +516,7 @@ export default function SettingsPage() {
             {/* Collapsible Content */}
             {openSections.nav && (
               <div className="px-5 sm:px-6 pb-6 pt-2 space-y-5 border-t border-zinc-800/80 animate-fade-in">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs text-zinc-400 leading-relaxed max-w-xl">
-                    Personalize the 4 shortcuts on your mobile navigation bar. The <strong>Home</strong> button is elevated and permanently anchored in the center for quick one-thumb reachability.
-                  </p>
+                <div className="flex items-center justify-end">
                   <button
                     type="button"
                     onClick={resetSlots}
