@@ -210,7 +210,7 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [folders, setFolders] = useState<TaskFolder[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
-  const [showFoldersSection, setShowFoldersSection] = useState(true);
+  const [showFoldersSection, setShowFoldersSection] = useState(false);
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [editingFolder, setEditingFolder] = useState<TaskFolder | null>(null);
   const [deletingFolder, setDeletingFolder] = useState<TaskFolder | null>(null);
@@ -1104,9 +1104,12 @@ export default function TasksPage() {
 
       {/* ── FOLDERS & EXAMS SECTION ── */}
       <div className="mb-5 bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 shadow-sm backdrop-blur-sm">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-400">
+        <div className={`flex items-center justify-between ${showFoldersSection ? 'mb-3' : ''}`}>
+          <div
+            onClick={() => setShowFoldersSection(!showFoldersSection)}
+            className="flex items-center gap-2.5 cursor-pointer select-none group"
+          >
+            <div className="p-1.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-400 group-hover:bg-blue-500/25 transition-colors">
               <Folder className="w-4 h-4" />
             </div>
             <div>
@@ -1116,9 +1119,6 @@ export default function TasksPage() {
                   {folders.length}
                 </span>
               </h2>
-              <p className="text-[11px] text-slate-400">
-                Group lessons & tasks for your exams with dedicated countdowns and progress tracking.
-              </p>
             </div>
           </div>
 
