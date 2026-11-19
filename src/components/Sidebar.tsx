@@ -185,7 +185,7 @@ export default function Sidebar() {
 
       {/* Notification bell (above user section) */}
       <div className={`px-3 pb-2 ${collapsed ? 'flex justify-center' : ''}`}>
-        <NotificationBell collapsed={collapsed} />
+        <NotificationBell collapsed={collapsed} placement="sidebar" />
       </div>
 
       {/* User Section */}
@@ -243,7 +243,7 @@ export default function Sidebar() {
   return (
     <>
       {/* Mobile top header bar */}
-      <header className="lg:hidden h-14 bg-slate-900/95 border-b border-slate-800 backdrop-blur-md px-3 sm:px-4 flex items-center justify-between shrink-0 z-30 sticky top-0 w-full">
+      <header className="lg:hidden h-14 bg-slate-900/95 border-b border-slate-800 backdrop-blur-md px-3 sm:px-4 flex items-center justify-between shrink-0 z-40 sticky top-0 w-full">
         <div className="flex items-center gap-2.5">
           <button
             onClick={() => setMobileOpen(true)}
@@ -269,7 +269,7 @@ export default function Sidebar() {
         </div>
 
         <div className="flex items-center gap-1.5">
-          <NotificationBell collapsed={true} />
+          <NotificationBell collapsed={true} placement="top" />
           <Link
             href="/settings"
             className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800/80 text-slate-400 hover:bg-slate-800 hover:text-white transition active:scale-95"

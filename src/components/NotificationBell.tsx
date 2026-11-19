@@ -21,9 +21,13 @@ import type { Notification } from '@/types';
 
 interface NotificationBellProps {
   collapsed?: boolean;
+  placement?: 'top' | 'sidebar' | 'auto';
 }
 
-export default function NotificationBell({ collapsed = false }: NotificationBellProps) {
+export default function NotificationBell({
+  collapsed = false,
+  placement = 'sidebar',
+}: NotificationBellProps) {
   const router = useRouter();
   const supabase = createClient();
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -146,13 +150,17 @@ export default function NotificationBell({ collapsed = false }: NotificationBell
 
   // Close dropdown on outside click
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
+    function handleClickOutside(e: MouseEvent | TouchEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, []);
 
   async function markAsRead(notificationId: string) {
@@ -253,17 +261,30 @@ export default function NotificationBell({ collapsed = false }: NotificationBell
       {/* Bell Button */}
       <button
         type="button"
-        onClick={() => setOpen(!open)}
-        className={`relative flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 transition-all duration-150 hover:bg-slate-800 hover:text-slate-200 ${
-          collapsed ? 'justify-center px-2.5' : 'w-full'
+        onClick={() => {
+          if (!open) {
+            fetchNotifications();
+          }
+          setOpen(!open);
+        }}
+        className={`relative flex items-center transition-all duration-150 text-slate-400 hover:text-slate-200 active:scale-95 ${
+          collapsed
+            ? 'h-9 w-9 justify-center rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white border border-slate-700/50 shadow-sm'
+            : 'w-full gap-2 px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-800'
         }`}
         title="Notifications"
         aria-label="View notifications"
       >
-        <Bell size={20} className="flex-shrink-0" />
+        <Bell size={collapsed ? 18 : 20} className="flex-shrink-0" />
         {!collapsed && <span>Notifications</span>}
         {unreadCount > 0 && (
-          <span className="absolute right-2 top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-lg shadow-red-500/30 animate-pulse">
+          <span
+            className={`absolute flex items-center justify-center rounded-full bg-red-500 font-bold text-white shadow-lg shadow-red-500/40 animate-pulse ${
+              collapsed
+                ? '-top-1 -right-1 h-4 min-w-[16px] px-1 text-[9px]'
+                : 'right-2 top-2.5 h-5 min-w-[20px] px-1 text-[10px]'
+            }`}
+          >
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
@@ -271,7 +292,13 @@ export default function NotificationBell({ collapsed = false }: NotificationBell
 
       {/* Dropdown Notification Center */}
       {open && (
-        <div className="absolute bottom-full left-0 mb-2 w-80 sm:w-96 animate-scale-in rounded-2xl border border-slate-700/80 bg-slate-900/95 shadow-2xl shadow-black/60 backdrop-blur-xl lg:bottom-auto lg:left-full lg:top-0 lg:mb-0 lg:ml-2 z-50 overflow-hidden">
+        <div
+          className={
+            placement === 'top'
+              ? 'absolute top-full right-0 mt-2 w-[calc(100vw-1.5rem)] sm:w-96 max-w-sm rounded-2xl border border-slate-700/80 bg-slate-900/95 shadow-2xl shadow-black/80 backdrop-blur-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150'
+              : 'absolute bottom-full left-0 mb-2 w-80 sm:w-96 rounded-2xl border border-slate-700/80 bg-slate-900/95 shadow-2xl shadow-black/60 backdrop-blur-xl lg:bottom-0 lg:left-full lg:top-auto lg:mb-0 lg:ml-2 z-50 overflow-hidden animate-in fade-in duration-150'
+          }
+        >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 bg-slate-950/60">
             <div className="flex items-center gap-2">
@@ -315,6 +342,15 @@ export default function NotificationBell({ collapsed = false }: NotificationBell
                   <Trash2 size={13} />
                 </button>
               )}
+
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white ml-0.5"
+                title="Close notifications"
+              >
+                <X size={14} />
+              </button>
             </div>
           </div>
 
