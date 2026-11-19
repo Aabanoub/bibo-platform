@@ -41,9 +41,23 @@ export interface Note {
   updated_at: string;
 }
 
+export interface TaskFolder {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  due_date: string | null;
+  color: string;
+  icon: string;
+  is_archived: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Task {
   id: string;
   user_id: string;
+  folder_id?: string | null;
   title: string;
   description: string | null;
   priority: TaskPriority;

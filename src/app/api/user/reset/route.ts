@@ -124,6 +124,7 @@ export async function POST(req: NextRequest) {
         'habit_logs',
         'habits',
         'tasks',
+        'task_folders',
         'transactions',
         'notes',
         'chat_messages',

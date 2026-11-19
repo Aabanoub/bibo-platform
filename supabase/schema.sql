@@ -68,10 +68,25 @@ CREATE TABLE IF NOT EXISTS notes (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- 3.2.5 task_folders
+CREATE TABLE IF NOT EXISTS task_folders (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id     UUID NOT NULL DEFAULT auth.uid() REFERENCES auth.users (id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    description TEXT,
+    due_date    TIMESTAMPTZ,
+    color       TEXT NOT NULL DEFAULT 'blue',
+    icon        TEXT NOT NULL DEFAULT 'folder',
+    is_archived BOOLEAN NOT NULL DEFAULT false,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- 3.3  tasks
 CREATE TABLE IF NOT EXISTS tasks (
     id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id     UUID NOT NULL DEFAULT auth.uid() REFERENCES auth.users (id) ON DELETE CASCADE,
+    folder_id   UUID REFERENCES task_folders (id) ON DELETE SET NULL,
     title       TEXT NOT NULL,
     description TEXT,
     priority    task_priority NOT NULL DEFAULT 'medium',
