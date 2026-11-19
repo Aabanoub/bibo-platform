@@ -16,6 +16,7 @@ import {
   ArrowRight,
   ShieldCheck,
   RefreshCw,
+  Info,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import {
@@ -77,6 +78,7 @@ export default function SalaryPlanModal({
   const [planId, setPlanId] = useState<string | null>(null);
 
   // Configuration Fields
+  const [showMyMoneyInfo, setShowMyMoneyInfo] = useState<boolean>(false);
   const [salaryAmount, setSalaryAmount] = useState<number | ''>('');
   const [currency, setCurrency] = useState<string>('EGP');
   const [frequency, setFrequency] = useState<SalaryFrequency>('monthly');
@@ -659,101 +661,144 @@ export default function SalaryPlanModal({
                   {allocations.map((cat) => {
                     const calculated = calculatedItems.find((c) => c.id === cat.id);
                     const allocatedAmount = calculated?.allocated_amount || 0;
+                    const isMyMoney = Boolean(
+                      cat.is_static ||
+                        cat.id === 'my_money' ||
+                        cat.name?.toLowerCase().trim() === 'my money'
+                    );
 
                     return (
                       <div
                         key={cat.id}
-                        className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 p-2.5 rounded-2xl bg-slate-950/40 border border-slate-800/80 hover:border-slate-700/80 transition-colors"
+                        className="p-2.5 rounded-2xl bg-slate-950/40 border border-slate-800/80 hover:border-slate-700/80 transition-colors"
                       >
-                        {/* Emoji Picker / Select */}
-                        <div className="relative">
-                          <select
-                            value={cat.emoji}
-                            onChange={(e) => handleEmojiChange(cat.id, e.target.value)}
-                            className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-700 text-lg flex items-center justify-center text-center cursor-pointer outline-none appearance-none"
-                            title="Change category emoji"
-                          >
-                            {PRESET_EMOJIS.map((em) => (
-                              <option key={em} value={em}>
-                                {em}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Category Name Input */}
-                        <div className="flex-1 min-w-[140px] flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={cat.name}
-                            onChange={(e) => handleNameChange(cat.id, e.target.value)}
-                            placeholder="Category name..."
-                            className="w-full bg-slate-900/80 border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-white font-medium outline-none focus:border-emerald-500"
-                          />
-                          {(cat.is_static || cat.id === 'my_money') && (
-                            <span
-                              className="shrink-0 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                              title="Mandatory static category automatically included in all salary plans"
+                        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5">
+                          {/* Emoji Picker / Select */}
+                          <div className="relative">
+                            <select
+                              value={cat.emoji}
+                              onChange={(e) => handleEmojiChange(cat.id, e.target.value)}
+                              className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-700 text-lg flex items-center justify-center text-center cursor-pointer outline-none appearance-none"
+                              title="Change category emoji"
                             >
-                              Static
-                            </span>
-                          )}
-                        </div>
+                              {PRESET_EMOJIS.map((em) => (
+                                <option key={em} value={em}>
+                                  {em}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
 
-                        {/* Percentage Controls */}
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handlePercentageChange(cat.id, Math.max(0, cat.percentage - 5))
-                            }
-                            className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-bold"
-                          >
-                            -5
-                          </button>
-                          <div className="relative w-16">
+                          {/* Category Name Input */}
+                          <div className="flex-1 min-w-[140px] flex items-center gap-2">
                             <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              value={cat.percentage}
-                              onChange={(e) =>
-                                handlePercentageChange(cat.id, Number(e.target.value))
-                              }
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-center text-white font-bold outline-none focus:border-emerald-500 pr-5"
+                              type="text"
+                              value={cat.name}
+                              onChange={(e) => handleNameChange(cat.id, e.target.value)}
+                              placeholder="Category name..."
+                              className="w-full bg-slate-900/80 border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-white font-medium outline-none focus:border-emerald-500"
                             />
-                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 text-[10px] pointer-events-none">
-                              %
+                            {isMyMoney && (
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span
+                                  className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                  title="Mandatory static category automatically included in all salary plans"
+                                >
+                                  Static
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowMyMoneyInfo((prev) => !prev)}
+                                  className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] ${
+                                    showMyMoneyInfo
+                                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-bold shadow-sm shadow-emerald-500/30'
+                                      : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25 hover:text-emerald-300'
+                                  }`}
+                                  title="This amount will be added automatically after you get the salary"
+                                  aria-label="Information about My Money"
+                                >
+                                  <Info className="w-3.5 h-3.5" />
+                                  <span className="hidden xs:inline text-[9px] font-semibold">Info</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Percentage Controls */}
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handlePercentageChange(cat.id, Math.max(0, cat.percentage - 5))
+                              }
+                              className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-bold"
+                            >
+                              -5
+                            </button>
+                            <div className="relative w-16">
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                value={cat.percentage}
+                                onChange={(e) =>
+                                  handlePercentageChange(cat.id, Number(e.target.value))
+                                }
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-center text-white font-bold outline-none focus:border-emerald-500 pr-5"
+                              />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 text-[10px] pointer-events-none">
+                                %
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handlePercentageChange(cat.id, Math.min(100, cat.percentage + 5))
+                              }
+                              className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-bold"
+                            >
+                              +5
+                            </button>
+                          </div>
+
+                          {/* Amount Preview */}
+                          <div className="w-24 text-right">
+                            <span className="text-xs font-bold text-emerald-400">
+                              {formatCurrency(allocatedAmount, currency)}
                             </span>
                           </div>
+
+                          {/* Delete Button */}
                           <button
                             type="button"
-                            onClick={() =>
-                              handlePercentageChange(cat.id, Math.min(100, cat.percentage + 5))
-                            }
-                            className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-bold"
+                            disabled={Boolean(cat.is_static || cat.id === 'my_money' || allocations.length <= 1)}
+                            onClick={() => handleRemoveCategory(cat.id)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors disabled:opacity-20 disabled:hover:bg-transparent"
+                            title={cat.is_static || cat.id === 'my_money' ? "Static category (cannot be removed)" : "Remove category"}
                           >
-                            +5
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
 
-                        {/* Amount Preview */}
-                        <div className="w-24 text-right">
-                          <span className="text-xs font-bold text-emerald-400">
-                            {formatCurrency(allocatedAmount, currency)}
-                          </span>
-                        </div>
-
-                        {/* Delete Button */}
-                        <button
-                          type="button"
-                          disabled={Boolean(cat.is_static || cat.id === 'my_money' || allocations.length <= 1)}
-                          onClick={() => handleRemoveCategory(cat.id)}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors disabled:opacity-20 disabled:hover:bg-transparent"
-                          title={cat.is_static || cat.id === 'my_money' ? "Static category (cannot be removed)" : "Remove category"}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {/* Expandable Info Note */}
+                        {isMyMoney && showMyMoneyInfo && (
+                          <div className="mt-2.5 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center justify-between gap-2 animate-in fade-in slide-in-from-top-1 duration-150">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Info className="w-4 h-4 text-emerald-400 shrink-0" />
+                              <span className="font-medium text-[11px] sm:text-xs leading-tight">
+                                This amount will be added automatically after you get the salary.
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setShowMyMoneyInfo(false)}
+                              className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors shrink-0"
+                              title="Dismiss info"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

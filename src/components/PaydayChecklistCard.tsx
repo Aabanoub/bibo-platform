@@ -350,6 +350,14 @@ export default function PaydayChecklistCard({
                         >
                           {item.name}
                         </span>
+                        {(item.id === 'my_money' || item.name?.toLowerCase().trim() === 'my money') && (
+                          <span
+                            className="text-[9px] px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold shrink-0"
+                            title="This amount will be added automatically after you get the salary"
+                          >
+                            Auto-Deposit
+                          </span>
+                        )}
                       </div>
                       <span className="text-[10px] text-slate-500 font-medium">
                         {item.percentage}% Allocation
