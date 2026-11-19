@@ -49,6 +49,8 @@ export default function MobileBottomNav() {
                       ? 'bg-gradient-to-tr from-purple-600 to-pink-500 text-white shadow-purple-500/35 scale-105'
                       : theme === 'rose-aura'
                       ? 'bg-gradient-to-tr from-rose-600 to-orange-400 text-white shadow-rose-500/35 scale-105'
+                      : theme === 'ios-glass'
+                      ? 'bg-gradient-to-tr from-[#0A84FF] via-[#5E5CE6] to-[#64D2FF] text-white shadow-blue-500/40 scale-105'
                       : 'bg-gradient-to-tr from-blue-600 to-cyan-500 text-white shadow-blue-500/35 scale-105'
                     : isGirly
                     ? 'bg-slate-800 text-pink-300 hover:bg-slate-700'

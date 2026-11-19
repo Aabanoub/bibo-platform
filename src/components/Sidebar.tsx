@@ -125,6 +125,8 @@ export default function Sidebar() {
                   ? 'from-purple-400 via-fuchsia-300 to-pink-400'
                   : theme === 'rose-aura'
                   ? 'from-rose-400 via-pink-300 to-amber-200'
+                  : theme === 'ios-glass'
+                  ? 'from-sky-400 via-blue-400 to-indigo-300'
                   : 'from-blue-400 via-cyan-300 to-indigo-400'
               }`}
             >

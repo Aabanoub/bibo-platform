@@ -427,7 +427,7 @@ export default function SettingsPage() {
                           )}
                         </div>
                         <div className="text-xs text-blue-300/80 mt-0.5">
-                          Cool & technological: Midnight Pulse & Forest Gravity
+                          iPhone Glass UI, Midnight Pulse & Forest Gravity
                         </div>
                       </div>
                     </button>
@@ -438,7 +438,7 @@ export default function SettingsPage() {
                 <div className="space-y-3 pt-2">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-                      Step 2: Choose Your Theme ({gender === 'female' ? 'Girl Palettes' : 'Boy Palettes'})
+                      Step 2: Choose Your Theme ({gender === 'female' ? 'Girl Palettes' : 'Boy & Glass Palettes'})
                     </span>
                     <span className="text-[10px] text-zinc-500">
                       Tap card to apply instantly
@@ -446,10 +446,10 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Render the 2 themes corresponding to selected gender */}
+                    {/* Render the themes corresponding to selected gender */}
                     {(gender === 'female'
-                      ? (['violet-dream', 'rose-aura'] as ThemeId[])
-                      : (['midnight-pulse', 'forest-gravity'] as ThemeId[])
+                      ? (['violet-dream', 'rose-aura', 'ios-glass'] as ThemeId[])
+                      : (['ios-glass', 'midnight-pulse', 'forest-gravity'] as ThemeId[])
                     ).map((tId) => {
                       const cfg = THEMES[tId];
                       const isSelected = theme === tId;

@@ -76,6 +76,20 @@ const THEME_SPLASH_MAP: Record<ThemeId, ThemeSplashConfig> = {
     arrowGlow: 'text-rose-400 shadow-rose-400/50',
     satelliteColor: '#fb9a8d',
   },
+  'ios-glass': {
+    bg: '#070B16',
+    glowPrimary: 'rgba(10, 132, 255, 0.32)',
+    glowSecondary: 'rgba(94, 92, 230, 0.28)',
+    accentGradient: 'from-[#0A84FF] via-[#5E5CE6] to-[#64D2FF]',
+    logoBorder: 'border-white/30',
+    logoShadow: 'shadow-blue-500/35',
+    orbitStops: { stop1: '#0A84FF', stop2: '#5E5CE6', stop3: '#64D2FF' },
+    textGradient: 'from-sky-300 via-blue-200 to-white',
+    taglineColor: 'text-sky-300/85',
+    beamGradient: 'from-transparent via-sky-400/80 to-transparent',
+    arrowGlow: 'text-sky-400 shadow-sky-400/50',
+    satelliteColor: '#64D2FF',
+  },
 };
 
 export default function AppSplashLoader() {

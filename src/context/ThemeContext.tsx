@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
 
-export type ThemeId = 'midnight-pulse' | 'forest-gravity' | 'violet-dream' | 'rose-aura';
+export type ThemeId = 'midnight-pulse' | 'forest-gravity' | 'violet-dream' | 'rose-aura' | 'ios-glass';
 export type GenderCategory = 'male' | 'female';
 export type GenderTheme = 'female' | 'male' | 'default';
 
@@ -111,6 +111,26 @@ export const THEMES: Record<ThemeId, ThemeConfig> = {
     badgeText: 'text-rose-300',
     borderColor: 'border-rose-500/40',
   },
+  'ios-glass': {
+    id: 'ios-glass',
+    name: 'iPhone Glass UI',
+    category: 'male',
+    categoryLabel: '💎 Liquid Glass',
+    subtitle: 'Apple frosted glass, specular highlights & dynamic glow',
+    style: 'iOS Translucent Glass & Liquid Blue',
+    colors: {
+      background: '#070b16',
+      secondaryBg: 'rgba(255, 255, 255, 0.08)',
+      primaryAccent: '#0A84FF',
+      secondaryAccent: '#5E5CE6',
+      text: '#F5F5F7',
+    },
+    gradient: 'from-[#070b16] via-[#0d1629] to-[#121f3a]',
+    accentGradient: 'from-[#0A84FF] via-[#5E5CE6] to-[#64D2FF]',
+    badgeBg: 'bg-blue-500/25',
+    badgeText: 'text-sky-300',
+    borderColor: 'border-white/20',
+  },
 };
 
 interface ThemeContextType {
@@ -125,14 +145,14 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType>({
   gender: 'default',
   setGender: async () => {},
-  theme: 'midnight-pulse',
+  theme: 'ios-glass',
   setTheme: async () => {},
   isGirly: false,
-  activeThemeConfig: THEMES['midnight-pulse'],
+  activeThemeConfig: THEMES['ios-glass'],
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeId>('midnight-pulse');
+  const [theme, setThemeState] = useState<ThemeId>('ios-glass');
   const [gender, setGenderState] = useState<GenderTheme>('default');
   const supabase = createClient();
 
@@ -142,16 +162,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const root = document.documentElement;
 
     // Clean any previous theme classes
-    root.classList.remove('theme-midnight', 'theme-forest', 'theme-violet', 'theme-rose', 'theme-female');
+    root.classList.remove('theme-midnight', 'theme-forest', 'theme-violet', 'theme-rose', 'theme-female', 'theme-glass');
 
     const classMap: Record<ThemeId, string> = {
       'midnight-pulse': 'theme-midnight',
       'forest-gravity': 'theme-forest',
       'violet-dream': 'theme-violet',
       'rose-aura': 'theme-rose',
+      'ios-glass': 'theme-glass',
     };
 
-    const targetClass = classMap[targetTheme] || 'theme-midnight';
+    const targetClass = classMap[targetTheme] || 'theme-glass';
     root.classList.add(targetClass);
     root.setAttribute('data-theme', targetTheme);
 
@@ -163,22 +184,28 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    // 1. Initial quick check from localStorage (instant, zero delay)
+    // 1. Initial check from localStorage with iOS Glass trial activation
     if (typeof window !== 'undefined') {
       const storedTheme = localStorage.getItem('bibo_user_theme') as ThemeId;
       const storedGender = localStorage.getItem('bibo_user_gender') as GenderTheme;
+      const glassTrialActivated = localStorage.getItem('bibo_glass_trial_v1');
 
-      let resolvedTheme: ThemeId = 'midnight-pulse';
+      let resolvedTheme: ThemeId = 'ios-glass';
       let resolvedGender: GenderTheme = storedGender || 'default';
 
-      if (storedTheme && THEMES[storedTheme]) {
+      if (!glassTrialActivated) {
+        // Automatically activate iPhone Glass UI trial as requested
+        resolvedTheme = 'ios-glass';
+        localStorage.setItem('bibo_glass_trial_v1', 'true');
+        localStorage.setItem('bibo_user_theme', 'ios-glass');
+      } else if (storedTheme && THEMES[storedTheme]) {
         resolvedTheme = storedTheme;
         resolvedGender = THEMES[storedTheme].category;
       } else if (storedGender === 'female') {
         resolvedTheme = 'rose-aura';
         resolvedGender = 'female';
       } else if (storedGender === 'male') {
-        resolvedTheme = 'midnight-pulse';
+        resolvedTheme = 'ios-glass';
         resolvedGender = 'male';
       }
 
@@ -207,7 +234,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           } else if (userGender === 'female') {
             resolvedTheme = 'rose-aura';
           } else if (userGender === 'male') {
-            resolvedTheme = 'midnight-pulse';
+            resolvedTheme = 'ios-glass';
           }
 
           setThemeState(resolvedTheme);
@@ -231,7 +258,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         const userTheme = session.user.user_metadata?.theme as ThemeId;
         const userGender = (session.user.user_metadata?.gender || 'default') as GenderTheme;
 
-        let resolvedTheme: ThemeId = 'midnight-pulse';
+        let resolvedTheme: ThemeId = 'ios-glass';
         let resolvedGender: GenderTheme = userGender;
 
         if (userTheme && THEMES[userTheme]) {
@@ -239,6 +266,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           resolvedGender = THEMES[userTheme].category;
         } else if (userGender === 'female') {
           resolvedTheme = 'rose-aura';
+        } else if (userGender === 'male') {
+          resolvedTheme = 'ios-glass';
         }
 
         setThemeState(resolvedTheme);
@@ -300,12 +329,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setGenderState(newGender);
 
     let targetTheme: ThemeId = theme;
-    if (newGender === 'female' && (theme === 'midnight-pulse' || theme === 'forest-gravity')) {
+    if (newGender === 'female' && (theme === 'midnight-pulse' || theme === 'forest-gravity' || theme === 'ios-glass')) {
       targetTheme = 'rose-aura';
       setThemeState('rose-aura');
     } else if ((newGender === 'male' || newGender === 'default') && (theme === 'violet-dream' || theme === 'rose-aura')) {
-      targetTheme = 'midnight-pulse';
-      setThemeState('midnight-pulse');
+      targetTheme = 'ios-glass';
+      setThemeState('ios-glass');
     }
 
     if (typeof window !== 'undefined') {
