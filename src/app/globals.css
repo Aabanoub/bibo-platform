@@ -907,8 +907,9 @@ html.theme-glass nav.fixed.bottom-0 {
 /* Explicit deep dark styling for notification dropdown across all themes */
 .notification-dropdown {
   background-color: #060913 !important;
-  border-color: rgba(51, 65, 85, 0.7) !important;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(51, 65, 85, 0.8) !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.98), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+  opacity: 1 !important;
 }
 
 @layer utilities {

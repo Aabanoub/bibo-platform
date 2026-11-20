@@ -2,11 +2,14 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
-import type { Task, TaskPriority, TaskStatus, TaskFolder } from '@/types';
+import type { Task, TaskPriority, TaskStatus, TaskFolder, TaskDifficulty, DailyScheduleItem } from '@/types';
 import TaskFolderModal, { FOLDER_COLORS, FOLDER_ICONS } from '@/components/TaskFolderModal';
 import DeleteFolderDialog from '@/components/DeleteFolderDialog';
 import TaskFolderCard, { getFolderCountdown } from '@/components/TaskFolderCard';
 import SmartDistributeModal from '@/components/SmartDistributeModal';
+import DailyPlannerView from '@/components/DailyPlannerView';
+import WeeklyForecastView from '@/components/WeeklyForecastView';
+import type { SchedulingPreferences } from '@/lib/daily-planner';
 import {
   Plus,
   Trash2,
@@ -37,6 +40,7 @@ import {
   BookOpen,
   GraduationCap,
   Layers,
+  BarChart2,
 } from 'lucide-react';
 import {
   requestNotificationPermission,
@@ -225,9 +229,17 @@ export default function TasksPage() {
   const [filterPriority, setFilterPriority] = useState<TaskPriority | ''>('');
   const [showCompletedSection, setShowCompletedSection] = useState(false);
 
+  // Main View Mode (Tasks & Folders vs AI Daily Planner vs Weekly Forecast)
+  const [activeMainTab, setActiveMainTab] = useState<'tasks' | 'planner' | 'forecast'>('tasks');
+  const [plannerDate, setPlannerDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [scheduleItems, setScheduleItems] = useState<DailyScheduleItem[]>([]);
+  const [userProfile, setUserProfile] = useState<any>(null);
+
   // Quick-Add state (Easy UI)
   const [quickTitle, setQuickTitle] = useState('');
   const [quickPriority, setQuickPriority] = useState<TaskPriority>('medium');
+  const [quickDifficulty, setQuickDifficulty] = useState<TaskDifficulty>('medium');
+  const [quickEstimatedDuration, setQuickEstimatedDuration] = useState<number>(30);
   const [quickDueDate, setQuickDueDate] = useState('');
   const [quickReminderAt, setQuickReminderAt] = useState('');
   const [quickFolderId, setQuickFolderId] = useState<string>('');
@@ -240,6 +252,8 @@ export default function TasksPage() {
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editPriority, setEditPriority] = useState<TaskPriority>('medium');
+  const [editDifficulty, setEditDifficulty] = useState<TaskDifficulty>('medium');
+  const [editEstimatedDuration, setEditEstimatedDuration] = useState<number>(30);
   const [editDueDate, setEditDueDate] = useState('');
   const [editReminderAt, setEditReminderAt] = useState('');
   const [editStatus, setEditStatus] = useState<TaskStatus>('todo');
@@ -334,6 +348,146 @@ export default function TasksPage() {
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
+
+  // ---------------------------------------------------------------------------
+  // AI Daily Planner & Weekly Forecast Data Sync
+  // ---------------------------------------------------------------------------
+
+  const fetchScheduleAndProfile = useCallback(async (date: string) => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const [profRes, scheduleRes] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
+        supabase
+          .from('daily_schedule_items')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('date', date)
+          .order('sort_order', { ascending: true }),
+      ]);
+
+      if (profRes.data) {
+        setUserProfile(profRes.data);
+      }
+      if (scheduleRes.data) {
+        setScheduleItems(scheduleRes.data as DailyScheduleItem[]);
+      }
+    } catch (e) {
+      console.error('fetchScheduleAndProfile error:', e);
+    }
+  }, [supabase]);
+
+  useEffect(() => {
+    fetchScheduleAndProfile(plannerDate);
+  }, [fetchScheduleAndProfile, plannerDate]);
+
+  const handleSaveSchedule = async (newItems: DailyScheduleItem[]) => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await supabase
+        .from('daily_schedule_items')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('date', plannerDate);
+
+      if (newItems.length > 0) {
+        const payload = newItems.map((item, idx) => ({
+          user_id: user.id,
+          date: plannerDate,
+          task_id: item.task_id || null,
+          session_type: item.session_type,
+          start_time: item.start_time,
+          end_time: item.end_time,
+          duration_minutes: item.duration_minutes,
+          title: item.title,
+          difficulty: item.difficulty || 'medium',
+          is_locked: Boolean(item.is_locked),
+          is_completed: Boolean(item.is_completed),
+          actual_duration_minutes: item.actual_duration_minutes || 0,
+          sort_order: idx,
+        }));
+
+        const { data: inserted, error: insertErr } = await supabase
+          .from('daily_schedule_items')
+          .insert(payload)
+          .select();
+
+        if (!insertErr && inserted) {
+          setScheduleItems(inserted as DailyScheduleItem[]);
+        }
+      } else {
+        setScheduleItems([]);
+      }
+    } catch (e) {
+      console.error('handleSaveSchedule error:', e);
+    }
+  };
+
+  const handleCompleteTaskFromPlanner = async (taskId: string, completed: boolean) => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await supabase
+        .from('tasks')
+        .update({
+          status: completed ? 'done' : 'todo',
+          completed_at: completed ? new Date().toISOString() : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', taskId)
+        .eq('user_id', user.id);
+
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, status: completed ? 'done' : 'todo' } : t))
+      );
+    } catch (e) {
+      console.error('handleCompleteTaskFromPlanner error:', e);
+    }
+  };
+
+  const handleSavePreferences = async (prefs: SchedulingPreferences) => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await supabase
+        .from('profiles')
+        .update({
+          daily_start_time: prefs.startTime,
+          daily_end_time: prefs.endTime,
+          high_focus_start: prefs.highFocusStart,
+          high_focus_end: prefs.highFocusEnd,
+          preferred_break_duration: prefs.preferredBreakDuration,
+          max_daily_study_minutes: prefs.maxDailyStudyMinutes,
+        })
+        .eq('id', user.id);
+
+      setUserProfile((prev: any) => ({
+        ...prev,
+        daily_start_time: prefs.startTime,
+        daily_end_time: prefs.endTime,
+        high_focus_start: prefs.highFocusStart,
+        high_focus_end: prefs.highFocusEnd,
+        preferred_break_duration: prefs.preferredBreakDuration,
+        max_daily_study_minutes: prefs.maxDailyStudyMinutes,
+      }));
+    } catch (e) {
+      console.error('handleSavePreferences error:', e);
+    }
+  };
 
   // ---------------------------------------------------------------------------
   // Automated 15s Task Reminder Dispatcher
@@ -742,6 +896,8 @@ export default function TasksPage() {
           title,
           description: quickDescription.trim() || null,
           priority: quickPriority,
+          difficulty: quickDifficulty,
+          estimated_duration: Number(quickEstimatedDuration) || 30,
           status: 'todo' as TaskStatus,
           due_date: quickDueDate || null,
           reminder_at: reminderDateISO,
@@ -850,6 +1006,8 @@ export default function TasksPage() {
     setEditTitle(task.title);
     setEditDescription(task.description || '');
     setEditPriority(task.priority);
+    setEditDifficulty(task.difficulty || 'medium');
+    setEditEstimatedDuration(task.estimated_duration || 30);
     setEditDueDate(task.due_date || '');
     setEditStatus(task.status);
     setEditFolderId(task.folder_id || '');
@@ -882,6 +1040,8 @@ export default function TasksPage() {
           description: editDescription.trim() || null,
           priority: editPriority,
           status: editStatus,
+          difficulty: editDifficulty,
+          estimated_duration: Number(editEstimatedDuration) || 30,
           due_date: editDueDate || null,
           reminder_at: reminderDateISO,
           reminder_sent:
@@ -919,6 +1079,8 @@ export default function TasksPage() {
               description: editDescription.trim() || null,
               priority: editPriority,
               status: editStatus,
+              difficulty: editDifficulty,
+              estimated_duration: Number(editEstimatedDuration) || 30,
               due_date: editDueDate || null,
               reminder_at: reminderDateISO,
               reminder_sent:
@@ -1211,7 +1373,84 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* ── FOLDERS & EXAMS SECTION ── */}
+      {/* ── TOP-LEVEL VIEW SWITCHER ── */}
+      <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-900/90 border border-slate-800 mb-5 overflow-x-auto shadow-sm">
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('tasks')}
+          className={`flex-1 min-w-[130px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+            activeMainTab === 'tasks'
+              ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+          }`}
+        >
+          <CheckSquare className="w-4 h-4" />
+          <span>Tasks & Folders</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('planner')}
+          className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+            activeMainTab === 'planner'
+              ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/20'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-purple-300" />
+          <span>AI Daily Planner</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('forecast')}
+          className={`flex-1 min-w-[130px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+            activeMainTab === 'forecast'
+              ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/20'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+          }`}
+        >
+          <BarChart2 className="w-4 h-4 text-emerald-300" />
+          <span>Weekly Forecast</span>
+        </button>
+      </div>
+
+      {activeMainTab === 'planner' && (
+        <DailyPlannerView
+          tasks={tasks}
+          folders={folders}
+          scheduleItems={scheduleItems}
+          currentDate={plannerDate}
+          onDateChange={(d) => setPlannerDate(d)}
+          onSaveSchedule={handleSaveSchedule}
+          onCompleteTask={handleCompleteTaskFromPlanner}
+          userPreferences={{
+            startTime: userProfile?.daily_start_time || '08:00',
+            endTime: userProfile?.daily_end_time || '21:00',
+            highFocusStart: userProfile?.high_focus_start || '09:00',
+            highFocusEnd: userProfile?.high_focus_end || '12:00',
+            preferredBreakDuration: userProfile?.preferred_break_duration || 15,
+            maxDailyStudyMinutes: userProfile?.max_daily_study_minutes || 480,
+          }}
+          onSavePreferences={handleSavePreferences}
+        />
+      )}
+
+      {activeMainTab === 'forecast' && (
+        <WeeklyForecastView
+          tasks={tasks}
+          folders={folders}
+          onSelectDate={(date) => {
+            setPlannerDate(date);
+            setActiveMainTab('planner');
+          }}
+          onNavigateToPlanner={() => setActiveMainTab('planner')}
+        />
+      )}
+
+      {activeMainTab === 'tasks' && (
+        <>
+          {/* ── FOLDERS & EXAMS SECTION ── */}
       <div className="mb-5 bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 shadow-sm backdrop-blur-sm">
         <div className={`flex items-center justify-between ${showFoldersSection ? 'mb-3' : ''}`}>
           <div
@@ -1790,6 +2029,8 @@ export default function TasksPage() {
           )}
         </div>
       )}
+        </>
+      )}
 
       {/* ── EDIT TASK MODAL ── */}
       {editingTask && (
@@ -1891,6 +2132,42 @@ export default function TasksPage() {
                     <option value="todo">To Do</option>
                     <option value="in_progress">In Progress</option>
                     <option value="done">Completed</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Difficulty & Estimated Duration Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Difficulty (AI Planning)
+                  </label>
+                  <select
+                    value={editDifficulty}
+                    onChange={(e) => setEditDifficulty(e.target.value as TaskDifficulty)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="easy">🟢 Easy (Quick / Low effort)</option>
+                    <option value="medium">🔵 Medium (Standard focus)</option>
+                    <option value="hard">🔴 Hard (High energy & deep focus)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Est. Duration
+                  </label>
+                  <select
+                    value={editEstimatedDuration}
+                    onChange={(e) => setEditEstimatedDuration(Number(e.target.value))}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value={15}>⏱️ 15 mins</option>
+                    <option value={30}>⏱️ 30 mins</option>
+                    <option value={45}>⏱️ 45 mins</option>
+                    <option value={60}>⏱️ 60 mins (1 hr)</option>
+                    <option value={90}>⏱️ 90 mins (1.5 hrs)</option>
+                    <option value={120}>⏱️ 120 mins (2 hrs)</option>
                   </select>
                 </div>
               </div>

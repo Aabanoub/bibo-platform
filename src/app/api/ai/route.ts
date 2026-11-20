@@ -3,6 +3,7 @@ import { GoogleGenerativeAI, Content } from '@google/generative-ai';
 import { createServerClient } from '@/lib/supabase-server';
 import { fetchUserPlatformData, formatContextPrompt, UserPlatformData } from '@/lib/user-context';
 import { calculateSmartDistribution } from '@/lib/smart-distribution';
+import { generateDeterministicDailyPlan } from '@/lib/daily-planner';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -51,6 +52,9 @@ Supported action schemas:
   {"type": "create_note", "data": {"title": string, "content": string, "tags"?: string[]}}
 - complete_habit:
   {"type": "complete_habit", "data": {"habit_name": string}}
+- generate_daily_plan:
+  {"type": "generate_daily_plan", "data": {"date"?: "YYYY-MM-DD"}}
+  (Use this when the user asks to schedule their day, plan their tasks for today/tomorrow, or optimize their daily study schedule.)
 
 RULES:
 - Always give a warm, clear conversational response acknowledging the action in your text first.
@@ -398,6 +402,79 @@ async function executeAction(
         success: true,
         message: `Balanced ${folderTasks.length} tasks in "${targetFolder?.name || 'Folder'}": ${plan.summary}`,
         data: plan,
+      };
+    }
+
+    if (action.type === 'generate_daily_plan') {
+      const targetDate = action.data?.date || new Date().toISOString().split('T')[0];
+
+      // 1. Fetch incomplete tasks, folders, profile
+      const [tasksRes, foldersRes, profRes] = await Promise.all([
+        supabase.from('tasks').select('*').eq('user_id', userId).neq('status', 'done'),
+        supabase.from('task_folders').select('*').eq('user_id', userId),
+        supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
+      ]);
+
+      const candidateTasks = (tasksRes.data || []) as any[];
+      const folders = (foldersRes.data || []) as any[];
+      const prof = profRes.data || {};
+
+      const prefs = {
+        startTime: prof.daily_start_time || '08:00',
+        endTime: prof.daily_end_time || '21:00',
+        highFocusStart: prof.high_focus_start || '09:00',
+        highFocusEnd: prof.high_focus_end || '12:00',
+        preferredBreakDuration: prof.preferred_break_duration || 15,
+        maxDailyStudyMinutes: prof.max_daily_study_minutes || 480,
+      };
+
+      const plan = generateDeterministicDailyPlan({
+        tasks: candidateTasks,
+        folders,
+        existingSessions: [],
+        preferences: prefs,
+        targetDate,
+      });
+
+      // 2. Wipe old items for target date and save new items
+      await supabase
+        .from('daily_schedule_items')
+        .delete()
+        .eq('user_id', userId)
+        .eq('date', targetDate);
+
+      if (plan.sessions.length > 0) {
+        const payload = plan.sessions.map((item, idx) => ({
+          user_id: userId,
+          date: targetDate,
+          task_id: item.task_id || null,
+          session_type: item.session_type,
+          start_time: item.start_time,
+          end_time: item.end_time,
+          duration_minutes: item.duration_minutes,
+          title: item.title,
+          difficulty: item.difficulty || 'medium',
+          is_locked: false,
+          is_completed: false,
+          sort_order: idx,
+        }));
+
+        await supabase.from('daily_schedule_items').insert(payload);
+      }
+
+      await supabase.from('notifications').insert({
+        user_id: userId,
+        title: `✨ AI Daily Plan Generated for ${targetDate}`,
+        message: `Scheduled ${plan.sessions.filter((i) => i.session_type !== 'break').length} tasks (${(plan.overview.totalPlannedMinutes / 60).toFixed(1)} hrs) with restorative breaks.`,
+        type: 'ai',
+        action_url: '/tasks',
+      });
+
+      return {
+        type: action.type,
+        success: true,
+        message: `Daily plan generated for ${targetDate}: ${plan.sessions.filter((i) => i.session_type !== 'break').length} study sessions scheduled.`,
+        data: plan.overview,
       };
     }
 

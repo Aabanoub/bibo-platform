@@ -72,7 +72,7 @@ export default function RootLayout({
           <NavigationProvider>
             <div className="flex h-screen overflow-hidden flex-col lg:flex-row">
               <Sidebar />
-              <main className="flex-1 overflow-y-auto pb-20 lg:pb-0">
+              <main className="flex-1 overflow-y-auto pb-20 lg:pb-0 relative z-0">
                 <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
                   {children}
                 </div>

@@ -308,7 +308,7 @@ export default function Sidebar() {
 
       {/* Desktop sidebar */}
       <aside
-        className={`hidden lg:block flex-shrink-0 relative z-40 transition-all duration-300 ${
+        className={`hidden lg:block flex-shrink-0 relative z-50 transition-all duration-300 ${
           collapsed ? 'w-[72px]' : 'w-64'
         }`}
       >

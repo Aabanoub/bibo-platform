@@ -7,7 +7,9 @@
 // ---------------------------------------------------------------------------
 
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
+export type TaskDifficulty = "easy" | "medium" | "hard";
 export type TaskStatus = "todo" | "in_progress" | "done";
+export type ScheduleSessionType = "task" | "break" | "review";
 export type TransactionType = "income" | "expense";
 export type HabitFrequency = "daily" | "weekly";
 export type ChatRole = "user" | "assistant";
@@ -26,6 +28,12 @@ export interface Profile {
   short_break_duration?: number;
   long_break_duration?: number;
   nav_slots?: string[];
+  daily_start_time?: string;
+  daily_end_time?: string;
+  high_focus_start?: string;
+  high_focus_end?: string;
+  preferred_break_duration?: number;
+  max_daily_study_minutes?: number;
   created_at: string;
   updated_at: string;
 }
@@ -61,12 +69,65 @@ export interface Task {
   title: string;
   description: string | null;
   priority: TaskPriority;
+  difficulty?: TaskDifficulty;
+  estimated_duration?: number; // in minutes (e.g. 15, 30, 45, 60, 90)
   status: TaskStatus;
   due_date: string | null;
   reminder_at?: string | null;
   reminder_sent?: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface DailyScheduleItem {
+  id: string;
+  user_id: string;
+  task_id?: string | null;
+  date: string; // YYYY-MM-DD
+  start_time: string; // HH:mm
+  end_time: string; // HH:mm
+  duration_minutes: number;
+  session_type: ScheduleSessionType;
+  title: string;
+  difficulty?: TaskDifficulty;
+  is_completed: boolean;
+  is_locked: boolean;
+  actual_duration_minutes: number;
+  sort_order: number;
+  notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  // Hydrated references
+  task?: Task | null;
+  folder?: TaskFolder | null;
+}
+
+export interface DayWorkloadOverview {
+  date: string;
+  totalTasks: number;
+  completedTasks: number;
+  remainingTasks: number;
+  totalPlannedMinutes: number;
+  availableMinutes: number;
+  workloadStatus: 'light' | 'balanced' | 'heavy' | 'overloaded';
+  progressPercent: number;
+  deferredTasks: {
+    task: Task;
+    reason: string;
+  }[];
+}
+
+export interface WeeklyForecastDay {
+  date: string;
+  dayName: string;
+  isToday: boolean;
+  totalTasks: number;
+  estimatedHours: number;
+  exams: string[];
+  deadlines: string[];
+  workloadStatus: 'light' | 'balanced' | 'heavy' | 'overloaded';
+  isOverloaded: boolean;
+  suggestedAction?: string;
 }
 
 export interface Transaction {
