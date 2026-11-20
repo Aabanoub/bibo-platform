@@ -50,10 +50,38 @@ export default function SettingsPage() {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     profile: false,
     theme: false,
+    tasksView: false,
     nav: false,
     notifications: false,
     danger: false,
   });
+
+  // Tasks Workspace layout preference ('ai_folders' vs 'classic')
+  const [tasksViewMode, setTasksViewMode] = useState<'ai_folders' | 'classic'>('ai_folders');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('tasks_view_mode') as 'ai_folders' | 'classic' | null;
+      if (saved) setTasksViewMode(saved);
+    }
+  }, []);
+
+  const handleSetTasksViewMode = async (mode: 'ai_folders' | 'classic') => {
+    setTasksViewMode(mode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('tasks_view_mode', mode);
+      window.dispatchEvent(new CustomEvent('tasks_view_mode_changed', { detail: mode }));
+    }
+    if (user?.id) {
+      try {
+        await supabase.auth.updateUser({
+          data: { tasks_view_mode: mode },
+        });
+      } catch (err) {
+        console.warn('Failed to save tasks_view_mode to user profile:', err);
+      }
+    }
+  };
 
   const toggleSection = (section: string) => {
     setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
@@ -457,6 +485,114 @@ export default function SettingsPage() {
                         </button>
                       );
                     })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Tasks Workspace & View Mode Card (Collapsible) */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 overflow-hidden transition-all duration-200">
+            <button
+              type="button"
+              onClick={() => toggleSection('tasksView')}
+              className="w-full flex items-center justify-between p-5 sm:p-6 text-left transition hover:bg-zinc-800/40 select-none"
+            >
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div
+                  className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl shadow-md transition-all ${
+                    isGirly
+                      ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30'
+                      : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                  }`}
+                >
+                  <CheckSquare size={20} />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-sm font-semibold text-white">Tasks Workspace Layout</h2>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border bg-blue-500/15 text-blue-300 border-blue-500/30">
+                      {tasksViewMode === 'classic' ? 'Classic List' : 'AI Subject Folders'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-400 truncate mt-0.5">
+                    {tasksViewMode === 'classic'
+                      ? 'Classic flat task manager with quick-add bar & filter pills'
+                      : 'AI-guided subject folders, exam countdowns & lesson sequencing'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-800/80 text-zinc-400 transition-transform duration-200 ${
+                    openSections.tasksView ? 'rotate-180 text-white' : ''
+                  }`}
+                >
+                  <ChevronDown size={16} />
+                </div>
+              </div>
+            </button>
+
+            {openSections.tasksView && (
+              <div className="px-5 sm:px-6 pb-6 pt-2 space-y-4 border-t border-zinc-800/80 animate-fade-in">
+                <p className="text-xs text-zinc-400">
+                  Select your preferred workspace layout for managing tasks and study lessons. You can switch between them anytime:
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Option 1: AI Subject Folders */}
+                  <div
+                    onClick={() => handleSetTasksViewMode('ai_folders')}
+                    className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                      tasksViewMode === 'ai_folders'
+                        ? 'bg-blue-600/15 border-blue-500 text-white shadow-md shadow-blue-500/10'
+                        : 'bg-zinc-950/60 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-purple-400" />
+                        <span className="text-sm font-bold text-white">AI Subject Folders (New)</span>
+                      </div>
+                      {tasksViewMode === 'ai_folders' ? (
+                        <span className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs">
+                          ✓
+                        </span>
+                      ) : (
+                        <span className="w-5 h-5 rounded-full border border-zinc-700" />
+                      )}
+                    </div>
+                    <p className="text-xs text-zinc-400 leading-relaxed">
+                      Folder-first study workspace with exam countdowns, subject grouping (Arabic, Math, etc.), pedagogical lesson ordering, and full AI Daily Planner integration.
+                    </p>
+                  </div>
+
+                  {/* Option 2: Classic Flat Tasks */}
+                  <div
+                    onClick={() => handleSetTasksViewMode('classic')}
+                    className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                      tasksViewMode === 'classic'
+                        ? 'bg-blue-600/15 border-blue-500 text-white shadow-md shadow-blue-500/10'
+                        : 'bg-zinc-950/60 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <CheckSquare className="w-4 h-4 text-cyan-400" />
+                        <span className="text-sm font-bold text-white">Classic Task List (Original)</span>
+                      </div>
+                      {tasksViewMode === 'classic' ? (
+                        <span className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs">
+                          ✓
+                        </span>
+                      ) : (
+                        <span className="w-5 h-5 rounded-full border border-zinc-700" />
+                      )}
+                    </div>
+                    <p className="text-xs text-zinc-400 leading-relaxed">
+                      Classic minimalist layout with instant Quick-Add input bar, filter pills, segmented tabs (All, Today, Upcoming, Completed), and Smart Algorithm sorting.
+                    </p>
                   </div>
                 </div>
               </div>

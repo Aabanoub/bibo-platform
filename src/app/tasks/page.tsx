@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
 import type { Task, TaskPriority, TaskStatus, TaskFolder, TaskDifficulty, DailyScheduleItem } from '@/types';
@@ -42,6 +44,7 @@ import {
   GraduationCap,
   Layers,
   BarChart2,
+  Settings,
 } from 'lucide-react';
 import {
   requestNotificationPermission,
@@ -234,6 +237,67 @@ export default function TasksPage() {
   const [scheduleItems, setScheduleItems] = useState<DailyScheduleItem[]>([]);
   const [allScheduleItems, setAllScheduleItems] = useState<DailyScheduleItem[]>([]);
   const [userProfile, setUserProfile] = useState<any>(null);
+
+  // User's choice between AI Folders and Classic Task list (stored in localStorage & settings)
+  const [tasksViewMode, setTasksViewMode] = useState<'ai_folders' | 'classic'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('tasks_view_mode') as 'ai_folders' | 'classic' | null;
+      if (saved) return saved;
+    }
+    return 'ai_folders';
+  });
+
+  useEffect(() => {
+    const handleModeChange = (e: any) => {
+      if (e?.detail) {
+        setTasksViewMode(e.detail);
+      } else if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('tasks_view_mode') as 'ai_folders' | 'classic' | null;
+        if (saved) setTasksViewMode(saved);
+      }
+    };
+    window.addEventListener('tasks_view_mode_changed', handleModeChange);
+    window.addEventListener('storage', handleModeChange);
+    return () => {
+      window.removeEventListener('tasks_view_mode_changed', handleModeChange);
+      window.removeEventListener('storage', handleModeChange);
+    };
+  }, []);
+
+  const switchTasksViewMode = (mode: 'ai_folders' | 'classic') => {
+    setTasksViewMode(mode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('tasks_view_mode', mode);
+      window.dispatchEvent(new CustomEvent('tasks_view_mode_changed', { detail: mode }));
+    }
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        supabase.auth.updateUser({ data: { tasks_view_mode: mode } }).catch(() => {});
+      }
+    });
+  };
+
+  // Quick-Add state (for Classic View Mode)
+  const [quickTitle, setQuickTitle] = useState('');
+  const [quickPriority, setQuickPriority] = useState<TaskPriority>('medium');
+  const [quickDifficulty, setQuickDifficulty] = useState<TaskDifficulty>('medium');
+  const [quickEstimatedDuration, setQuickEstimatedDuration] = useState<number>(30);
+  const [quickDueDate, setQuickDueDate] = useState('');
+  const [quickReminderAt, setQuickReminderAt] = useState('');
+  const [quickFolderId, setQuickFolderId] = useState<string>('');
+  const [showQuickOptions, setShowQuickOptions] = useState(false);
+  const [quickDescription, setQuickDescription] = useState('');
+  const [submittingQuick, setSubmittingQuick] = useState(false);
+  const quickInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync quickFolderId when selected folder changes in classic mode
+  useEffect(() => {
+    if (selectedFolderId && selectedFolderId !== 'unfiled') {
+      setQuickFolderId(selectedFolderId);
+    } else {
+      setQuickFolderId('');
+    }
+  }, [selectedFolderId]);
 
   // Unified Task Modal state (Handles both Create & Edit with Image 2 UI)
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -1011,7 +1075,14 @@ export default function TasksPage() {
 
   const handleAddLessonToFolder = (folder: TaskFolder, e: React.MouseEvent) => {
     e.stopPropagation();
-    openCreateTaskModal(folder.id);
+    if (tasksViewMode === 'classic') {
+      setSelectedFolderId(folder.id);
+      setQuickFolderId(folder.id);
+      setShowQuickOptions(true);
+      quickInputRef.current?.focus();
+    } else {
+      openCreateTaskModal(folder.id);
+    }
   };
 
   const handleSaveFolder = async (data: {
@@ -1097,6 +1168,136 @@ export default function TasksPage() {
     } catch (err: unknown) {
       console.error('Delete folder error:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete folder');
+    }
+  };
+
+  /**
+   * Quick Add Task (Classic Mode)
+   */
+  const handleQuickAdd = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const title = quickTitle.trim();
+    if (!title || submittingQuick) return;
+
+    setSubmittingQuick(true);
+    setError(null);
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) throw new Error('You must be logged in to create tasks.');
+
+      const reminderDateISO = quickReminderAt ? new Date(quickReminderAt).toISOString() : null;
+      const targetFolderId =
+        quickFolderId || (selectedFolderId && selectedFolderId !== 'unfiled' ? selectedFolderId : null) || null;
+
+      const { data, error: err } = await supabase
+        .from('tasks')
+        .insert({
+          user_id: user.id,
+          folder_id: targetFolderId,
+          title,
+          description: quickDescription.trim() || null,
+          priority: quickPriority,
+          difficulty: quickDifficulty,
+          estimated_duration: Number(quickEstimatedDuration) || 30,
+          status: 'todo' as TaskStatus,
+          due_date: quickDueDate || null,
+          reminder_at: reminderDateISO,
+          reminder_sent: false,
+        })
+        .select()
+        .single();
+
+      if (err) throw err;
+
+      const newTask = data as Task;
+      setTasks((prev) => [newTask, ...prev]);
+
+      if (reminderDateISO && new Date(reminderDateISO).getTime() > Date.now()) {
+        scheduleBackgroundNotification({
+          userId: user.id,
+          idempotencyKey: `task_reminder_${newTask.id}_${reminderDateISO}`,
+          title: `⏰ Task Reminder: ${newTask.title}`,
+          message: `Time to finish your task: "${newTask.title}"! Priority: ${newTask.priority.toUpperCase()}`,
+          category: 'task',
+          actionUrl: '/tasks',
+          scheduledFor: new Date(reminderDateISO),
+        }).catch(() => { });
+      }
+
+      setQuickTitle('');
+      setQuickDescription('');
+      setQuickDueDate('');
+      setQuickReminderAt('');
+      setQuickPriority('medium');
+      setShowQuickOptions(false);
+
+      try {
+        const folderName = targetFolderId ? foldersMap.get(targetFolderId)?.name : null;
+        await supabase.from('notifications').insert({
+          user_id: user.id,
+          title: folderName ? `Lesson added to "${folderName}"` : 'Task Created',
+          message: reminderDateISO
+            ? `Task "${newTask.title}" added with reminder.`
+            : `Task "${newTask.title}" added to your list.`,
+          type: 'task',
+          is_read: false,
+          action_url: '/tasks',
+        });
+      } catch { }
+
+      quickInputRef.current?.focus();
+    } catch (err: unknown) {
+      console.error('Create task error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to create task');
+    } finally {
+      setSubmittingQuick(false);
+    }
+  };
+
+  const setQuickDatePreset = (preset: 'today' | 'tomorrow' | 'clear') => {
+    const now = new Date();
+    if (preset === 'today') {
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+        now.getDate()
+      ).padStart(2, '0')}`;
+      setQuickDueDate(todayStr);
+    } else if (preset === 'tomorrow') {
+      const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(
+        2,
+        '0'
+      )}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+      setQuickDueDate(tomorrowStr);
+    } else {
+      setQuickDueDate('');
+    }
+  };
+
+  const setQuickReminderPreset = async (preset: '1h' | 'tonight' | 'tomorrow_9am') => {
+    const now = new Date();
+    let target = new Date();
+
+    if (preset === '1h') {
+      target = new Date(now.getTime() + 60 * 60 * 1000);
+    } else if (preset === 'tonight') {
+      target.setHours(20, 0, 0, 0);
+      if (target.getTime() <= now.getTime()) {
+        target = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+      }
+    } else if (preset === 'tomorrow_9am') {
+      target.setDate(target.getDate() + 1);
+      target.setHours(9, 0, 0, 0);
+    }
+
+    const offset = target.getTimezoneOffset() * 60000;
+    setQuickReminderAt(new Date(target.getTime() - offset).toISOString().slice(0, 16));
+
+    if (notifPermission !== 'granted') {
+      await requestPermission();
     }
   };
 
@@ -1677,7 +1878,47 @@ export default function TasksPage() {
       )}
 
       {activeMainTab === 'tasks' && (
-        <div className="space-y-6">
+        <div className="space-y-5">
+          {/* ── TASKS VIEW MODE SWITCHER (AI SUBJECT FOLDERS vs CLASSIC FLAT LIST) ── */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-sm">
+            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-950/80 border border-slate-800/80 text-xs">
+              <button
+                type="button"
+                onClick={() => switchTasksViewMode('ai_folders')}
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center gap-1.5 ${
+                  tasksViewMode === 'ai_folders'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-purple-300" />
+                <span>AI Subject Folders</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => switchTasksViewMode('classic')}
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center gap-1.5 ${
+                  tasksViewMode === 'classic'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5 text-cyan-300" />
+                <span>Classic Task List</span>
+              </button>
+            </div>
+
+            <Link
+              href="/settings"
+              className="text-[11px] text-slate-400 hover:text-blue-400 transition-colors flex items-center gap-1 px-2 py-1"
+            >
+              <Settings className="w-3 h-3 text-slate-500" />
+              <span>Change default in Settings</span>
+            </Link>
+          </div>
+
+          {tasksViewMode === 'ai_folders' ? (
+<div className="space-y-6">
           {/* ── TOP ACTION BAR: FOLDERS & TASKS ── */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-sm backdrop-blur-sm">
             <div className="flex items-center gap-3">
@@ -2021,6 +2262,564 @@ export default function TasksPage() {
               </div>
             );
           })()}
+        </div>
+          ) : (
+            <div>
+      <div className="mb-5 bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 shadow-sm backdrop-blur-sm">
+        <div className={`flex items-center justify-between ${showFoldersSection ? 'mb-3' : ''}`}>
+          <div
+            onClick={() => setShowFoldersSection(!showFoldersSection)}
+            className="flex items-center gap-2.5 cursor-pointer select-none group"
+          >
+            <div className="p-1.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-400 group-hover:bg-blue-500/25 transition-colors">
+              <Folder className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                <span>Folders & Exams</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700/80 font-mono">
+                  {folders.length}
+                </span>
+              </h2>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleOpenCreateFolder}
+              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-blue-500/20 active:scale-95 shrink-0"
+            >
+              <FolderPlus className="w-3.5 h-3.5" />
+              <span>New Folder</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowFoldersSection(!showFoldersSection)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              title={showFoldersSection ? 'Collapse folders' : 'Expand folders'}
+            >
+              {showFoldersSection ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        {showFoldersSection && (
+          <div>
+            {folders.length === 0 ? (
+              <div className="p-4 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-center space-y-2">
+                <div className="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center mx-auto">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-white">Create your first subject or exam folder</h3>
+                  <p className="text-[11px] text-slate-400 max-w-sm mx-auto mt-0.5">
+                    For example, create an <strong>&quot;English&quot;</strong> folder with your exam date to keep all your lessons and study topics organized in one place!
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenCreateFolder}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-xs font-semibold border border-blue-500/30 transition-colors mt-1"
+                >
+                  <Plus className="w-3 h-3" /> Create &quot;English&quot; Folder
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {folders.map((folder) => {
+                  const stats = folderStatsMap.get(folder.id) || { total: 0, done: 0, percent: 0 };
+                  const isSelected = selectedFolderId === folder.id;
+                  return (
+                    <TaskFolderCard
+                      key={folder.id}
+                      folder={folder}
+                      totalTasks={stats.total}
+                      completedTasks={stats.done}
+                      isSelected={isSelected}
+                      onSelect={(fId) => {
+                        setSelectedFolderId(selectedFolderId === fId ? null : fId);
+                      }}
+                      onEdit={handleOpenEditFolder}
+                      onDelete={handleOpenDeleteFolder}
+                      onAddLesson={handleAddLessonToFolder}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── ACTIVE FOLDER BANNER ── */}
+      {activeFolder && (
+        <div className="mb-4 p-3.5 rounded-2xl bg-gradient-to-r from-blue-950/40 via-slate-900/90 to-slate-900/90 border border-blue-500/40 flex items-center justify-between gap-3 shadow-lg shadow-blue-950/20 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className={`p-2 rounded-xl border shrink-0 ${
+                FOLDER_COLORS[activeFolder.color]?.bg || 'bg-blue-500/20'
+              } ${FOLDER_COLORS[activeFolder.color]?.border || 'border-blue-500/40'} ${
+                FOLDER_COLORS[activeFolder.color]?.text || 'text-blue-300'
+              }`}
+            >
+              {(() => {
+                const IconC = FOLDER_ICONS[activeFolder.icon]?.icon || Folder;
+                return <IconC className="w-4 h-4 sm:w-5 sm:h-5" />;
+              })()}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] text-blue-300 font-bold uppercase tracking-wider">
+                  Viewing Folder:
+                </span>
+                <span className="text-sm font-bold text-white truncate">
+                  {activeFolder.name}
+                </span>
+                {activeFolder.due_date && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-200 border border-blue-500/30 font-medium">
+                    📅 Exam: {new Date(activeFolder.due_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Lessons added below are automatically organized in &quot;{activeFolder.name}&quot;.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setSelectedFolderId(null)}
+              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition-colors"
+            >
+              Show All Tasks
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── EASY UI: INSTANT QUICK-ADD BAR ── */}
+      <div className="mb-6 bg-slate-900/90 border border-slate-800 rounded-2xl p-3 shadow-lg shadow-black/20 focus-within:border-blue-500/60 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all">
+        <form onSubmit={handleQuickAdd}>
+          <div className="flex items-center gap-2.5">
+            <div className="text-slate-500 pl-1">
+              <Plus className="w-5 h-5 text-blue-400" />
+            </div>
+            <input
+              ref={quickInputRef}
+              type="text"
+              value={quickTitle}
+              onChange={(e) => setQuickTitle(e.target.value)}
+              onFocus={() => setShowQuickOptions(true)}
+              placeholder={
+                activeFolder
+                  ? `Add lesson or topic to "${activeFolder.name}"... (press Enter)`
+                  : 'What needs to be done? Type and press Enter...'
+              }
+              className="w-full bg-transparent text-sm sm:text-base text-white placeholder-slate-500 outline-none"
+            />
+            <button
+              type="submit"
+              disabled={!quickTitle.trim() || submittingQuick}
+              className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-blue-600/30 shrink-0"
+            >
+              {submittingQuick ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <>
+                  <Plus className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Add</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Quick-Options Bar (Pills & Controls) */}
+          {showQuickOptions && (
+            <div className="mt-3 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {/* Target Folder Selector */}
+                {folders.length > 0 && (
+                  <div className="relative inline-flex items-center">
+                    <select
+                      value={quickFolderId}
+                      onChange={(e) => setQuickFolderId(e.target.value)}
+                      className="text-[11px] font-medium py-1 px-2.5 rounded-lg border border-slate-700/60 bg-slate-800/80 text-slate-300 outline-none cursor-pointer appearance-none pr-5 hover:bg-slate-700"
+                    >
+                      <option value="">📁 General (No Folder)</option>
+                      {folders.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          📁 {f.name} {f.due_date ? `(Exam: ${new Date(f.due_date).toLocaleDateString([], { month: 'short', day: 'numeric' })})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-3 h-3 absolute right-1.5 pointer-events-none opacity-60 text-slate-400" />
+                  </div>
+                )}
+
+                {/* Priority Selector Pill */}
+                <div className="relative inline-flex items-center">
+                  <select
+                    value={quickPriority}
+                    onChange={(e) => setQuickPriority(e.target.value as TaskPriority)}
+                    className={`text-[11px] font-medium py-1 px-2.5 rounded-lg border outline-none cursor-pointer appearance-none pr-5 ${PRIORITY_CONFIG[quickPriority].badge}`}
+                  >
+                    {PRIORITIES.map((p) => (
+                      <option key={p} value={p} className="bg-slate-900 text-white">
+                        {p.toUpperCase()} Priority
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3 h-3 absolute right-1.5 pointer-events-none opacity-60" />
+                </div>
+
+                {/* Due Date Presets */}
+                <button
+                  type="button"
+                  onClick={() => setQuickDatePreset('today')}
+                  className={`py-1 px-2.5 rounded-lg border text-[11px] transition-colors flex items-center gap-1 ${quickDueDate === new Date().toISOString().slice(0, 10)
+                    ? 'bg-blue-600/30 border-blue-500 text-blue-300 font-semibold'
+                    : 'bg-slate-800/80 border-slate-700/60 text-slate-300 hover:bg-slate-700'
+                    }`}
+                >
+                  <Calendar className="w-3 h-3" /> Today
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setQuickDatePreset('tomorrow')}
+                  className="py-1 px-2.5 rounded-lg border border-slate-700/60 bg-slate-800/80 text-slate-300 hover:bg-slate-700 text-[11px] transition-colors"
+                >
+                  Tomorrow
+                </button>
+
+                {/* Date Picker input */}
+                <input
+                  type="date"
+                  value={quickDueDate}
+                  onChange={(e) => setQuickDueDate(e.target.value)}
+                  className="bg-slate-800/80 border border-slate-700/60 text-slate-300 text-[11px] rounded-lg py-1 px-2 outline-none focus:border-blue-500"
+                />
+
+                {/* Reminder Preset Button */}
+                <button
+                  type="button"
+                  onClick={() => setQuickReminderPreset('1h')}
+                  className={`py-1 px-2.5 rounded-lg border text-[11px] transition-colors flex items-center gap-1 ${quickReminderAt
+                    ? 'bg-amber-500/20 border-amber-500/40 text-amber-300 font-medium'
+                    : 'bg-slate-800/80 border-slate-700/60 text-slate-300 hover:bg-slate-700'
+                    }`}
+                  title="Set reminder for 1 hour from now"
+                >
+                  <Bell className="w-3 h-3" />
+                  {quickReminderAt ? 'Remind Set' : 'Remind 1h'}
+                </button>
+              </div>
+
+              {/* Extra details toggle */}
+              <button
+                type="button"
+                onClick={() => setShowQuickOptions(!showQuickOptions)}
+                className="text-[11px] text-slate-500 hover:text-slate-400 py-1"
+              >
+                Hide
+              </button>
+            </div>
+          )}
+        </form>
+      </div>
+
+      {/* ── FOLDER FILTER PILLS ── */}
+      {folders.length > 0 && (
+        <div className="flex items-center gap-1.5 mb-3.5 overflow-x-auto pb-1 text-xs">
+          <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider shrink-0 flex items-center gap-1 mr-1">
+            <Layers className="w-3.5 h-3.5 text-blue-400" /> Filter:
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedFolderId(null)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all shrink-0 flex items-center gap-1.5 border ${
+              selectedFolderId === null
+                ? 'bg-blue-600/30 text-blue-200 border-blue-500 font-bold shadow-sm'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+            }`}
+          >
+            <span>All Tasks</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 font-mono">
+              {tasks.length}
+            </span>
+          </button>
+
+          {folders.map((f) => {
+            const stats = folderStatsMap.get(f.id);
+            const isFSelected = selectedFolderId === f.id;
+            const colorCfg = FOLDER_COLORS[f.color] || FOLDER_COLORS.blue;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setSelectedFolderId(isFSelected ? null : f.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all shrink-0 flex items-center gap-1.5 border ${
+                  isFSelected
+                    ? `${colorCfg.border} ${colorCfg.bg} ${colorCfg.text} font-bold ring-2 ${colorCfg.ring} shadow-sm`
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-800/60'
+                }`}
+              >
+                <span>📁 {f.name}</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/30 font-mono">
+                  {stats?.done || 0}/{stats?.total || 0}
+                </span>
+              </button>
+            );
+          })}
+
+          {unfiledCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedFolderId(selectedFolderId === 'unfiled' ? null : 'unfiled')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all shrink-0 flex items-center gap-1.5 border ${
+                selectedFolderId === 'unfiled'
+                  ? 'bg-slate-700 text-white border-slate-500 font-bold'
+                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+              }`}
+            >
+              <span>Unfiled</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 font-mono">
+                {unfiledCount}
+              </span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── TOOLBAR: TABS, SEARCH & SMART SORT ── */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 mb-4">
+        {/* Segmented Filter Tabs */}
+        <div className="flex items-center bg-slate-900 border border-slate-800 p-1 rounded-xl overflow-x-auto text-xs">
+          <button
+            onClick={() => setActiveTab('all')}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'all'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
+          >
+            All
+            <span className="text-[10px] bg-black/20 px-1.5 py-0.2 rounded-full">
+              {taskStats.active}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('today')}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'today'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
+          >
+            Today
+            {taskStats.today > 0 && (
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${taskStats.overdue > 0 ? 'bg-red-500 text-white' : 'bg-black/20'
+                  }`}
+              >
+                {taskStats.today}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('upcoming')}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'upcoming'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
+          >
+            Upcoming
+            <span className="text-[10px] bg-black/20 px-1.5 py-0.2 rounded-full">
+              {taskStats.upcoming}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('done')}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'done'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
+          >
+            Completed
+            <span className="text-[10px] bg-black/20 px-1.5 py-0.2 rounded-full">
+              {taskStats.done}
+            </span>
+          </button>
+        </div>
+
+        {/* Sorting & Smart Distribute Controls */}
+        <div className="flex items-center gap-2">
+          {/* Smart Algorithm / Sorting Selector */}
+          <div className="relative">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortOption)}
+              className="bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs rounded-xl px-2.5 py-1.5 outline-none focus:border-blue-500 cursor-pointer pr-7 appearance-none font-medium"
+              title="Change task sorting algorithm"
+            >
+              <option value="smart">⚡ Smart Algorithm</option>
+              <option value="due_date">📅 Due Date</option>
+              <option value="priority">🚩 Priority (Urgent first)</option>
+              <option value="newest">🕒 Newest first</option>
+            </select>
+            <ChevronDown className="w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500" />
+          </div>
+
+          {/* Clear Completed button */}
+          {taskStats.done > 0 && activeTab === 'done' && (
+            <button
+              onClick={clearCompletedTasks}
+              className="px-2.5 py-1.5 rounded-xl bg-red-950/40 border border-red-800/60 hover:bg-red-900/60 text-red-300 text-xs font-medium flex items-center gap-1 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Clear Done
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── TASKS LIST CONTAINER ── */}
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-3">
+          <Loader2 className="w-7 h-7 animate-spin text-blue-500" />
+          <p className="text-xs">Loading tasks...</p>
+        </div>
+      ) : displayedTasks.length === 0 ? (
+        <div className="p-12 text-center bg-slate-900/40 border border-slate-800/80 rounded-2xl">
+          <CheckSquare className="w-10 h-10 mx-auto text-slate-600 mb-2 stroke-1" />
+          <h3 className="text-sm font-semibold text-slate-300">
+            {selectedFolderId
+              ? `No lessons found in this folder`
+              : 'No tasks found'}
+          </h3>
+          <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+            {selectedFolderId
+              ? 'Type in the box above to add lessons to this folder!'
+              : activeTab === 'today'
+                ? 'No tasks due today. Great job keeping on top of your schedule!'
+                : activeTab === 'upcoming'
+                  ? 'No upcoming scheduled tasks.'
+                  : activeTab === 'done'
+                    ? 'No completed tasks yet. Finish a task to see it here!'
+                    : 'Add your first task using the box above to get organized.'}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* SECTION 1: OVERDUE TASKS (HIGH URGENCY ALERT) */}
+          {activeTab === 'all' && overdueList.length > 0 && (
+            <div className="bg-red-950/20 border border-red-900/40 rounded-2xl p-3">
+              <div className="flex items-center gap-2 mb-2 px-1 text-red-400 font-semibold text-xs tracking-wider uppercase">
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span>Overdue ({overdueList.length})</span>
+              </div>
+              <div className="space-y-2">
+                {overdueList.map((task) => (
+                  <TaskItem
+                    key={task.id}
+                    task={task}
+                    folder={task.folder_id ? foldersMap.get(task.folder_id) : undefined}
+                    onToggleDone={toggleTaskDone}
+                    onToggleInProgress={toggleInProgress}
+                    onEdit={openEditModal}
+                    onDelete={deleteTask}
+                    onSelectFolder={(fId) => setSelectedFolderId(fId)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* SECTION 2: ACTIVE TASKS (SMART RANKED) */}
+          {activeTab === 'all' ? (
+            nonOverdueList.length > 0 && (
+              <div className="space-y-2">
+                {overdueList.length > 0 && (
+                  <div className="flex items-center gap-2 px-1 text-slate-400 font-semibold text-xs tracking-wider uppercase pt-1">
+                    <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Up Next</span>
+                  </div>
+                )}
+                {nonOverdueList.map((task) => (
+                  <TaskItem
+                    key={task.id}
+                    task={task}
+                    folder={task.folder_id ? foldersMap.get(task.folder_id) : undefined}
+                    onToggleDone={toggleTaskDone}
+                    onToggleInProgress={toggleInProgress}
+                    onEdit={openEditModal}
+                    onDelete={deleteTask}
+                    onSelectFolder={(fId) => setSelectedFolderId(fId)}
+                  />
+                ))}
+              </div>
+            )
+          ) : (
+            <div className="space-y-2">
+              {displayedTasks.map((task) => (
+                <TaskItem
+                  key={task.id}
+                  task={task}
+                  folder={task.folder_id ? foldersMap.get(task.folder_id) : undefined}
+                  onToggleDone={toggleTaskDone}
+                  onToggleInProgress={toggleInProgress}
+                  onEdit={openEditModal}
+                  onDelete={deleteTask}
+                  onSelectFolder={(fId) => setSelectedFolderId(fId)}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* SECTION 3: COMPLETED TASKS (COLLAPSIBLE IN 'ALL' VIEW) */}
+          {activeTab === 'all' && doneDisplayed.length > 0 && (
+            <div className="pt-4 border-t border-slate-800/80">
+              <button
+                type="button"
+                onClick={() => setShowCompletedSection(!showCompletedSection)}
+                className="flex items-center justify-between w-full p-2 rounded-xl text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 transition-colors"
+              >
+                <div className="flex items-center gap-2 font-medium">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>Completed ({doneDisplayed.length})</span>
+                </div>
+                {showCompletedSection ? (
+                  <ChevronUp className="w-4 h-4 text-slate-500" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-slate-500" />
+                )}
+              </button>
+
+              {showCompletedSection && (
+                <div className="space-y-2 mt-2">
+                  {doneDisplayed.map((task) => (
+                    <TaskItem
+                      key={task.id}
+                      task={task}
+                      folder={task.folder_id ? foldersMap.get(task.folder_id) : undefined}
+                      onToggleDone={toggleTaskDone}
+                      onToggleInProgress={toggleInProgress}
+                      onEdit={openEditModal}
+                      onDelete={deleteTask}
+                      onSelectFolder={(fId) => setSelectedFolderId(fId)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+            </div>
+          )}
         </div>
       )}
 
