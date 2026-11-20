@@ -249,11 +249,12 @@ export default function TasksPage() {
 
   useEffect(() => {
     const handleModeChange = (e: any) => {
-      if (e?.detail) {
-        setTasksViewMode(e.detail);
-      } else if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem('tasks_view_mode') as 'ai_folders' | 'classic' | null;
-        if (saved) setTasksViewMode(saved);
+      const mode = e?.detail || (typeof window !== 'undefined' ? (localStorage.getItem('tasks_view_mode') as 'ai_folders' | 'classic') : null);
+      if (mode) {
+        setTasksViewMode(mode);
+        if (mode === 'classic') {
+          setActiveMainTab('tasks');
+        }
       }
     };
     window.addEventListener('tasks_view_mode_changed', handleModeChange);
@@ -264,8 +265,18 @@ export default function TasksPage() {
     };
   }, []);
 
+  // When in classic mode, ensure active tab is always 'tasks' (no AI Planner or Weekly Forecast)
+  useEffect(() => {
+    if (tasksViewMode === 'classic' && activeMainTab !== 'tasks') {
+      setActiveMainTab('tasks');
+    }
+  }, [tasksViewMode, activeMainTab]);
+
   const switchTasksViewMode = (mode: 'ai_folders' | 'classic') => {
     setTasksViewMode(mode);
+    if (mode === 'classic') {
+      setActiveMainTab('tasks');
+    }
     if (typeof window !== 'undefined') {
       localStorage.setItem('tasks_view_mode', mode);
       window.dispatchEvent(new CustomEvent('tasks_view_mode_changed', { detail: mode }));
@@ -1800,49 +1811,51 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* ── TOP-LEVEL VIEW SWITCHER ── */}
-      <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-900/90 border border-slate-800 mb-5 overflow-x-auto shadow-sm">
-        <button
-          type="button"
-          onClick={() => setActiveMainTab('tasks')}
-          className={`flex-1 min-w-[130px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
-            activeMainTab === 'tasks'
-              ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-          }`}
-        >
-          <CheckSquare className="w-4 h-4" />
-          <span>Tasks & Folders</span>
-        </button>
+      {/* ── TOP-LEVEL VIEW SWITCHER (ONLY IN AI FOLDERS MODE - COMPLETELY REMOVED IN CLASSIC MODE) ── */}
+      {tasksViewMode === 'ai_folders' && (
+        <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-900/90 border border-slate-800 mb-5 overflow-x-auto shadow-sm">
+          <button
+            type="button"
+            onClick={() => setActiveMainTab('tasks')}
+            className={`flex-1 min-w-[130px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+              activeMainTab === 'tasks'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <CheckSquare className="w-4 h-4" />
+            <span>Tasks & Folders</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveMainTab('planner')}
-          className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
-            activeMainTab === 'planner'
-              ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/20'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-          }`}
-        >
-          <Sparkles className="w-4 h-4 text-purple-300" />
-          <span>AI Daily Planner</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveMainTab('planner')}
+            className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+              activeMainTab === 'planner'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-purple-300" />
+            <span>AI Daily Planner</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveMainTab('forecast')}
-          className={`flex-1 min-w-[130px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
-            activeMainTab === 'forecast'
-              ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/20'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-          }`}
-        >
-          <BarChart2 className="w-4 h-4 text-emerald-300" />
-          <span>Weekly Forecast</span>
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={() => setActiveMainTab('forecast')}
+            className={`flex-1 min-w-[130px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+              activeMainTab === 'forecast'
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <BarChart2 className="w-4 h-4 text-emerald-300" />
+            <span>Weekly Forecast</span>
+          </button>
+        </div>
+      )}
 
-      {activeMainTab === 'planner' && (
+      {tasksViewMode === 'ai_folders' && activeMainTab === 'planner' && (
         <DailyPlannerView
           tasks={tasks}
           folders={folders}
@@ -1864,7 +1877,7 @@ export default function TasksPage() {
         />
       )}
 
-      {activeMainTab === 'forecast' && (
+      {tasksViewMode === 'ai_folders' && activeMainTab === 'forecast' && (
         <WeeklyForecastView
           tasks={tasks}
           folders={folders}
@@ -1877,7 +1890,7 @@ export default function TasksPage() {
         />
       )}
 
-      {activeMainTab === 'tasks' && (
+      {(tasksViewMode === 'classic' || activeMainTab === 'tasks') && (
         <div className="space-y-5">
           {/* ── TASKS VIEW MODE SWITCHER (AI SUBJECT FOLDERS vs CLASSIC FLAT LIST) ── */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-sm">
