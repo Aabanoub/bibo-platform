@@ -235,45 +235,30 @@ export default function TasksPage() {
   const [allScheduleItems, setAllScheduleItems] = useState<DailyScheduleItem[]>([]);
   const [userProfile, setUserProfile] = useState<any>(null);
 
-  // Quick-Add state (Easy UI)
-  const [quickTitle, setQuickTitle] = useState('');
-  const [quickPriority, setQuickPriority] = useState<TaskPriority>('medium');
-  const [quickDifficulty, setQuickDifficulty] = useState<TaskDifficulty>('medium');
-  const [quickEstimatedDuration, setQuickEstimatedDuration] = useState<number>(30);
-  const [quickDueDate, setQuickDueDate] = useState('');
-  const [quickReminderAt, setQuickReminderAt] = useState('');
-  const [quickFolderId, setQuickFolderId] = useState<string>('');
-  const [showQuickOptions, setShowQuickOptions] = useState(false);
-  const [quickDescription, setQuickDescription] = useState('');
-  const [submittingQuick, setSubmittingQuick] = useState(false);
+  // Unified Task Modal state (Handles both Create & Edit with Image 2 UI)
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [taskModalMode, setTaskModalMode] = useState<'create' | 'edit'>('create');
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [taskModalFolderId, setTaskModalFolderId] = useState<string>('');
+  const [taskModalTitle, setTaskModalTitle] = useState('');
+  const [taskModalDescription, setTaskModalDescription] = useState('');
+  const [taskModalPriority, setTaskModalPriority] = useState<TaskPriority>('medium');
+  const [taskModalDifficulty, setTaskModalDifficulty] = useState<TaskDifficulty>('medium');
+  const [taskModalEstimatedDuration, setTaskModalEstimatedDuration] = useState<number>(30);
+  const [taskModalDueDate, setTaskModalDueDate] = useState('');
+  const [taskModalReminderAt, setTaskModalReminderAt] = useState('');
+  const [taskModalStatus, setTaskModalStatus] = useState<TaskStatus>('todo');
+  const [savingTaskModal, setSavingTaskModal] = useState(false);
+  const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
 
-  // Edit Modal state
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [editTitle, setEditTitle] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editPriority, setEditPriority] = useState<TaskPriority>('medium');
-  const [editDifficulty, setEditDifficulty] = useState<TaskDifficulty>('medium');
-  const [editEstimatedDuration, setEditEstimatedDuration] = useState<number>(30);
-  const [editDueDate, setEditDueDate] = useState('');
-  const [editReminderAt, setEditReminderAt] = useState('');
-  const [editStatus, setEditStatus] = useState<TaskStatus>('todo');
-  const [editFolderId, setEditFolderId] = useState<string>('');
-  const [savingEdit, setSavingEdit] = useState(false);
-
-  // Sync quickFolderId when selected folder changes
-  useEffect(() => {
-    if (selectedFolderId && selectedFolderId !== 'unfiled') {
-      setQuickFolderId(selectedFolderId);
-    } else {
-      setQuickFolderId('');
-    }
-  }, [selectedFolderId]);
+  const toggleCollapseFolder = (folderId: string) => {
+    setCollapsedFolders((prev) => ({ ...prev, [folderId]: !prev[folderId] }));
+  };
 
   // Notification permission tracking
   const [notifPermission, setNotifPermission] = useState<string>('default');
   const [requestingPerm, setRequestingPerm] = useState(false);
 
-  const quickInputRef = useRef<HTMLInputElement>(null);
 
   // Check notification permission
   const checkNotificationStatus = useCallback(() => {
@@ -1012,10 +997,7 @@ export default function TasksPage() {
 
   const handleAddLessonToFolder = (folder: TaskFolder, e: React.MouseEvent) => {
     e.stopPropagation();
-    setSelectedFolderId(folder.id);
-    setQuickFolderId(folder.id);
-    setShowQuickOptions(true);
-    quickInputRef.current?.focus();
+    openCreateTaskModal(folder.id);
   };
 
   const handleSaveFolder = async (data: {
@@ -1068,7 +1050,7 @@ export default function TasksPage() {
       const newFolder = created as TaskFolder;
       setFolders((prev) => [newFolder, ...prev]);
       setSelectedFolderId(newFolder.id);
-      setQuickFolderId(newFolder.id);
+      setTaskModalFolderId(newFolder.id);
     }
   };
 
@@ -1105,93 +1087,206 @@ export default function TasksPage() {
   };
 
   /**
-   * Quick Add Task
+   * Open Create Task Modal (Matching Image 2)
    */
-  const handleQuickAdd = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const title = quickTitle.trim();
-    if (!title || submittingQuick) return;
+  const openCreateTaskModal = (folderId?: string) => {
+    setTaskModalMode('create');
+    setEditingTaskId(null);
+    setTaskModalFolderId(folderId || (selectedFolderId && selectedFolderId !== 'unfiled' ? selectedFolderId : ''));
+    setTaskModalTitle('');
+    setTaskModalDescription('');
+    setTaskModalPriority('medium');
+    setTaskModalDifficulty('medium');
+    setTaskModalEstimatedDuration(30);
+    setTaskModalDueDate('');
+    setTaskModalReminderAt('');
+    setTaskModalStatus('todo');
+    setIsTaskModalOpen(true);
+  };
 
-    setSubmittingQuick(true);
-    setError(null);
+  /**
+   * Open Edit Task Modal (Matching Image 2)
+   */
+  const openEditModal = (task: Task, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setTaskModalMode('edit');
+    setEditingTaskId(task.id);
+    setTaskModalFolderId(task.folder_id || '');
+    setTaskModalTitle(task.title);
+    setTaskModalDescription(task.description || '');
+    setTaskModalPriority(task.priority);
+    setTaskModalDifficulty(task.difficulty || 'medium');
+    setTaskModalEstimatedDuration(task.estimated_duration || 30);
+    setTaskModalDueDate(task.due_date ? task.due_date.slice(0, 10) : '');
+    setTaskModalStatus(task.status);
 
+    if (task.reminder_at) {
+      try {
+        const d = new Date(task.reminder_at);
+        const offset = d.getTimezoneOffset() * 60000;
+        setTaskModalReminderAt(new Date(d.getTime() - offset).toISOString().slice(0, 16));
+      } catch {
+        setTaskModalReminderAt('');
+      }
+    } else {
+      setTaskModalReminderAt('');
+    }
+
+    setIsTaskModalOpen(true);
+  };
+
+  /**
+   * Unified Save Handler for Create & Edit Task Modal
+   */
+  const saveTaskModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!taskModalTitle.trim() || savingTaskModal) return;
+
+    setSavingTaskModal(true);
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
+      if (!user) throw new Error('You must be logged in to manage tasks.');
 
-      if (!user) throw new Error('You must be logged in to create tasks.');
+      const reminderDateISO = taskModalReminderAt ? new Date(taskModalReminderAt).toISOString() : null;
+      const targetFolderId = taskModalFolderId || null;
 
-      const reminderDateISO = quickReminderAt ? new Date(quickReminderAt).toISOString() : null;
-      const targetFolderId =
-        quickFolderId || (selectedFolderId && selectedFolderId !== 'unfiled' ? selectedFolderId : null) || null;
-
-      const { data, error: err } = await supabase
-        .from('tasks')
-        .insert({
+      if (taskModalMode === 'create') {
+        const payload = {
           user_id: user.id,
           folder_id: targetFolderId,
-          title,
-          description: quickDescription.trim() || null,
-          priority: quickPriority,
-          difficulty: quickDifficulty,
-          estimated_duration: Number(quickEstimatedDuration) || 30,
-          status: 'todo' as TaskStatus,
-          due_date: quickDueDate || null,
+          title: taskModalTitle.trim(),
+          description: taskModalDescription.trim() || null,
+          priority: taskModalPriority,
+          status: taskModalStatus,
+          difficulty: taskModalDifficulty,
+          estimated_duration: Number(taskModalEstimatedDuration) || 30,
+          due_date: taskModalDueDate || null,
           reminder_at: reminderDateISO,
           reminder_sent: false,
-        })
-        .select()
-        .single();
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
 
-      if (err) throw err;
+        const { data, error: err } = await supabase
+          .from('tasks')
+          .insert(payload)
+          .select()
+          .single();
 
-      const newTask = data as Task;
-      setTasks((prev) => [newTask, ...prev]);
+        if (err) throw err;
 
-      // If scheduled reminder is in the future, queue background notification
-      if (reminderDateISO && new Date(reminderDateISO).getTime() > Date.now()) {
-        scheduleBackgroundNotification({
-          userId: user.id,
-          idempotencyKey: `task_reminder_${newTask.id}_${reminderDateISO}`,
-          title: `⏰ Task Reminder: ${newTask.title}`,
-          message: `Time to finish your task: "${newTask.title}"! Priority: ${newTask.priority.toUpperCase()}`,
-          category: 'task',
-          actionUrl: '/tasks',
-          scheduledFor: new Date(reminderDateISO),
-        }).catch(() => { });
+        const newTask = data as Task;
+        setTasks((prev) => [newTask, ...prev]);
+
+        if (reminderDateISO && new Date(reminderDateISO).getTime() > Date.now()) {
+          scheduleBackgroundNotification({
+            userId: user.id,
+            idempotencyKey: `task_reminder_${newTask.id}_${reminderDateISO}`,
+            title: `⏰ Task Reminder: ${newTask.title}`,
+            message: `Time to finish: "${newTask.title}"! Priority: ${newTask.priority.toUpperCase()}`,
+            category: 'task',
+            actionUrl: '/tasks',
+            scheduledFor: new Date(reminderDateISO),
+          }).catch(() => { });
+        }
+      } else if (taskModalMode === 'edit' && editingTaskId) {
+        const isCompleted = taskModalStatus === 'done';
+        const existingTask = tasks.find((t) => t.id === editingTaskId);
+
+        const { error: err } = await supabase
+          .from('tasks')
+          .update({
+            folder_id: targetFolderId,
+            title: taskModalTitle.trim(),
+            description: taskModalDescription.trim() || null,
+            priority: taskModalPriority,
+            status: taskModalStatus,
+            difficulty: taskModalDifficulty,
+            estimated_duration: Number(taskModalEstimatedDuration) || 30,
+            due_date: taskModalDueDate || null,
+            reminder_at: reminderDateISO,
+            reminder_sent:
+              reminderDateISO !== existingTask?.reminder_at ? false : existingTask?.reminder_sent,
+            completed_at: isCompleted ? new Date().toISOString() : null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', editingTaskId);
+
+        if (err) throw err;
+
+        // Also update daily_schedule_items in DB
+        await supabase
+          .from('daily_schedule_items')
+          .update({
+            title: taskModalTitle.trim(),
+            difficulty: taskModalDifficulty,
+            duration_minutes: Number(taskModalEstimatedDuration) || 30,
+            is_completed: isCompleted,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('task_id', editingTaskId)
+          .eq('user_id', user.id);
+
+        setTasks((prev) =>
+          prev.map((t) =>
+            t.id === editingTaskId
+              ? {
+                  ...t,
+                  folder_id: targetFolderId,
+                  title: taskModalTitle.trim(),
+                  description: taskModalDescription.trim() || null,
+                  priority: taskModalPriority,
+                  status: taskModalStatus,
+                  difficulty: taskModalDifficulty,
+                  estimated_duration: Number(taskModalEstimatedDuration) || 30,
+                  due_date: taskModalDueDate || null,
+                  reminder_at: reminderDateISO,
+                  reminder_sent:
+                    reminderDateISO !== existingTask?.reminder_at ? false : existingTask?.reminder_sent,
+                  completed_at: isCompleted ? new Date().toISOString() : null,
+                  updated_at: new Date().toISOString(),
+                }
+              : t
+          )
+        );
+
+        setScheduleItems((prev) =>
+          prev.map((s) =>
+            s.task_id === editingTaskId
+              ? {
+                  ...s,
+                  title: taskModalTitle.trim(),
+                  difficulty: taskModalDifficulty,
+                  duration_minutes: Number(taskModalEstimatedDuration) || 30,
+                  is_completed: isCompleted,
+                }
+              : s
+          )
+        );
+
+        setAllScheduleItems((prev) =>
+          prev.map((s) =>
+            s.task_id === editingTaskId
+              ? {
+                  ...s,
+                  title: taskModalTitle.trim(),
+                  difficulty: taskModalDifficulty,
+                  duration_minutes: Number(taskModalEstimatedDuration) || 30,
+                  is_completed: isCompleted,
+                }
+              : s
+          )
+        );
       }
 
-      // Reset Quick Add fields
-      setQuickTitle('');
-      setQuickDescription('');
-      setQuickDueDate('');
-      setQuickReminderAt('');
-      setQuickPriority('medium');
-      setShowQuickOptions(false);
-
-      // In-app notification
-      try {
-        const folderName = targetFolderId ? foldersMap.get(targetFolderId)?.name : null;
-        await supabase.from('notifications').insert({
-          user_id: user.id,
-          title: folderName ? `Lesson added to "${folderName}"` : 'Task Created',
-          message: reminderDateISO
-            ? `Task "${newTask.title}" added with reminder.`
-            : `Task "${newTask.title}" added to your list.`,
-          type: 'task',
-          is_read: false,
-          action_url: '/tasks',
-        });
-      } catch { }
-
-      // Keep focus on input for rapid entry
-      quickInputRef.current?.focus();
-    } catch (err: unknown) {
-      console.error('Create task error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create task');
+      setIsTaskModalOpen(false);
+    } catch (e: unknown) {
+      console.error('saveTaskModal error:', e);
+      setError(e instanceof Error ? e.message : 'Failed to save task');
     } finally {
-      setSubmittingQuick(false);
+      setSavingTaskModal(false);
     }
   };
 
@@ -1202,6 +1297,10 @@ export default function TasksPage() {
     if (e) e.stopPropagation();
     try {
       setTasks((prev) => prev.filter((t) => t.id !== id));
+      setScheduleItems((prev) => prev.filter((s) => s.task_id !== id));
+      setAllScheduleItems((prev) => prev.filter((s) => s.task_id !== id));
+
+      await supabase.from('daily_schedule_items').delete().eq('task_id', id);
       const { error: err } = await supabase.from('tasks').delete().eq('id', id);
       if (err) throw err;
       try {
@@ -1232,153 +1331,6 @@ export default function TasksPage() {
     } catch (e: unknown) {
       fetchTasks();
       setError(e instanceof Error ? e.message : 'Failed to clear completed tasks');
-    }
-  };
-
-  /**
-   * Open Edit Modal
-   */
-  const openEditModal = (task: Task, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setEditingTask(task);
-    setEditTitle(task.title);
-    setEditDescription(task.description || '');
-    setEditPriority(task.priority);
-    setEditDifficulty(task.difficulty || 'medium');
-    setEditEstimatedDuration(task.estimated_duration || 30);
-    setEditDueDate(task.due_date || '');
-    setEditStatus(task.status);
-    setEditFolderId(task.folder_id || '');
-
-    if (task.reminder_at) {
-      const d = new Date(task.reminder_at);
-      const offset = d.getTimezoneOffset() * 60000;
-      setEditReminderAt(new Date(d.getTime() - offset).toISOString().slice(0, 16));
-    } else {
-      setEditReminderAt('');
-    }
-  };
-
-  /**
-   * Save Edited Task
-   */
-  const saveEditedTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingTask || !editTitle.trim() || savingEdit) return;
-
-    setSavingEdit(true);
-    try {
-      const reminderDateISO = editReminderAt ? new Date(editReminderAt).toISOString() : null;
-
-      const { error: err } = await supabase
-        .from('tasks')
-        .update({
-          folder_id: editFolderId || null,
-          title: editTitle.trim(),
-          description: editDescription.trim() || null,
-          priority: editPriority,
-          status: editStatus,
-          difficulty: editDifficulty,
-          estimated_duration: Number(editEstimatedDuration) || 30,
-          due_date: editDueDate || null,
-          reminder_at: reminderDateISO,
-          reminder_sent:
-            reminderDateISO !== editingTask.reminder_at ? false : editingTask.reminder_sent,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', editingTask.id);
-
-      if (err) throw err;
-
-      if (reminderDateISO && new Date(reminderDateISO).getTime() > Date.now()) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
-          scheduleBackgroundNotification({
-            userId: user.id,
-            idempotencyKey: `task_reminder_${editingTask.id}_${reminderDateISO}`,
-            title: `⏰ Task Reminder: ${editTitle.trim()}`,
-            message: `Time to finish your task: "${editTitle.trim()}"! Priority: ${editPriority.toUpperCase()}`,
-            category: 'task',
-            actionUrl: '/tasks',
-            scheduledFor: new Date(reminderDateISO),
-          }).catch(() => { });
-        }
-      }
-
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === editingTask.id
-            ? {
-              ...t,
-              folder_id: editFolderId || null,
-              title: editTitle.trim(),
-              description: editDescription.trim() || null,
-              priority: editPriority,
-              status: editStatus,
-              difficulty: editDifficulty,
-              estimated_duration: Number(editEstimatedDuration) || 30,
-              due_date: editDueDate || null,
-              reminder_at: reminderDateISO,
-              reminder_sent:
-                reminderDateISO !== editingTask.reminder_at ? false : editingTask.reminder_sent,
-              updated_at: new Date().toISOString(),
-            }
-            : t
-        )
-      );
-
-      setEditingTask(null);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to update task');
-    } finally {
-      setSavingEdit(false);
-    }
-  };
-
-  // Quick preset helper for dates
-  const setQuickDatePreset = (preset: 'today' | 'tomorrow' | 'clear') => {
-    const now = new Date();
-    if (preset === 'today') {
-      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
-        now.getDate()
-      ).padStart(2, '0')}`;
-      setQuickDueDate(todayStr);
-    } else if (preset === 'tomorrow') {
-      const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(
-        2,
-        '0'
-      )}-${String(tomorrow.getDate()).padStart(2, '0')}`;
-      setQuickDueDate(tomorrowStr);
-    } else {
-      setQuickDueDate('');
-    }
-  };
-
-  // Quick preset helper for reminders
-  const setQuickReminderPreset = async (preset: '1h' | 'tonight' | 'tomorrow_9am') => {
-    const now = new Date();
-    let target = new Date();
-
-    if (preset === '1h') {
-      target = new Date(now.getTime() + 60 * 60 * 1000);
-    } else if (preset === 'tonight') {
-      target.setHours(20, 0, 0, 0);
-      if (target.getTime() <= now.getTime()) {
-        target = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-      }
-    } else if (preset === 'tomorrow_9am') {
-      target.setDate(target.getDate() + 1);
-      target.setHours(9, 0, 0, 0);
-    }
-
-    const offset = target.getTimezoneOffset() * 60000;
-    setQuickReminderAt(new Date(target.getTime() - offset).toISOString().slice(0, 16));
-
-    if (notifPermission !== 'granted') {
-      await requestPermission();
     }
   };
 
@@ -1704,633 +1656,419 @@ export default function TasksPage() {
       )}
 
       {activeMainTab === 'tasks' && (
-        <>
-          {/* ── FOLDERS & EXAMS SECTION ── */}
-      <div className="mb-5 bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 shadow-sm backdrop-blur-sm">
-        <div className={`flex items-center justify-between ${showFoldersSection ? 'mb-3' : ''}`}>
-          <div
-            onClick={() => setShowFoldersSection(!showFoldersSection)}
-            className="flex items-center gap-2.5 cursor-pointer select-none group"
-          >
-            <div className="p-1.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-400 group-hover:bg-blue-500/25 transition-colors">
-              <Folder className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                <span>Folders & Exams</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700/80 font-mono">
-                  {folders.length}
-                </span>
-              </h2>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleOpenCreateFolder}
-              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-blue-500/20 active:scale-95 shrink-0"
-            >
-              <FolderPlus className="w-3.5 h-3.5" />
-              <span>New Folder</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowFoldersSection(!showFoldersSection)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-              title={showFoldersSection ? 'Collapse folders' : 'Expand folders'}
-            >
-              {showFoldersSection ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
-
-        {showFoldersSection && (
-          <div>
-            {folders.length === 0 ? (
-              <div className="p-4 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-center space-y-2">
-                <div className="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center mx-auto">
-                  <BookOpen className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold text-white">Create your first subject or exam folder</h3>
-                  <p className="text-[11px] text-slate-400 max-w-sm mx-auto mt-0.5">
-                    For example, create an <strong>&quot;English&quot;</strong> folder with your exam date to keep all your lessons and study topics organized in one place!
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleOpenCreateFolder}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-xs font-semibold border border-blue-500/30 transition-colors mt-1"
-                >
-                  <Plus className="w-3 h-3" /> Create &quot;English&quot; Folder
-                </button>
+        <div className="space-y-6">
+          {/* ── TOP ACTION BAR: FOLDERS & TASKS ── */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-sm backdrop-blur-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 shrink-0">
+                <Folder className="w-5 h-5" />
               </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {folders.map((folder) => {
-                  const stats = folderStatsMap.get(folder.id) || { total: 0, done: 0, percent: 0 };
-                  const isSelected = selectedFolderId === folder.id;
-                  return (
-                    <TaskFolderCard
-                      key={folder.id}
-                      folder={folder}
-                      totalTasks={stats.total}
-                      completedTasks={stats.done}
-                      isSelected={isSelected}
-                      onSelect={(fId) => {
-                        setSelectedFolderId(selectedFolderId === fId ? null : fId);
-                      }}
-                      onEdit={handleOpenEditFolder}
-                      onDelete={handleOpenDeleteFolder}
-                      onAddLesson={handleAddLessonToFolder}
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* ── ACTIVE FOLDER BANNER ── */}
-      {activeFolder && (
-        <div className="mb-4 p-3.5 rounded-2xl bg-gradient-to-r from-blue-950/40 via-slate-900/90 to-slate-900/90 border border-blue-500/40 flex items-center justify-between gap-3 shadow-lg shadow-blue-950/20 animate-in fade-in duration-200">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div
-              className={`p-2 rounded-xl border shrink-0 ${
-                FOLDER_COLORS[activeFolder.color]?.bg || 'bg-blue-500/20'
-              } ${FOLDER_COLORS[activeFolder.color]?.border || 'border-blue-500/40'} ${
-                FOLDER_COLORS[activeFolder.color]?.text || 'text-blue-300'
-              }`}
-            >
-              {(() => {
-                const IconC = FOLDER_ICONS[activeFolder.icon]?.icon || Folder;
-                return <IconC className="w-4 h-4 sm:w-5 sm:h-5" />;
-              })()}
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] text-blue-300 font-bold uppercase tracking-wider">
-                  Viewing Folder:
-                </span>
-                <span className="text-sm font-bold text-white truncate">
-                  {activeFolder.name}
-                </span>
-                {activeFolder.due_date && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-200 border border-blue-500/30 font-medium">
-                    📅 Exam: {new Date(activeFolder.due_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+              <div>
+                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                  <span>Subject Folders & Tasks</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-semibold font-mono">
+                    {folders.length} {folders.length === 1 ? 'Folder' : 'Folders'}
                   </span>
-                )}
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Organize your subjects, lessons, and exam dates. Add tasks directly into any folder.
+                </p>
               </div>
-              <p className="text-[11px] text-slate-400">
-                Lessons added below are automatically organized in &quot;{activeFolder.name}&quot;.
-              </p>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2 shrink-0 flex-wrap">
-            <button
-              type="button"
-              onClick={() => setSelectedFolderId(null)}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition-colors"
-            >
-              Show All Tasks
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── EASY UI: INSTANT QUICK-ADD BAR ── */}
-      <div className="mb-6 bg-slate-900/90 border border-slate-800 rounded-2xl p-3 shadow-lg shadow-black/20 focus-within:border-blue-500/60 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all">
-        <form onSubmit={handleQuickAdd}>
-          <div className="flex items-center gap-2.5">
-            <div className="text-slate-500 pl-1">
-              <Plus className="w-5 h-5 text-blue-400" />
-            </div>
-            <input
-              ref={quickInputRef}
-              type="text"
-              value={quickTitle}
-              onChange={(e) => setQuickTitle(e.target.value)}
-              onFocus={() => setShowQuickOptions(true)}
-              placeholder={
-                activeFolder
-                  ? `Add lesson or topic to "${activeFolder.name}"... (press Enter)`
-                  : 'What needs to be done? Type and press Enter...'
-              }
-              className="w-full bg-transparent text-sm sm:text-base text-white placeholder-slate-500 outline-none"
-            />
-            <button
-              type="submit"
-              disabled={!quickTitle.trim() || submittingQuick}
-              className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-blue-600/30 shrink-0"
-            >
-              {submittingQuick ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <>
-                  <Plus className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Add</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Quick-Options Bar (Pills & Controls) */}
-          {showQuickOptions && (
-            <div className="mt-3 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div className="flex flex-wrap items-center gap-1.5">
-                {/* Target Folder Selector */}
-                {folders.length > 0 && (
-                  <div className="relative inline-flex items-center">
-                    <select
-                      value={quickFolderId}
-                      onChange={(e) => setQuickFolderId(e.target.value)}
-                      className="text-[11px] font-medium py-1 px-2.5 rounded-lg border border-slate-700/60 bg-slate-800/80 text-slate-300 outline-none cursor-pointer appearance-none pr-5 hover:bg-slate-700"
-                    >
-                      <option value="">📁 General (No Folder)</option>
-                      {folders.map((f) => (
-                        <option key={f.id} value={f.id}>
-                          📁 {f.name} {f.due_date ? `(Exam: ${new Date(f.due_date).toLocaleDateString([], { month: 'short', day: 'numeric' })})` : ''}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-3 h-3 absolute right-1.5 pointer-events-none opacity-60 text-slate-400" />
-                  </div>
-                )}
-
-                {/* Priority Selector Pill */}
-                <div className="relative inline-flex items-center">
-                  <select
-                    value={quickPriority}
-                    onChange={(e) => setQuickPriority(e.target.value as TaskPriority)}
-                    className={`text-[11px] font-medium py-1 px-2.5 rounded-lg border outline-none cursor-pointer appearance-none pr-5 ${PRIORITY_CONFIG[quickPriority].badge}`}
-                  >
-                    {PRIORITIES.map((p) => (
-                      <option key={p} value={p} className="bg-slate-900 text-white">
-                        {p.toUpperCase()} Priority
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-3 h-3 absolute right-1.5 pointer-events-none opacity-60" />
-                </div>
-
-                {/* Due Date Presets */}
-                <button
-                  type="button"
-                  onClick={() => setQuickDatePreset('today')}
-                  className={`py-1 px-2.5 rounded-lg border text-[11px] transition-colors flex items-center gap-1 ${quickDueDate === new Date().toISOString().slice(0, 10)
-                    ? 'bg-blue-600/30 border-blue-500 text-blue-300 font-semibold'
-                    : 'bg-slate-800/80 border-slate-700/60 text-slate-300 hover:bg-slate-700'
-                    }`}
-                >
-                  <Calendar className="w-3 h-3" /> Today
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setQuickDatePreset('tomorrow')}
-                  className="py-1 px-2.5 rounded-lg border border-slate-700/60 bg-slate-800/80 text-slate-300 hover:bg-slate-700 text-[11px] transition-colors"
-                >
-                  Tomorrow
-                </button>
-
-                {/* Date Picker input */}
-                <input
-                  type="date"
-                  value={quickDueDate}
-                  onChange={(e) => setQuickDueDate(e.target.value)}
-                  className="bg-slate-800/80 border border-slate-700/60 text-slate-300 text-[11px] rounded-lg py-1 px-2 outline-none focus:border-blue-500"
-                />
-
-                {/* Reminder Preset Button */}
-                <button
-                  type="button"
-                  onClick={() => setQuickReminderPreset('1h')}
-                  className={`py-1 px-2.5 rounded-lg border text-[11px] transition-colors flex items-center gap-1 ${quickReminderAt
-                    ? 'bg-amber-500/20 border-amber-500/40 text-amber-300 font-medium'
-                    : 'bg-slate-800/80 border-slate-700/60 text-slate-300 hover:bg-slate-700'
-                    }`}
-                  title="Set reminder for 1 hour from now"
-                >
-                  <Bell className="w-3 h-3" />
-                  {quickReminderAt ? 'Remind Set' : 'Remind 1h'}
-                </button>
-              </div>
-
-              {/* Extra details toggle */}
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
-                onClick={() => setShowQuickOptions(!showQuickOptions)}
-                className="text-[11px] text-slate-500 hover:text-slate-400 py-1"
+                onClick={handleOpenCreateFolder}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all border border-slate-700 shadow-sm active:scale-95"
               >
-                Hide
+                <FolderPlus className="w-4 h-4 text-cyan-400" />
+                <span>New Folder</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => openCreateTaskModal()}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-blue-600/30 active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Task</span>
+              </button>
+            </div>
+          </div>
+
+          {/* ── EMPTY STATE WHEN NO FOLDERS ── */}
+          {folders.length === 0 && (
+            <div className="p-8 text-center rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center mx-auto">
+                <FolderPlus className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Create your first subject folder</h3>
+                <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
+                  Create folders for your subjects (e.g. Arabic, Math, English) with exam dates.
+                  Then add lessons and study tasks to stay on track!
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleOpenCreateFolder}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-500/20 transition-all"
+              >
+                <FolderPlus className="w-4 h-4" />
+                <span>Create Subject Folder</span>
               </button>
             </div>
           )}
-        </form>
-      </div>
 
-      {/* ── FOLDER FILTER PILLS ── */}
-      {folders.length > 0 && (
-        <div className="flex items-center gap-1.5 mb-3.5 overflow-x-auto pb-1 text-xs">
-          <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider shrink-0 flex items-center gap-1 mr-1">
-            <Layers className="w-3.5 h-3.5 text-blue-400" /> Filter:
-          </span>
-          <button
-            type="button"
-            onClick={() => setSelectedFolderId(null)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all shrink-0 flex items-center gap-1.5 border ${
-              selectedFolderId === null
-                ? 'bg-blue-600/30 text-blue-200 border-blue-500 font-bold shadow-sm'
-                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
-            }`}
-          >
-            <span>All Tasks</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 font-mono">
-              {tasks.length}
-            </span>
-          </button>
+          {/* ── FOLDERS LIST (CONTAINERS WITH EMBEDDED TASKS) ── */}
+          {folders.map((folder) => {
+            const folderTasks = tasks.filter((t) => t.folder_id === folder.id);
+            const completedCount = folderTasks.filter((t) => t.status === 'done').length;
+            const totalCount = folderTasks.length;
+            const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+            const colorCfg = FOLDER_COLORS[folder.color] || FOLDER_COLORS.blue;
+            const countdown = folder.due_date ? getFolderCountdown(folder.due_date) : null;
+            const isCollapsed = Boolean(collapsedFolders[folder.id]);
+            const IconComp = FOLDER_ICONS[folder.icon]?.icon || Folder;
 
-          {folders.map((f) => {
-            const stats = folderStatsMap.get(f.id);
-            const isFSelected = selectedFolderId === f.id;
-            const colorCfg = FOLDER_COLORS[f.color] || FOLDER_COLORS.blue;
+            // Sort tasks pedagogically and by completion
+            const sortedFolderTasks = [...folderTasks].sort((a, b) => {
+              if (a.status === 'done' && b.status !== 'done') return 1;
+              if (a.status !== 'done' && b.status === 'done') return -1;
+
+              const lessonA = extractLessonSequence(a.title, folder.name);
+              const lessonB = extractLessonSequence(b.title, folder.name);
+              if (
+                lessonA.seriesKey === lessonB.seriesKey &&
+                lessonA.sequenceNumber !== null &&
+                lessonB.sequenceNumber !== null &&
+                lessonA.sequenceNumber !== lessonB.sequenceNumber
+              ) {
+                return lessonA.sequenceNumber - lessonB.sequenceNumber;
+              }
+
+              const weight: Record<TaskPriority, number> = { urgent: 4, high: 3, medium: 2, low: 1 };
+              if (weight[b.priority] !== weight[a.priority]) {
+                return weight[b.priority] - weight[a.priority];
+              }
+
+              return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+            });
+
             return (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setSelectedFolderId(isFSelected ? null : f.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all shrink-0 flex items-center gap-1.5 border ${
-                  isFSelected
-                    ? `${colorCfg.border} ${colorCfg.bg} ${colorCfg.text} font-bold ring-2 ${colorCfg.ring} shadow-sm`
-                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-800/60'
-                }`}
+              <div
+                key={folder.id}
+                className="rounded-2xl bg-slate-900/80 border border-slate-800 overflow-hidden shadow-sm hover:border-slate-700/80 transition-all"
               >
-                <span>📁 {f.name}</span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/30 font-mono">
-                  {stats?.done || 0}/{stats?.total || 0}
-                </span>
-              </button>
+                {/* Folder Header Bar */}
+                <div className="p-3.5 sm:p-4 bg-slate-900/90 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  {/* Left: Folder Info */}
+                  <div
+                    onClick={() => toggleCollapseFolder(folder.id)}
+                    className="flex items-center gap-3 cursor-pointer select-none group min-w-0 flex-1"
+                  >
+                    <div
+                      className={`p-2 rounded-xl border shrink-0 transition-transform group-hover:scale-105 ${colorCfg.bg} ${colorCfg.border} ${colorCfg.text}`}
+                    >
+                      <IconComp className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-bold text-sm sm:text-base text-white truncate group-hover:text-blue-300 transition-colors">
+                          {folder.name}
+                        </h3>
+
+                        {/* Exam Countdown Badge */}
+                        {countdown && (
+                          <span
+                            className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
+                              countdown.isOverdue
+                                ? 'bg-red-500/15 text-red-300 border-red-500/30'
+                                : countdown.isToday
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 animate-pulse'
+                                : 'bg-blue-500/15 text-blue-200 border-blue-500/30'
+                            }`}
+                          >
+                            <Calendar className="w-3 h-3 shrink-0" />
+                            <span>Exam: {countdown.formattedDate}</span>
+                            <span className="text-[10px] opacity-80">({countdown.label})</span>
+                          </span>
+                        )}
+
+                        {/* Task Count Badge */}
+                        <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700/60 font-medium font-mono">
+                          {completedCount}/{totalCount} Completed ({progressPct}%)
+                        </span>
+                      </div>
+
+                      {/* Mini Progress Bar */}
+                      {totalCount > 0 && (
+                        <div className="w-full max-w-xs mt-2 bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-300 ${
+                              progressPct === 100 ? 'bg-emerald-500' : 'bg-blue-500'
+                            }`}
+                            style={{ width: `${progressPct}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right: Actions */}
+                  <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openCreateTaskModal(folder.id)}
+                      className="px-3 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-semibold flex items-center gap-1 transition-all active:scale-95"
+                      title={`Add task to ${folder.name}`}
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Task</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleOpenEditFolder(folder, e)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                      title="Edit folder"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleOpenDeleteFolder(folder, e)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors"
+                      title="Delete folder"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleCollapseFolder(folder.id)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                      title={isCollapsed ? 'Expand folder' : 'Collapse folder'}
+                    >
+                      {isCollapsed ? (
+                        <ChevronDown className="w-4 h-4" />
+                      ) : (
+                        <ChevronUp className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Folder Content (Tasks List) */}
+                {!isCollapsed && (
+                  <div className="p-3 sm:p-4 space-y-2 bg-slate-950/40">
+                    {sortedFolderTasks.length === 0 ? (
+                      <div className="py-6 px-4 text-center rounded-xl border border-dashed border-slate-800/80 bg-slate-900/30">
+                        <p className="text-xs text-slate-400">
+                          No tasks or lessons in <strong className="text-slate-300">&quot;{folder.name}&quot;</strong> yet.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => openCreateTaskModal(folder.id)}
+                          className="mt-2 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-xs font-semibold border border-blue-500/30 transition-colors"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Add First Lesson</span>
+                        </button>
+                      </div>
+                    ) : (
+                      sortedFolderTasks.map((task) => (
+                        <TaskItem
+                          key={task.id}
+                          task={task}
+                          folder={folder}
+                          onToggleDone={toggleTaskDone}
+                          onToggleInProgress={toggleInProgress}
+                          onEdit={openEditModal}
+                          onDelete={deleteTask}
+                        />
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
             );
           })}
 
-          {unfiledCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setSelectedFolderId(selectedFolderId === 'unfiled' ? null : 'unfiled')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all shrink-0 flex items-center gap-1.5 border ${
-                selectedFolderId === 'unfiled'
-                  ? 'bg-slate-700 text-white border-slate-500 font-bold'
-                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-              }`}
-            >
-              <span>Unfiled</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 font-mono">
-                {unfiledCount}
-              </span>
-            </button>
-          )}
-        </div>
-      )}
+          {/* ── GENERAL / UNFILED TASKS (NO FOLDER) ── */}
+          {(() => {
+            const unfiledTasks = tasks.filter((t) => !t.folder_id);
+            if (unfiledTasks.length === 0 && folders.length > 0) return null;
+            const completedCount = unfiledTasks.filter((t) => t.status === 'done').length;
+            const totalCount = unfiledTasks.length;
+            const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+            const isCollapsed = Boolean(collapsedFolders['unfiled']);
 
-      {/* ── TOOLBAR: TABS, SEARCH & SMART SORT ── */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 mb-4">
-        {/* Segmented Filter Tabs */}
-        <div className="flex items-center bg-slate-900 border border-slate-800 p-1 rounded-xl overflow-x-auto text-xs">
-          <button
-            onClick={() => setActiveTab('all')}
-            className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'all'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-          >
-            All
-            <span className="text-[10px] bg-black/20 px-1.5 py-0.2 rounded-full">
-              {taskStats.active}
-            </span>
-          </button>
+            return (
+              <div className="rounded-2xl bg-slate-900/80 border border-slate-800 overflow-hidden shadow-sm hover:border-slate-700/80 transition-all">
+                <div className="p-3.5 sm:p-4 bg-slate-900/90 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div
+                    onClick={() => toggleCollapseFolder('unfiled')}
+                    className="flex items-center gap-3 cursor-pointer select-none group min-w-0 flex-1"
+                  >
+                    <div className="p-2 rounded-xl border border-slate-700 bg-slate-800 text-slate-300 shrink-0">
+                      <Layers className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-bold text-sm sm:text-base text-white group-hover:text-blue-300 transition-colors">
+                          General Tasks
+                        </h3>
+                        <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700/60 font-medium font-mono">
+                          {completedCount}/{totalCount} Completed ({progressPct}%)
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Tasks not assigned to any specific subject folder
+                      </p>
+                    </div>
+                  </div>
 
-          <button
-            onClick={() => setActiveTab('today')}
-            className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'today'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-          >
-            Today
-            {taskStats.today > 0 && (
-              <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${taskStats.overdue > 0 ? 'bg-red-500 text-white' : 'bg-black/20'
-                  }`}
-              >
-                {taskStats.today}
-              </span>
-            )}
-          </button>
+                  <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openCreateTaskModal('')}
+                      className="px-3 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-semibold flex items-center gap-1 transition-all active:scale-95"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Task</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleCollapseFolder('unfiled')}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                      title={isCollapsed ? 'Expand section' : 'Collapse section'}
+                    >
+                      {isCollapsed ? (
+                        <ChevronDown className="w-4 h-4" />
+                      ) : (
+                        <ChevronUp className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
 
-          <button
-            onClick={() => setActiveTab('upcoming')}
-            className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'upcoming'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-          >
-            Upcoming
-            <span className="text-[10px] bg-black/20 px-1.5 py-0.2 rounded-full">
-              {taskStats.upcoming}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('done')}
-            className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'done'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-          >
-            Completed
-            <span className="text-[10px] bg-black/20 px-1.5 py-0.2 rounded-full">
-              {taskStats.done}
-            </span>
-          </button>
-        </div>
-
-        {/* Sorting & Smart Distribute Controls */}
-        <div className="flex items-center gap-2">
-          {/* Smart Algorithm / Sorting Selector */}
-          <div className="relative">
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortOption)}
-              className="bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs rounded-xl px-2.5 py-1.5 outline-none focus:border-blue-500 cursor-pointer pr-7 appearance-none font-medium"
-              title="Change task sorting algorithm"
-            >
-              <option value="smart">⚡ Smart Algorithm</option>
-              <option value="due_date">📅 Due Date</option>
-              <option value="priority">🚩 Priority (Urgent first)</option>
-              <option value="newest">🕒 Newest first</option>
-            </select>
-            <ChevronDown className="w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500" />
-          </div>
-
-          {/* Clear Completed button */}
-          {taskStats.done > 0 && activeTab === 'done' && (
-            <button
-              onClick={clearCompletedTasks}
-              className="px-2.5 py-1.5 rounded-xl bg-red-950/40 border border-red-800/60 hover:bg-red-900/60 text-red-300 text-xs font-medium flex items-center gap-1 transition-colors"
-            >
-              <Trash2 className="w-3.5 h-3.5" /> Clear Done
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* ── TASKS LIST CONTAINER ── */}
-      {loading ? (
-        <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-3">
-          <Loader2 className="w-7 h-7 animate-spin text-blue-500" />
-          <p className="text-xs">Loading tasks...</p>
-        </div>
-      ) : displayedTasks.length === 0 ? (
-        <div className="p-12 text-center bg-slate-900/40 border border-slate-800/80 rounded-2xl">
-          <CheckSquare className="w-10 h-10 mx-auto text-slate-600 mb-2 stroke-1" />
-          <h3 className="text-sm font-semibold text-slate-300">
-            {selectedFolderId
-              ? `No lessons found in this folder`
-              : 'No tasks found'}
-          </h3>
-          <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
-            {selectedFolderId
-              ? 'Type in the box above to add lessons to this folder!'
-              : activeTab === 'today'
-                ? 'No tasks due today. Great job keeping on top of your schedule!'
-                : activeTab === 'upcoming'
-                  ? 'No upcoming scheduled tasks.'
-                  : activeTab === 'done'
-                    ? 'No completed tasks yet. Finish a task to see it here!'
-                    : 'Add your first task using the box above to get organized.'}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {/* SECTION 1: OVERDUE TASKS (HIGH URGENCY ALERT) */}
-          {activeTab === 'all' && overdueList.length > 0 && (
-            <div className="bg-red-950/20 border border-red-900/40 rounded-2xl p-3">
-              <div className="flex items-center gap-2 mb-2 px-1 text-red-400 font-semibold text-xs tracking-wider uppercase">
-                <AlertCircle className="w-3.5 h-3.5" />
-                <span>Overdue ({overdueList.length})</span>
-              </div>
-              <div className="space-y-2">
-                {overdueList.map((task) => (
-                  <TaskItem
-                    key={task.id}
-                    task={task}
-                    folder={task.folder_id ? foldersMap.get(task.folder_id) : undefined}
-                    onToggleDone={toggleTaskDone}
-                    onToggleInProgress={toggleInProgress}
-                    onEdit={openEditModal}
-                    onDelete={deleteTask}
-                    onSelectFolder={(fId) => setSelectedFolderId(fId)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* SECTION 2: ACTIVE TASKS (SMART RANKED) */}
-          {activeTab === 'all' ? (
-            nonOverdueList.length > 0 && (
-              <div className="space-y-2">
-                {overdueList.length > 0 && (
-                  <div className="flex items-center gap-2 px-1 text-slate-400 font-semibold text-xs tracking-wider uppercase pt-1">
-                    <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Up Next</span>
+                {!isCollapsed && (
+                  <div className="p-3 sm:p-4 space-y-2 bg-slate-950/40">
+                    {unfiledTasks.length === 0 ? (
+                      <div className="py-6 px-4 text-center rounded-xl border border-dashed border-slate-800/80 bg-slate-900/30">
+                        <p className="text-xs text-slate-400">No general unfiled tasks.</p>
+                      </div>
+                    ) : (
+                      unfiledTasks.map((task) => (
+                        <TaskItem
+                          key={task.id}
+                          task={task}
+                          onToggleDone={toggleTaskDone}
+                          onToggleInProgress={toggleInProgress}
+                          onEdit={openEditModal}
+                          onDelete={deleteTask}
+                        />
+                      ))
+                    )}
                   </div>
                 )}
-                {nonOverdueList.map((task) => (
-                  <TaskItem
-                    key={task.id}
-                    task={task}
-                    folder={task.folder_id ? foldersMap.get(task.folder_id) : undefined}
-                    onToggleDone={toggleTaskDone}
-                    onToggleInProgress={toggleInProgress}
-                    onEdit={openEditModal}
-                    onDelete={deleteTask}
-                    onSelectFolder={(fId) => setSelectedFolderId(fId)}
-                  />
-                ))}
               </div>
-            )
-          ) : (
-            <div className="space-y-2">
-              {displayedTasks.map((task) => (
-                <TaskItem
-                  key={task.id}
-                  task={task}
-                  folder={task.folder_id ? foldersMap.get(task.folder_id) : undefined}
-                  onToggleDone={toggleTaskDone}
-                  onToggleInProgress={toggleInProgress}
-                  onEdit={openEditModal}
-                  onDelete={deleteTask}
-                  onSelectFolder={(fId) => setSelectedFolderId(fId)}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* SECTION 3: COMPLETED TASKS (COLLAPSIBLE IN 'ALL' VIEW) */}
-          {activeTab === 'all' && doneDisplayed.length > 0 && (
-            <div className="pt-4 border-t border-slate-800/80">
-              <button
-                type="button"
-                onClick={() => setShowCompletedSection(!showCompletedSection)}
-                className="flex items-center justify-between w-full p-2 rounded-xl text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 transition-colors"
-              >
-                <div className="flex items-center gap-2 font-medium">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>Completed ({doneDisplayed.length})</span>
-                </div>
-                {showCompletedSection ? (
-                  <ChevronUp className="w-4 h-4 text-slate-500" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-slate-500" />
-                )}
-              </button>
-
-              {showCompletedSection && (
-                <div className="space-y-2 mt-2">
-                  {doneDisplayed.map((task) => (
-                    <TaskItem
-                      key={task.id}
-                      task={task}
-                      folder={task.folder_id ? foldersMap.get(task.folder_id) : undefined}
-                      onToggleDone={toggleTaskDone}
-                      onToggleInProgress={toggleInProgress}
-                      onEdit={openEditModal}
-                      onDelete={deleteTask}
-                      onSelectFolder={(fId) => setSelectedFolderId(fId)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
-        </>
-      )}
 
-      {/* ── EDIT TASK MODAL ── */}
-      {editingTask && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+      {/* ── UNIFIED TASK MODAL (ADD & EDIT - MATCHING IMAGE 2/3) ── */}
+      {isTaskModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-[#0b1120] border border-slate-800 rounded-2xl w-full max-w-lg p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150 my-auto">
+            {/* Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <h3 className="font-semibold text-base text-white flex items-center gap-2">
-                <Edit3 className="w-4 h-4 text-blue-400" />
-                Edit Task
+                {taskModalMode === 'create' ? (
+                  <>
+                    <Plus className="w-4 h-4 text-blue-400" />
+                    <span>Add Task</span>
+                  </>
+                ) : (
+                  <>
+                    <Edit3 className="w-4 h-4 text-blue-400" />
+                    <span>Edit Task</span>
+                  </>
+                )}
               </h3>
               <button
-                onClick={() => setEditingTask(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                type="button"
+                onClick={() => setIsTaskModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={saveEditedTask} className="space-y-4 mt-4">
-              {/* Folder Selection */}
+            {/* Form */}
+            <form onSubmit={saveTaskModal} className="space-y-4 mt-4">
+              {/* FOLDER / SUBJECT GROUP */}
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1 flex items-center justify-between">
-                  <span>Folder / Subject Group</span>
+                  <span>FOLDER / SUBJECT GROUP</span>
                   <button
                     type="button"
                     onClick={() => {
                       setEditingFolder(null);
                       setIsFolderModalOpen(true);
                     }}
-                    className="text-[11px] text-blue-400 hover:underline flex items-center gap-1 font-normal lowercase"
+                    className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal lowercase"
                   >
                     <Plus className="w-3 h-3" /> new folder
                   </button>
                 </label>
-                <select
-                  value={editFolderId}
-                  onChange={(e) => setEditFolderId(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">📁 General (No Folder)</option>
-                  {folders.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      📁 {f.name} {f.due_date ? `(Exam: ${new Date(f.due_date).toLocaleDateString([], { month: 'short', day: 'numeric' })})` : ''}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select
+                    value={taskModalFolderId}
+                    onChange={(e) => setTaskModalFolderId(e.target.value)}
+                    className="w-full bg-slate-900/90 border border-slate-800 hover:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer appearance-none pr-8"
+                  >
+                    <option value="">📁 General (No Folder)</option>
+                    {folders.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        📁 {f.name} {f.due_date ? `(Exam: ${new Date(f.due_date).toLocaleDateString([], { month: 'short', day: 'numeric' })})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500" />
+                </div>
               </div>
 
-              {/* Title */}
+              {/* Task Title * */}
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Task Title *</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Task Title *
+                </label>
                 <input
                   type="text"
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
+                  value={taskModalTitle}
+                  onChange={(e) => setTaskModalTitle(e.target.value)}
+                  placeholder="e.g. Lesson 3 - Grammar"
+                  className="w-full bg-slate-900/90 border border-slate-800 hover:border-slate-700 rounded-xl px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
                   required
+                  autoFocus
                 />
               </div>
 
-              {/* Description */}
+              {/* Description (optional) */}
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1">
                   Description (optional)
                 </label>
                 <textarea
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
+                  value={taskModalDescription}
+                  onChange={(e) => setTaskModalDescription(e.target.value)}
                   rows={2}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  className="w-full bg-slate-900/90 border border-slate-800 hover:border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500 resize-none placeholder-slate-500"
                   placeholder="Notes, links, or context..."
                 />
               </div>
@@ -2339,88 +2077,99 @@ export default function TasksPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1">Priority</label>
-                  <select
-                    value={editPriority}
-                    onChange={(e) => setEditPriority(e.target.value as TaskPriority)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {PRIORITIES.map((p) => (
-                      <option key={p} value={p}>
-                        {p.charAt(0).toUpperCase() + p.slice(1)}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={taskModalPriority}
+                      onChange={(e) => setTaskModalPriority(e.target.value as TaskPriority)}
+                      className="w-full bg-slate-900/90 border border-slate-800 hover:border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer appearance-none pr-7"
+                    >
+                      <option value="urgent">Urgent</option>
+                      <option value="high">High</option>
+                      <option value="medium">Medium</option>
+                      <option value="low">Low</option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500" />
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1">Status</label>
-                  <select
-                    value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value as TaskStatus)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="todo">To Do</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="done">Completed</option>
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={taskModalStatus}
+                      onChange={(e) => setTaskModalStatus(e.target.value as TaskStatus)}
+                      className="w-full bg-slate-900/90 border border-slate-800 hover:border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer appearance-none pr-7"
+                    >
+                      <option value="todo">To Do</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="done">Completed</option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500" />
+                  </div>
                 </div>
               </div>
 
-              {/* Difficulty & Estimated Duration Grid */}
+              {/* Difficulty & Est. Duration Grid */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1">
                     Difficulty (AI Planning)
                   </label>
-                  <select
-                    value={editDifficulty}
-                    onChange={(e) => setEditDifficulty(e.target.value as TaskDifficulty)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="easy">🟢 Easy (Quick / Low effort)</option>
-                    <option value="medium">🔵 Medium (Standard focus)</option>
-                    <option value="hard">🔴 Hard (High energy & deep focus)</option>
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={taskModalDifficulty}
+                      onChange={(e) => setTaskModalDifficulty(e.target.value as TaskDifficulty)}
+                      className="w-full bg-slate-900/90 border border-slate-800 hover:border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer appearance-none pr-7"
+                    >
+                      <option value="medium">🔵 Medium (Standard focus)</option>
+                      <option value="easy">🟢 Easy (Quick / Low effort)</option>
+                      <option value="hard">🔴 Hard (High energy & deep focus)</option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500" />
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1">
                     Est. Duration
                   </label>
-                  <select
-                    value={editEstimatedDuration}
-                    onChange={(e) => setEditEstimatedDuration(Number(e.target.value))}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value={15}>⏱️ 15 mins</option>
-                    <option value={30}>⏱️ 30 mins</option>
-                    <option value={45}>⏱️ 45 mins</option>
-                    <option value={60}>⏱️ 60 mins (1 hr)</option>
-                    <option value={90}>⏱️ 90 mins (1.5 hrs)</option>
-                    <option value={120}>⏱️ 120 mins (2 hrs)</option>
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={taskModalEstimatedDuration}
+                      onChange={(e) => setTaskModalEstimatedDuration(Number(e.target.value))}
+                      className="w-full bg-slate-900/90 border border-slate-800 hover:border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer appearance-none pr-7"
+                    >
+                      <option value={15}>⏱️ 15 mins</option>
+                      <option value={30}>⏱️ 30 mins</option>
+                      <option value={45}>⏱️ 45 mins</option>
+                      <option value={60}>⏱️ 60 mins (1 hr)</option>
+                      <option value={90}>⏱️ 90 mins (1.5 hrs)</option>
+                      <option value={120}>⏱️ 120 mins (2 hrs)</option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500" />
+                  </div>
                 </div>
               </div>
 
-              {/* Due Date & Reminder Grid */}
+              {/* Due Date & Notification Reminder Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1">Due Date</label>
                   <input
                     type="date"
-                    value={editDueDate}
-                    onChange={(e) => setEditDueDate(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500"
+                    value={taskModalDueDate}
+                    onChange={(e) => setTaskModalDueDate(e.target.value)}
+                    className="w-full bg-slate-900/90 border border-slate-800 hover:border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center justify-between">
                     <span>Notification Reminder</span>
-                    {editReminderAt && (
+                    {taskModalReminderAt && (
                       <button
                         type="button"
-                        onClick={() => setEditReminderAt('')}
+                        onClick={() => setTaskModalReminderAt('')}
                         className="text-[10px] text-red-400 hover:underline"
                       >
                         Clear
@@ -2429,14 +2178,14 @@ export default function TasksPage() {
                   </label>
                   <input
                     type="datetime-local"
-                    value={editReminderAt}
+                    value={taskModalReminderAt}
                     onChange={(e) => {
-                      setEditReminderAt(e.target.value);
+                      setTaskModalReminderAt(e.target.value);
                       if (e.target.value && notifPermission !== 'granted') {
                         requestPermission();
                       }
                     }}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full bg-slate-900/90 border border-slate-800 hover:border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
@@ -2445,22 +2194,24 @@ export default function TasksPage() {
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setEditingTask(null)}
+                  onClick={() => setIsTaskModalOpen(false)}
                   className="px-4 py-2 rounded-xl text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={!editTitle.trim() || savingEdit}
+                  disabled={!taskModalTitle.trim() || savingTaskModal}
                   className="px-4 py-2 rounded-xl text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium flex items-center gap-1.5 transition-colors shadow-md shadow-blue-500/20"
                 >
-                  {savingEdit ? (
+                  {savingTaskModal ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : taskModalMode === 'create' ? (
+                    <Plus className="w-3.5 h-3.5" />
                   ) : (
                     <Check className="w-3.5 h-3.5" />
                   )}
-                  Save Changes
+                  <span>{taskModalMode === 'create' ? 'Add Task' : 'Save Changes'}</span>
                 </button>
               </div>
             </form>
