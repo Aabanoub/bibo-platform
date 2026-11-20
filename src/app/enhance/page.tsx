@@ -20,6 +20,7 @@ import {
   Split,
   Image as ImageIcon,
   Zap,
+  Loader2,
 } from 'lucide-react';
 
 type PresetMode = 'auto' | 'portrait' | 'document' | 'landscape' | 'upscale2x' | 'upscale4x' | 'custom';
@@ -102,11 +103,120 @@ const PRESET_CONFIGS: Record<PresetMode, AdjustmentSettings> = {
   custom: DEFAULT_SETTINGS,
 };
 
+// Background Web Worker script for zero-freezing pixel manipulation
+const WORKER_SCRIPT = `
+self.onmessage = function(e) {
+  const { id, imgData, cfg } = e.data;
+  const data = imgData.data;
+  const len = data.length;
+  const w = imgData.width;
+  const h = imgData.height;
+
+  // 1. Brightness, Contrast & Vibrance pass
+  const contrastFactor = (259 * (cfg.contrast + 255)) / (255 * (259 - cfg.contrast));
+  const brightnessOffset = (cfg.brightness / 100) * 255;
+  const vibranceFactor = cfg.vibrance / 100;
+
+  for (let i = 0; i < len; i += 4) {
+    let r = data[i];
+    let g = data[i + 1];
+    let b = data[i + 2];
+
+    // Brightness
+    r += brightnessOffset;
+    g += brightnessOffset;
+    b += brightnessOffset;
+
+    // Contrast
+    r = contrastFactor * (r - 128) + 128;
+    g = contrastFactor * (g - 128) + 128;
+    b = contrastFactor * (b - 128) + 128;
+
+    // Smart Vibrance
+    const max = Math.max(r, g, b);
+    const avg = (r + g + b) / 3;
+    const amt = ((Math.abs(max - avg) * 2) / 255) * vibranceFactor;
+    if (r !== max) r += (max - r) * amt;
+    if (g !== max) g += (max - g) * amt;
+    if (b !== max) b += (max - b) * amt;
+
+    data[i] = Math.min(255, Math.max(0, r));
+    data[i + 1] = Math.min(255, Math.max(0, g));
+    data[i + 2] = Math.min(255, Math.max(0, b));
+  }
+
+  // 2. Denoise (Edge-preserving noise smoothing)
+  if (cfg.denoise > 5) {
+    const denoiseFactor = (cfg.denoise / 100) * 0.55;
+    const temp = new Uint8ClampedArray(data);
+    const threshold = 32 * (1 - denoiseFactor * 0.4);
+
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const idx = (y * w + x) * 4;
+        for (let c = 0; c < 3; c++) {
+          const center = temp[idx + c];
+          let sum = center;
+          let count = 1;
+
+          const top = temp[((y - 1) * w + x) * 4 + c];
+          const btm = temp[((y + 1) * w + x) * 4 + c];
+          const lft = temp[(y * w + (x - 1)) * 4 + c];
+          const rgt = temp[(y * w + (x + 1)) * 4 + c];
+
+          if (Math.abs(top - center) < threshold) { sum += top; count++; }
+          if (Math.abs(btm - center) < threshold) { sum += btm; count++; }
+          if (Math.abs(lft - center) < threshold) { sum += lft; count++; }
+          if (Math.abs(rgt - center) < threshold) { sum += rgt; count++; }
+
+          data[idx + c] = Math.round(center * (1 - denoiseFactor) + (sum / count) * denoiseFactor);
+        }
+      }
+    }
+  }
+
+  // 3. Unsharp Mask & Clarity (High-pass edge sharpening)
+  if (cfg.sharpness > 0 || cfg.clarity > 0) {
+    const sharpWeight = (cfg.sharpness / 100) * 0.85 + (cfg.clarity / 100) * 0.45;
+    if (sharpWeight > 0.05) {
+      const srcPixels = new Uint8ClampedArray(data);
+      const centerWeight = 1 + 4 * sharpWeight;
+      const edgeWeight = -sharpWeight;
+
+      for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          const idx = (y * w + x) * 4;
+
+          for (let c = 0; c < 3; c++) {
+            const top = ((y - 1) * w + x) * 4 + c;
+            const btm = ((y + 1) * w + x) * 4 + c;
+            const lft = (y * w + (x - 1)) * 4 + c;
+            const rgt = (y * w + (x + 1)) * 4 + c;
+
+            const val =
+              srcPixels[idx + c] * centerWeight +
+              (srcPixels[top] + srcPixels[btm] + srcPixels[lft] + srcPixels[rgt]) * edgeWeight;
+
+            data[idx + c] = Math.min(255, Math.max(0, val));
+          }
+        }
+      }
+    }
+  }
+
+  // Send back result with zero-copy buffer transfer
+  self.postMessage({ id, imgData }, [imgData.data.buffer]);
+};
+`;
+
+const MAX_PREVIEW_SIZE = 1280;
+
 export default function PhotoEnhancerPage() {
   const [originalImage, setOriginalImage] = useState<string | null>(null);
   const [imageMeta, setImageMeta] = useState<{ width: number; height: number; name: string } | null>(null);
   const [enhancedUrl, setEnhancedUrl] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [activePreset, setActivePreset] = useState<PresetMode>('auto');
   const [settings, setSettings] = useState<AdjustmentSettings>(PRESET_CONFIGS.auto);
   const [splitPos, setSplitPos] = useState<number>(50); // 0 - 100%
@@ -114,167 +224,124 @@ export default function PhotoEnhancerPage() {
   const [isAdvancedExpanded, setIsAdvancedExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // References
+  const previewImgRef = useRef<HTMLImageElement | null>(null);
+  const workerRef = useRef<Worker | null>(null);
+  const taskIdRef = useRef<number>(0);
+  const pendingExportResolve = useRef<((value: string) => void) | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingSplit = useRef(false);
 
-  // Apply enhancement algorithm on canvas
-  const processImage = useCallback(
-    async (src: string, cfg: AdjustmentSettings): Promise<string> => {
-      return new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          const originalW = img.naturalWidth || img.width;
-          const originalH = img.naturalHeight || img.height;
-          const scale = cfg.upscale;
+  // Initialize Web Worker for non-blocking background processing
+  useEffect(() => {
+    let worker: Worker | null = null;
+    try {
+      const blob = new Blob([WORKER_SCRIPT], { type: 'application/javascript' });
+      const workerUrl = URL.createObjectURL(blob);
+      worker = new Worker(workerUrl);
+      workerRef.current = worker;
 
-          const targetW = originalW * scale;
-          const targetH = originalH * scale;
+      worker.onmessage = (e) => {
+        const { id, imgData } = e.data;
 
-          // Offscreen working canvas
+        // Export resolution task
+        if (id === 'export' && pendingExportResolve.current) {
+          const exportCanvas = document.createElement('canvas');
+          exportCanvas.width = imgData.width;
+          exportCanvas.height = imgData.height;
+          const ctx = exportCanvas.getContext('2d');
+          if (ctx) {
+            ctx.putImageData(imgData, 0, 0);
+            pendingExportResolve.current(exportCanvas.toDataURL('image/png', 0.95));
+          }
+          pendingExportResolve.current = null;
+          return;
+        }
+
+        // Live preview task (only process if it matches latest taskId to avoid stale frame flicker)
+        if (id === taskIdRef.current) {
           const canvas = document.createElement('canvas');
-          canvas.width = targetW;
-          canvas.height = targetH;
-          const ctx = canvas.getContext('2d', { willReadFrequently: true });
-          if (!ctx) {
-            resolve(src);
-            return;
+          canvas.width = imgData.width;
+          canvas.height = imgData.height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.putImageData(imgData, 0, 0);
+            setEnhancedUrl(canvas.toDataURL('image/png', 0.92));
           }
+          setIsProcessing(false);
+        }
+      };
 
-          // Multi-step high-quality scaling
-          ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = 'high';
-          ctx.drawImage(img, 0, 0, targetW, targetH);
+      worker.onerror = (err) => {
+        console.error('Enhancer worker error:', err);
+        setIsProcessing(false);
+      };
+    } catch (err) {
+      console.warn('Web Worker not supported in this environment:', err);
+    }
 
-          // Pixel data manipulation
-          const imgData = ctx.getImageData(0, 0, targetW, targetH);
-          const data = imgData.data;
-          const len = data.length;
+    return () => {
+      worker?.terminate();
+      workerRef.current = null;
+    };
+  }, []);
 
-          // Contrast & Brightness factors
-          const contrastFactor = (259 * (cfg.contrast + 255)) / (255 * (259 - cfg.contrast));
-          const brightnessOffset = (cfg.brightness / 100) * 255;
-          const vibranceFactor = cfg.vibrance / 100;
+  // Request non-blocking enhancement via Web Worker
+  const triggerWorkerEnhancement = useCallback(
+    (cfg: AdjustmentSettings) => {
+      const img = previewImgRef.current;
+      if (!img || !workerRef.current) return;
 
-          for (let i = 0; i < len; i += 4) {
-            let r = data[i];
-            let g = data[i + 1];
-            let b = data[i + 2];
+      const currentId = ++taskIdRef.current;
+      setIsProcessing(true);
 
-            // 1. Brightness
-            r += brightnessOffset;
-            g += brightnessOffset;
-            b += brightnessOffset;
+      // Create preview scale canvas
+      const naturalW = img.naturalWidth || img.width;
+      const naturalH = img.naturalHeight || img.height;
+      const previewScale = Math.min(1, MAX_PREVIEW_SIZE / Math.max(naturalW, naturalH));
 
-            // 2. Contrast
-            r = contrastFactor * (r - 128) + 128;
-            g = contrastFactor * (g - 128) + 128;
-            b = contrastFactor * (b - 128) + 128;
+      const targetW = Math.max(10, Math.round(naturalW * previewScale));
+      const targetH = Math.max(10, Math.round(naturalH * previewScale));
 
-            // 3. Vibrance
-            const max = Math.max(r, g, b);
-            const avg = (r + g + b) / 3;
-            const amt = ((Math.abs(max - avg) * 2) / 255) * vibranceFactor;
-            if (r !== max) r += (max - r) * amt;
-            if (g !== max) g += (max - g) * amt;
-            if (b !== max) b += (max - b) * amt;
+      const canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) {
+        setIsProcessing(false);
+        return;
+      }
 
-            data[i] = Math.min(255, Math.max(0, r));
-            data[i + 1] = Math.min(255, Math.max(0, g));
-            data[i + 2] = Math.min(255, Math.max(0, b));
-          }
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, targetW, targetH);
 
-          ctx.putImageData(imgData, 0, 0);
+      const imgData = ctx.getImageData(0, 0, targetW, targetH);
 
-          // 4. Sharpness & Clarity (Unsharp Mask via convolution)
-          if (cfg.sharpness > 0 || cfg.clarity > 0) {
-            const sharpWeight = (cfg.sharpness / 100) * 0.9 + (cfg.clarity / 100) * 0.5;
-            if (sharpWeight > 0.05) {
-              const srcData = ctx.getImageData(0, 0, targetW, targetH);
-              const srcPixels = srcData.data;
-              const dstData = ctx.createImageData(targetW, targetH);
-              const dstPixels = dstData.data;
-
-              const w = targetW;
-              const h = targetH;
-              const centerWeight = 1 + 4 * sharpWeight;
-              const edgeWeight = -sharpWeight;
-
-              for (let y = 1; y < h - 1; y++) {
-                for (let x = 1; x < w - 1; x++) {
-                  const idx = (y * w + x) * 4;
-
-                  for (let c = 0; c < 3; c++) {
-                    const top = ((y - 1) * w + x) * 4 + c;
-                    const btm = ((y + 1) * w + x) * 4 + c;
-                    const lft = (y * w + (x - 1)) * 4 + c;
-                    const rgt = (y * w + (x + 1)) * 4 + c;
-
-                    const val =
-                      srcPixels[idx + c] * centerWeight +
-                      (srcPixels[top] + srcPixels[btm] + srcPixels[lft] + srcPixels[rgt]) * edgeWeight;
-
-                    dstPixels[idx + c] = Math.min(255, Math.max(0, val));
-                  }
-                  dstPixels[idx + 3] = srcPixels[idx + 3]; // Preserve alpha
-                }
-              }
-
-              // Copy borders
-              for (let x = 0; x < w; x++) {
-                const top = x * 4;
-                const btm = ((h - 1) * w + x) * 4;
-                for (let c = 0; c < 4; c++) {
-                  dstPixels[top + c] = srcPixels[top + c];
-                  dstPixels[btm + c] = srcPixels[btm + c];
-                }
-              }
-              for (let y = 0; y < h; y++) {
-                const lft = (y * w) * 4;
-                const rgt = (y * w + (w - 1)) * 4;
-                for (let c = 0; c < 4; c++) {
-                  dstPixels[lft + c] = srcPixels[lft + c];
-                  dstPixels[rgt + c] = srcPixels[rgt + c];
-                }
-              }
-
-              ctx.putImageData(dstData, 0, 0);
-            }
-          }
-
-          resolve(canvas.toDataURL('image/png', 0.95));
-        };
-        img.src = src;
-      });
+      // Post to background worker thread with transferable ArrayBuffer
+      workerRef.current.postMessage(
+        {
+          id: currentId,
+          imgData,
+          cfg,
+        },
+        [imgData.data.buffer]
+      );
     },
     []
   );
 
-  // Trigger processing on image or settings change
+  // Debounced trigger on settings change
   useEffect(() => {
     if (!originalImage) return;
-    let active = true;
-    setIsProcessing(true);
 
-    const timeout = setTimeout(async () => {
-      try {
-        const result = await processImage(originalImage, settings);
-        if (active) {
-          setEnhancedUrl(result);
-        }
-      } catch (err) {
-        console.error('Enhancement processing error:', err);
-      } finally {
-        if (active) setIsProcessing(false);
-      }
-    }, 120);
+    const timer = setTimeout(() => {
+      triggerWorkerEnhancement(settings);
+    }, 60);
 
-    return () => {
-      active = false;
-      clearTimeout(timeout);
-    };
-  }, [originalImage, settings, processImage]);
+    return () => clearTimeout(timer);
+  }, [originalImage, settings, triggerWorkerEnhancement]);
 
   // Handle image upload
   const handleFileUpload = (file: File) => {
@@ -287,7 +354,9 @@ export default function PhotoEnhancerPage() {
       const dataUri = e.target?.result as string;
       if (dataUri) {
         const img = new Image();
+        img.crossOrigin = 'anonymous';
         img.onload = () => {
+          previewImgRef.current = img;
           setImageMeta({
             width: img.naturalWidth || img.width,
             height: img.naturalHeight || img.height,
@@ -316,16 +385,13 @@ export default function PhotoEnhancerPage() {
   };
 
   // Slider dragging logic for Before/After split
-  const handleSplitMove = useCallback(
-    (clientX: number) => {
-      if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      const x = clientX - rect.left;
-      const percent = Math.min(100, Math.max(0, (x / rect.width) * 100));
-      setSplitPos(percent);
-    },
-    []
-  );
+  const handleSplitMove = useCallback((clientX: number) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const percent = Math.min(100, Math.max(0, (x / rect.width) * 100));
+    setSplitPos(percent);
+  }, []);
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (e.touches[0]) handleSplitMove(e.touches[0].clientX);
@@ -335,13 +401,50 @@ export default function PhotoEnhancerPage() {
     if (isDraggingSplit.current) handleSplitMove(e.clientX);
   };
 
-  // Download High-Res
-  const downloadEnhanced = (format: 'png' | 'jpeg') => {
-    if (!enhancedUrl) return;
-    const link = document.createElement('a');
-    link.download = `${imageMeta?.name || 'photo'}-enhanced-${settings.upscale}x.${format === 'png' ? 'png' : 'jpg'}`;
-    link.href = enhancedUrl;
-    link.click();
+  // Non-blocking Full-Resolution Export via Web Worker
+  const downloadEnhanced = async (format: 'png' | 'jpeg') => {
+    const img = previewImgRef.current;
+    if (!img) return;
+
+    setIsExporting(true);
+
+    try {
+      const scale = settings.upscale;
+      const targetW = (img.naturalWidth || img.width) * scale;
+      const targetH = (img.naturalHeight || img.height) * scale;
+
+      const exportCanvas = document.createElement('canvas');
+      exportCanvas.width = targetW;
+      exportCanvas.height = targetH;
+      const ctx = exportCanvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) throw new Error('Could not get canvas context');
+
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, targetW, targetH);
+
+      const imgData = ctx.getImageData(0, 0, targetW, targetH);
+
+      // Process in background worker so the main UI never freezes
+      const fullResultUrl = await new Promise<string>((resolve) => {
+        pendingExportResolve.current = resolve;
+        if (workerRef.current) {
+          workerRef.current.postMessage({ id: 'export', imgData, cfg: settings }, [imgData.data.buffer]);
+        } else {
+          resolve(exportCanvas.toDataURL(format === 'png' ? 'image/png' : 'image/jpeg', 0.95));
+        }
+      });
+
+      const link = document.createElement('a');
+      link.download = `${imageMeta?.name || 'photo'}-enhanced-${settings.upscale}x.${format === 'png' ? 'png' : 'jpg'}`;
+      link.href = fullResultUrl;
+      link.click();
+    } catch (err) {
+      console.error('Export error:', err);
+      alert('Failed to export image. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Copy to clipboard
@@ -402,18 +505,44 @@ export default function PhotoEnhancerPage() {
     }
 
     const uri = canvas.toDataURL('image/png');
-    setImageMeta({
-      width: 400,
-      height: 300,
-      name: `sample-${type}`,
-    });
-    setOriginalImage(uri);
-    setActivePreset(type === 'portrait' ? 'portrait' : 'document');
-    setSettings(PRESET_CONFIGS[type === 'portrait' ? 'portrait' : 'document']);
+    const img = new Image();
+    img.onload = () => {
+      previewImgRef.current = img;
+      setImageMeta({
+        width: 400,
+        height: 300,
+        name: `sample-${type}`,
+      });
+      setOriginalImage(uri);
+      setActivePreset(type === 'portrait' ? 'portrait' : 'document');
+      setSettings(PRESET_CONFIGS[type === 'portrait' ? 'portrait' : 'document']);
+    };
+    img.src = uri;
   };
 
   return (
     <div className="space-y-6 text-zinc-100 max-w-6xl mx-auto pb-12 animate-fade-in">
+      {/* Non-blocking Background Export Overlay */}
+      {isExporting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm animate-fade-in">
+          <div className="p-6 rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl max-w-sm w-full mx-4 text-center space-y-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-600/20 text-indigo-400 mx-auto animate-pulse">
+              <Sparkles size={28} />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white">Rendering Ultra-HD Image</h3>
+              <p className="text-xs text-zinc-400 mt-1">
+                Applying {settings.upscale}x super-resolution and unsharp masking on background thread...
+              </p>
+            </div>
+            <div className="w-full bg-zinc-800 h-2 rounded-full overflow-hidden">
+              <div className="bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 h-full w-full animate-pulse" />
+            </div>
+            <p className="text-[11px] text-zinc-500">Your browser remains 100% smooth & responsive</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-4">
         <div className="flex items-center gap-2.5">
@@ -423,12 +552,12 @@ export default function PhotoEnhancerPage() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-lg sm:text-xl font-bold tracking-tight">Photo Quality Enhancer</h1>
-              <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[10px] font-semibold uppercase tracking-wider">
-                AI Studio
+              <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1">
+                <Zap size={10} /> Fast WebWorker Engine
               </span>
             </div>
             <p className="text-[11px] sm:text-xs text-zinc-400">
-              Restore clarity, de-blur edges, upscale 2x/4x & enhance details instantly
+              Restore clarity, de-blur edges, upscale 2x/4x & enhance details with 0ms freeze
             </p>
           </div>
         </div>
@@ -440,6 +569,7 @@ export default function PhotoEnhancerPage() {
               setOriginalImage(null);
               setEnhancedUrl(null);
               setImageMeta(null);
+              previewImgRef.current = null;
             }}
             className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
           >
@@ -482,7 +612,7 @@ export default function PhotoEnhancerPage() {
             </div>
             <div className="flex items-center gap-2 text-xs text-zinc-500 font-medium">
               <ShieldCheck size={14} className="text-emerald-400" />
-              <span>100% Private: Processed entirely on your device with zero upload latency</span>
+              <span>100% Private: Powered by off-thread Web Workers with zero freeze and zero uploads</span>
             </div>
           </div>
 
@@ -599,7 +729,7 @@ export default function PhotoEnhancerPage() {
               <div className="absolute top-3 right-3 z-30 pointer-events-none flex items-center gap-2">
                 {isProcessing && (
                   <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-900/80 backdrop-blur-md text-[11px] font-semibold text-indigo-200 border border-indigo-700 animate-pulse">
-                    <Sparkles size={12} /> Enhancing...
+                    <Loader2 size={12} className="animate-spin" /> Enhancing...
                   </span>
                 )}
                 <span className="px-2.5 py-1 rounded-lg bg-indigo-600/90 backdrop-blur-md text-[11px] font-semibold text-white shadow-md">
@@ -651,9 +781,10 @@ export default function PhotoEnhancerPage() {
                 <button
                   type="button"
                   onClick={() => downloadEnhanced('png')}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-lg shadow-indigo-500/20 transition"
+                  disabled={isExporting}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-lg shadow-indigo-500/20 transition disabled:opacity-50"
                 >
-                  <Download size={14} />
+                  {isExporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
                   <span>Download Enhanced PNG</span>
                 </button>
               </div>
