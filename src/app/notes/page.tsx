@@ -132,6 +132,73 @@ export default function NotesPage() {
     });
   }, [fetchNotes]);
 
+  // ---------------------------------------------------------------------------
+  // Supabase Realtime Subscription for Notes
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    async function setupRealtime() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      channel = supabase
+        .channel(`notes-live-${user.id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'notes', filter: `user_id=eq.${user.id}` },
+          (payload: any) => {
+            if (payload.eventType === 'INSERT') {
+              const newNote = payload.new as Note;
+              setNotes((prev) => (prev.some((n) => n.id === newNote.id) ? prev : [newNote, ...prev]));
+            } else if (payload.eventType === 'UPDATE') {
+              const updated = payload.new as Note;
+              setNotes((prev) => prev.map((n) => (n.id === updated.id ? { ...n, ...updated } : n)));
+            } else if (payload.eventType === 'DELETE') {
+              const deletedId = payload.old.id;
+              setNotes((prev) => prev.filter((n) => n.id !== deletedId));
+              if (selectedId === deletedId) {
+                setSelectedId(null);
+                setTitle('');
+                setContent('');
+                setTags([]);
+              }
+            }
+          }
+        )
+        .subscribe();
+    }
+
+    setupRealtime();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [supabase, selectedId]);
+
+  // ---------------------------------------------------------------------------
+  // Tab Visibility Sync
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchNotes();
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility);
+    }
+
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibility);
+      }
+    };
+  }, [fetchNotes]);
+
   // ---- auto-save ----------------------------------------------------------
   useEffect(() => {
     if (!selectedId) return;

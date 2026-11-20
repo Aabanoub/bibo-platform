@@ -204,6 +204,67 @@ export default function FinancePage() {
     fetchSalaryData();
   }, [fetchTransactions, fetchSalaryData]);
 
+  // ---------------------------------------------------------------------------
+  // Supabase Realtime Subscriptions for Transactions & Salary Distribution
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    async function setupRealtime() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      channel = supabase
+        .channel(`finance-live-${user.id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'transactions', filter: `user_id=eq.${user.id}` },
+          () => fetchTransactions()
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'salary_distribution_plans', filter: `user_id=eq.${user.id}` },
+          () => fetchSalaryData()
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'salary_distribution_cycles', filter: `user_id=eq.${user.id}` },
+          () => fetchSalaryData()
+        )
+        .subscribe();
+    }
+
+    setupRealtime();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [supabase, fetchTransactions, fetchSalaryData]);
+
+  // ---------------------------------------------------------------------------
+  // Tab Visibility & Daily Rollover Check
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchTransactions();
+        fetchSalaryData();
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility);
+    }
+
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibility);
+      }
+    };
+  }, [fetchTransactions, fetchSalaryData]);
+
   // Scheduled Payday Detection with Idempotency & Duplicate Prevention
   useEffect(() => {
     if (!salaryPlan || activeSalaryCycle) return;

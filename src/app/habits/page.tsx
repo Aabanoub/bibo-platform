@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
 import type { Habit, HabitLog, HabitFrequency } from '@/types';
 import {
@@ -24,7 +24,10 @@ import {
 function getDayStr(offset = 0): string {
   const d = new Date();
   d.setDate(d.getDate() + offset);
-  return d.toISOString().split('T')[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function getWeekDays(): { date: string; label: string }[] {
@@ -33,7 +36,7 @@ function getWeekDays(): { date: string; label: string }[] {
     const d = new Date();
     d.setDate(d.getDate() + i);
     days.push({
-      date: d.toISOString().split('T')[0],
+      date: getDayStr(i),
       label: d.toLocaleDateString('en-US', { weekday: 'short' }),
     });
   }
@@ -161,6 +164,74 @@ export default function HabitsPage() {
 
   useEffect(() => {
     fetchData();
+  }, [fetchData]);
+
+  // ---------------------------------------------------------------------------
+  // Supabase Realtime Subscriptions for Habits & Daily Logs
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    async function setupRealtime() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      channel = supabase
+        .channel(`habits-live-${user.id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'habits', filter: `user_id=eq.${user.id}` },
+          () => fetchData()
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'habit_logs', filter: `user_id=eq.${user.id}` },
+          () => fetchData()
+        )
+        .subscribe();
+    }
+
+    setupRealtime();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [supabase, fetchData]);
+
+  // ---------------------------------------------------------------------------
+  // Daily Date Rollover & Tab Visibility Check
+  // ---------------------------------------------------------------------------
+  const todayRef = useRef<string>(getDayStr());
+
+  useEffect(() => {
+    function checkDateRollover() {
+      const current = getDayStr();
+      if (current !== todayRef.current) {
+        todayRef.current = current;
+        fetchData();
+      }
+    }
+
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        checkDateRollover();
+        fetchData();
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility);
+    }
+    const interval = setInterval(checkDateRollover, 60000);
+
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibility);
+      }
+      clearInterval(interval);
+    };
   }, [fetchData]);
 
   // ---- create habit -------------------------------------------------------

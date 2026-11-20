@@ -207,29 +207,76 @@ export default function FocusPage() {
   }, []);
 
   // Load active tasks
+  const loadTasks = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('user_id', user.id)
+      .neq('status', 'done')
+      .order('priority', { ascending: false });
+
+    if (data) {
+      setTasks(data);
+      if (data.length > 0 && !selectedTaskId) {
+        setSelectedTaskId(data[0].id);
+      }
+    }
+  }, [supabase, selectedTaskId]);
+
   useEffect(() => {
-    async function loadTasks() {
+    loadTasks();
+  }, [loadTasks]);
+
+  // Realtime subscription for live tasks during focus
+  useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    async function setupRealtime() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('user_id', user.id)
-        .neq('status', 'done')
-        .order('priority', { ascending: false });
-
-      if (data) {
-        setTasks(data);
-        if (data.length > 0) {
-          setSelectedTaskId(data[0].id);
-        }
-      }
+      channel = supabase
+        .channel(`focus-tasks-live-${user.id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'tasks', filter: `user_id=eq.${user.id}` },
+          () => loadTasks()
+        )
+        .subscribe();
     }
-    loadTasks();
-  }, [supabase]);
+
+    setupRealtime();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [supabase, loadTasks]);
+
+  // Tab visibility re-sync
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        loadTasks();
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility);
+    }
+
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibility);
+      }
+    };
+  }, [loadTasks]);
 
   // Handle Timer ticking
   useEffect(() => {

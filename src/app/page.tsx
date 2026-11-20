@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import {
   CheckSquare,
@@ -59,128 +59,219 @@ export default function DashboardPage() {
   const [userName, setUserName] = useState('');
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function fetchDashboard() {
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (!user) return;
+  // Local date helper to avoid UTC midnight date slippage
+  const getLocalDateStr = (d: Date = new Date()): string => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
 
-        setUserName(
-          user.user_metadata?.full_name ||
-            user.user_metadata?.name ||
-            user.email?.split('@')[0] ||
-            'User'
-        );
+  const fetchDashboard = useCallback(async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
 
-        const today = new Date();
-        const todayDateStr = today.toISOString().split('T')[0];
-        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
-        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
-        const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      setUserName(
+        user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          user.email?.split('@')[0] ||
+          'User'
+      );
 
-        // Fetch all data in parallel
-        const [
-          tasksRes,
-          completedTasksRes,
-          transactionsRes,
-          habitsRes,
-          habitLogsRes,
-          notesRes,
-          recentNotesRes,
-        ] = await Promise.all([
-          supabase
-            .from('tasks')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', user.id)
-            .neq('status', 'done'),
-          supabase
-            .from('tasks')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', user.id)
-            .eq('status', 'done')
-            .gte('updated_at', todayStart),
-          supabase
-            .from('transactions')
-            .select('id, description, amount, type, date, created_at')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false }),
-          supabase
-            .from('habits')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', user.id),
-          supabase
-            .from('habit_logs')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', user.id)
-            .eq('completed_at', todayDateStr),
-          supabase
-            .from('notes')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', user.id),
-          supabase
-            .from('notes')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', user.id)
-            .gte('updated_at', weekAgo),
-        ]);
+      const today = new Date();
+      const todayDateStr = getLocalDateStr(today);
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+      const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-        // Calculate synchronized Net Balance and spending totals
-        const allTransactions = (transactionsRes.data as any[]) || [];
-        let totalIncome = 0;
-        let totalExpenses = 0;
-        let todaySpending = 0;
-        let monthlySpending = 0;
+      // Fetch all data in parallel
+      const [
+        tasksRes,
+        completedTasksRes,
+        transactionsRes,
+        habitsRes,
+        habitLogsRes,
+        notesRes,
+        recentNotesRes,
+      ] = await Promise.all([
+        supabase
+          .from('tasks')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .neq('status', 'done'),
+        supabase
+          .from('tasks')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('status', 'done')
+          .gte('updated_at', todayStart),
+        supabase
+          .from('transactions')
+          .select('id, description, amount, type, date, created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('habits')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id),
+        supabase
+          .from('habit_logs')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('completed_at', todayDateStr),
+        supabase
+          .from('notes')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id),
+        supabase
+          .from('notes')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .gte('updated_at', weekAgo),
+      ]);
 
-        const currentMonthPrefix = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+      // Calculate synchronized Net Balance and spending totals
+      const allTransactions = (transactionsRes.data as any[]) || [];
+      let totalIncome = 0;
+      let totalExpenses = 0;
+      let todaySpending = 0;
+      let monthlySpending = 0;
 
-        for (const t of allTransactions) {
-          const amt = Math.abs(Number(t.amount)) || 0;
-          const isIncome = t.type === 'income';
-          const isExpense = t.type === 'expense';
-          const txDate = t.date ? String(t.date).slice(0, 10) : '';
+      const currentMonthPrefix = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
 
-          if (isIncome) totalIncome += amt;
-          if (isExpense) {
-            totalExpenses += amt;
-            if (txDate.startsWith(currentMonthPrefix)) {
-              monthlySpending += amt;
-            }
-            if (txDate === todayDateStr) {
-              todaySpending += amt;
-            }
+      for (const t of allTransactions) {
+        const amt = Math.abs(Number(t.amount)) || 0;
+        const isIncome = t.type === 'income';
+        const isExpense = t.type === 'expense';
+        const txDate = t.date ? String(t.date).slice(0, 10) : '';
+
+        if (isIncome) totalIncome += amt;
+        if (isExpense) {
+          totalExpenses += amt;
+          if (txDate.startsWith(currentMonthPrefix)) {
+            monthlySpending += amt;
+          }
+          if (txDate === todayDateStr) {
+            todaySpending += amt;
           }
         }
+      }
 
-        const netBalance = totalIncome - totalExpenses;
-        const habitsCompletedToday = habitLogsRes.count || 0;
-        const totalHabits = habitsRes.count || 0;
-        const habitsLeftToday = Math.max(0, totalHabits - habitsCompletedToday);
+      const netBalance = totalIncome - totalExpenses;
+      const habitsCompletedToday = habitLogsRes.count || 0;
+      const totalHabits = habitsRes.count || 0;
+      const habitsLeftToday = Math.max(0, totalHabits - habitsCompletedToday);
 
-        setData({
-          openTasks: tasksRes.count || 0,
-          completedToday: completedTasksRes.count || 0,
-          netBalance,
-          totalIncome,
-          totalExpenses,
-          todaySpending,
-          monthlySpending,
-          habitsCompletedToday,
-          totalHabits,
-          habitsLeftToday,
-          totalNotes: notesRes.count || 0,
-          recentlyUpdatedNotes: recentNotesRes.count || 0,
-        });
-      } catch (err) {
-        console.error('Dashboard fetch error:', err);
-      } finally {
-        setLoading(false);
+      setData({
+        openTasks: tasksRes.count || 0,
+        completedToday: completedTasksRes.count || 0,
+        netBalance,
+        totalIncome,
+        totalExpenses,
+        todaySpending,
+        monthlySpending,
+        habitsCompletedToday,
+        totalHabits,
+        habitsLeftToday,
+        totalNotes: notesRes.count || 0,
+        recentlyUpdatedNotes: recentNotesRes.count || 0,
+      });
+    } catch (err) {
+      console.error('Dashboard fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [supabase]);
+
+  useEffect(() => {
+    fetchDashboard();
+  }, [fetchDashboard]);
+
+  // ---------------------------------------------------------------------------
+  // Realtime Live Synchronization for Dashboard Data
+  // Automatically syncs tasks, habits, spending, notes across tabs/devices
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    async function setupLiveDashboard() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      channel = supabase
+        .channel(`dashboard-live-${user.id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'tasks', filter: `user_id=eq.${user.id}` },
+          () => fetchDashboard()
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'habits', filter: `user_id=eq.${user.id}` },
+          () => fetchDashboard()
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'habit_logs', filter: `user_id=eq.${user.id}` },
+          () => fetchDashboard()
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'transactions', filter: `user_id=eq.${user.id}` },
+          () => fetchDashboard()
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'notes', filter: `user_id=eq.${user.id}` },
+          () => fetchDashboard()
+        )
+        .subscribe();
+    }
+
+    setupLiveDashboard();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [supabase, fetchDashboard]);
+
+  // ---------------------------------------------------------------------------
+  // Daily Date Rollover & Tab Visibility Check
+  // ---------------------------------------------------------------------------
+  const todayRef = useRef<string>(getLocalDateStr());
+
+  useEffect(() => {
+    function checkDateRollover() {
+      const current = getLocalDateStr();
+      if (current !== todayRef.current) {
+        todayRef.current = current;
+        fetchDashboard();
       }
     }
 
-    fetchDashboard();
-  }, []);
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        checkDateRollover();
+        fetchDashboard();
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility);
+    }
+    const interval = setInterval(checkDateRollover, 60000);
+
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibility);
+      }
+      clearInterval(interval);
+    };
+  }, [fetchDashboard]);
 
   function getGreeting(): string {
     const hour = new Date().getHours();
