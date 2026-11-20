@@ -9,6 +9,7 @@ import TaskFolderCard, { getFolderCountdown } from '@/components/TaskFolderCard'
 import SmartDistributeModal from '@/components/SmartDistributeModal';
 import DailyPlannerView from '@/components/DailyPlannerView';
 import WeeklyForecastView from '@/components/WeeklyForecastView';
+import { toLocalDateStr } from '@/lib/weekly-forecast';
 import type { SchedulingPreferences } from '@/lib/daily-planner';
 import { extractLessonSequence } from '@/lib/lesson-sequencing';
 import {
@@ -232,8 +233,9 @@ export default function TasksPage() {
 
   // Main View Mode (Tasks & Folders vs AI Daily Planner vs Weekly Forecast)
   const [activeMainTab, setActiveMainTab] = useState<'tasks' | 'planner' | 'forecast'>('tasks');
-  const [plannerDate, setPlannerDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [plannerDate, setPlannerDate] = useState<string>(() => toLocalDateStr(new Date()));
   const [scheduleItems, setScheduleItems] = useState<DailyScheduleItem[]>([]);
+  const [allScheduleItems, setAllScheduleItems] = useState<DailyScheduleItem[]>([]);
   const [userProfile, setUserProfile] = useState<any>(null);
 
   // Quick-Add state (Easy UI)
@@ -361,7 +363,7 @@ export default function TasksPage() {
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      const [profRes, scheduleRes] = await Promise.all([
+      const [profRes, scheduleRes, allScheduleRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
         supabase
           .from('daily_schedule_items')
@@ -369,6 +371,11 @@ export default function TasksPage() {
           .eq('user_id', user.id)
           .eq('date', date)
           .order('sort_order', { ascending: true }),
+        supabase
+          .from('daily_schedule_items')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('date', { ascending: true }),
       ]);
 
       if (profRes.data) {
@@ -376,6 +383,9 @@ export default function TasksPage() {
       }
       if (scheduleRes.data) {
         setScheduleItems(scheduleRes.data as DailyScheduleItem[]);
+      }
+      if (allScheduleRes.data) {
+        setAllScheduleItems(allScheduleRes.data as DailyScheduleItem[]);
       }
     } catch (e) {
       console.error('fetchScheduleAndProfile error:', e);
@@ -461,6 +471,9 @@ export default function TasksPage() {
           console.error('Error saving moved schedule items:', otherErr);
         }
       }
+
+      // Refresh both day schedule and all schedule items
+      await fetchScheduleAndProfile(plannerDate);
     } catch (e) {
       console.error('handleSaveSchedule error:', e);
     }
@@ -1490,6 +1503,7 @@ export default function TasksPage() {
         <WeeklyForecastView
           tasks={tasks}
           folders={folders}
+          scheduleItems={allScheduleItems}
           onSelectDate={(date) => {
             setPlannerDate(date);
             setActiveMainTab('planner');

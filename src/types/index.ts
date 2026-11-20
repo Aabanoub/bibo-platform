@@ -125,6 +125,7 @@ export interface WeeklyForecastDay {
   estimatedHours: number;
   exams: string[];
   deadlines: string[];
+  items?: { title: string; difficulty?: string; duration_minutes: number }[];
   workloadStatus: 'light' | 'balanced' | 'heavy' | 'overloaded';
   isOverloaded: boolean;
   suggestedAction?: string;

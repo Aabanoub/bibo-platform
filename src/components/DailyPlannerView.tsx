@@ -16,6 +16,7 @@ import {
   timeToMinutes,
   minutesToTime,
 } from '@/lib/daily-planner';
+import { toLocalDateStr } from '@/lib/weekly-forecast';
 import {
   adaptWhenSessionOverruns,
 } from '@/lib/adaptive-scheduler';
@@ -272,9 +273,10 @@ export default function DailyPlannerView({
 
   // Move task to tomorrow
   const handleMoveToTomorrow = async (session: DailyScheduleItem) => {
-    const tomorrow = new Date(currentDate);
+    const parts = currentDate.split('-').map(Number);
+    const tomorrow = new Date(parts[0], parts[1] - 1, parts[2]);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    const tomorrowStr = toLocalDateStr(tomorrow);
 
     // Remove from today, and add to tomorrow
     const remainingToday = currentDaySessions.filter((s) => s.id !== sessionIdSafe(session.id));
@@ -381,12 +383,13 @@ export default function DailyPlannerView({
 
   // Navigate Days
   const handleStepDay = (step: number) => {
-    const d = new Date(currentDate);
+    const parts = currentDate.split('-').map(Number);
+    const d = new Date(parts[0], parts[1] - 1, parts[2]);
     d.setDate(d.getDate() + step);
-    onDateChange(d.toISOString().split('T')[0]);
+    onDateChange(toLocalDateStr(d));
   };
 
-  const isToday = currentDate === new Date().toISOString().split('T')[0];
+  const isToday = currentDate === toLocalDateStr(new Date());
   const formattedHeaderDate = new Date(currentDate + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'short',

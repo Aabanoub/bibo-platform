@@ -14,12 +14,13 @@ import {
   BarChart2,
   CheckCircle2,
 } from 'lucide-react';
-import type { Task, TaskFolder } from '@/types';
+import type { Task, TaskFolder, DailyScheduleItem } from '@/types';
 import { calculateWeeklyForecast } from '@/lib/weekly-forecast';
 
 interface WeeklyForecastViewProps {
   tasks: Task[];
   folders: TaskFolder[];
+  scheduleItems?: DailyScheduleItem[];
   onSelectDate?: (dateStr: string) => void;
   onNavigateToPlanner?: () => void;
 }
@@ -27,6 +28,7 @@ interface WeeklyForecastViewProps {
 export default function WeeklyForecastView({
   tasks,
   folders,
+  scheduleItems = [],
   onSelectDate,
   onNavigateToPlanner,
 }: WeeklyForecastViewProps) {
@@ -40,10 +42,8 @@ export default function WeeklyForecastView({
   }, [currentStartOffset]);
 
   const forecast = useMemo(() => {
-    return calculateWeeklyForecast(tasks, folders, windowStartDate);
-  }, [tasks, folders, windowStartDate]);
-
-  const foldersMap = useMemo(() => new Map(folders.map((f) => [f.id, f])), [folders]);
+    return calculateWeeklyForecast(tasks, folders, windowStartDate, scheduleItems);
+  }, [tasks, folders, windowStartDate, scheduleItems]);
 
   function handlePrevWeek() {
     setCurrentStartOffset((prev) => prev - 1);
@@ -191,13 +191,6 @@ export default function WeeklyForecastView({
         {forecast.days.map((day) => {
           const style = getWorkloadStyle(day.workloadStatus);
 
-          // Find tasks for this day
-          const dayTasks = tasks.filter((t) => {
-            const folder = t.folder_id ? foldersMap.get(t.folder_id) : undefined;
-            const effectiveDueDate = t.due_date ? t.due_date.slice(0, 10) : folder?.due_date?.slice(0, 10);
-            return effectiveDueDate === day.date;
-          });
-
           return (
             <div
               key={day.date}
@@ -205,26 +198,28 @@ export default function WeeklyForecastView({
                 if (onSelectDate) onSelectDate(day.date);
                 if (onNavigateToPlanner) onNavigateToPlanner();
               }}
-              className={`group relative rounded-2xl border ${style.border} ${style.glow} bg-slate-900/50 hover:bg-slate-900/80 p-4 transition-all duration-200 flex flex-col justify-between cursor-pointer`}
+              className={`group relative rounded-2xl border ${style.border} ${style.glow} bg-slate-900/60 hover:bg-slate-900/90 p-3.5 sm:p-4 transition-all duration-200 flex flex-col justify-between cursor-pointer min-h-[250px] shadow-sm`}
             >
               <div>
                 {/* Day Header */}
-                <div className="flex items-center justify-between gap-1 mb-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors">
+                <div className="flex items-start justify-between gap-1 mb-2.5">
+                  <div>
+                    <div className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors leading-tight">
                       {day.dayName}
-                    </span>
-                    <span className="text-xs text-slate-400">{formatShortDate(day.date)}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 font-medium">
+                      {formatShortDate(day.date)}
+                    </div>
                   </div>
                   {day.isToday && (
-                    <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                    <span className="shrink-0 text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 shadow-sm">
                       Today
                     </span>
                   )}
                 </div>
 
                 {/* Workload Status Pill */}
-                <div className="mb-3">
+                <div className="mb-2">
                   <span
                     className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${style.badge}`}
                   >
@@ -234,65 +229,69 @@ export default function WeeklyForecastView({
 
                 {/* Exams badge if any */}
                 {day.exams.length > 0 && (
-                  <div className="mb-3 p-2 rounded-lg bg-purple-950/40 border border-purple-500/30 text-purple-200 text-xs flex items-center gap-1.5">
-                    <GraduationCap size={14} className="text-purple-400 shrink-0" />
-                    <span className="font-semibold truncate">{day.exams.join(', ')}</span>
+                  <div
+                    className="mb-2.5 px-2 py-1 rounded-lg bg-purple-950/60 border border-purple-500/40 text-purple-200 text-[10px] font-semibold flex items-center gap-1.5"
+                    title={`Exam: ${day.exams.join(', ')}`}
+                  >
+                    <GraduationCap size={12} className="text-purple-400 shrink-0" />
+                    <span className="truncate">{day.exams.join(', ')}</span>
                   </div>
                 )}
 
                 {/* Metrics */}
-                <div className="space-y-1.5 text-xs">
+                <div className="space-y-1 text-xs mt-1">
                   <div className="flex items-center justify-between text-slate-300">
                     <span className="text-slate-400">Tasks:</span>
-                    <span className="font-semibold">{day.totalTasks}</span>
+                    <span className="font-bold text-white font-mono">{day.totalTasks}</span>
                   </div>
                   <div className="flex items-center justify-between text-slate-300">
                     <span className="text-slate-400">Est. Time:</span>
-                    <span className="font-semibold text-slate-200">{day.estimatedHours}h</span>
+                    <span className="font-bold text-slate-200 font-mono">{day.estimatedHours}h</span>
                   </div>
                 </div>
 
                 {/* Mini Workload Gauge Bar */}
-                <div className="mt-3 w-full h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                <div className="mt-2.5 w-full h-1.5 rounded-full bg-slate-800/80 overflow-hidden">
                   <div
                     className={`h-full ${style.bar} transition-all duration-300`}
                     style={{
-                      width: `${Math.min(100, Math.max(8, (day.estimatedHours / 6) * 100))}%`,
+                      width: `${day.estimatedHours > 0 ? Math.min(100, Math.max(10, (day.estimatedHours / 6) * 100)) : 0}%`,
                     }}
                   />
                 </div>
 
                 {/* Tasks Preview */}
-                {dayTasks.length > 0 && (
-                  <div className="mt-3.5 pt-3 border-t border-slate-800/80 space-y-1.5">
-                    {dayTasks.slice(0, 3).map((t) => (
+                {day.items && day.items.length > 0 && (
+                  <div className="mt-3 pt-2.5 border-t border-slate-800/80 space-y-1">
+                    {day.items.slice(0, 3).map((item, idx) => (
                       <div
-                        key={t.id}
-                        className="flex items-center gap-1.5 text-[11px] text-slate-400 group-hover:text-slate-300 truncate"
+                        key={idx}
+                        className="flex items-center gap-1.5 text-[10px] text-slate-300 truncate"
+                        title={item.title}
                       >
                         <span
                           className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                            t.difficulty === 'hard'
+                            item.difficulty === 'hard'
                               ? 'bg-rose-400'
-                              : t.difficulty === 'easy'
+                              : item.difficulty === 'easy'
                               ? 'bg-emerald-400'
                               : 'bg-blue-400'
                           }`}
                         />
-                        <span className="truncate">{t.title}</span>
+                        <span className="truncate font-medium">{item.title}</span>
                       </div>
                     ))}
-                    {dayTasks.length > 3 && (
-                      <p className="text-[10px] text-slate-500 font-medium">
-                        +{dayTasks.length - 3} more
+                    {day.items.length > 3 && (
+                      <p className="text-[9px] text-slate-500 font-medium pl-3">
+                        +{day.items.length - 3} more tasks
                       </p>
                     )}
                   </div>
                 )}
               </div>
 
-              {/* Action Hint */}
-              <div className="mt-4 pt-2 border-t border-slate-800/60 flex items-center justify-between text-[11px] text-slate-400 group-hover:text-blue-400 transition-colors">
+              {/* Bottom Navigation Link */}
+              <div className="mt-auto pt-3 border-t border-slate-800/40 flex items-center justify-between text-[11px] text-slate-400 group-hover:text-blue-400 transition-colors">
                 <span>View daily plan</span>
                 <ArrowRight size={12} className="group-hover:translate-x-0.5 transition-transform" />
               </div>
