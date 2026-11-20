@@ -249,10 +249,24 @@ export default function TasksPage() {
   const [taskModalReminderAt, setTaskModalReminderAt] = useState('');
   const [taskModalStatus, setTaskModalStatus] = useState<TaskStatus>('todo');
   const [savingTaskModal, setSavingTaskModal] = useState(false);
-  const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
+  // Folder expansion state (collapsed by default until expanded by the user)
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
 
-  const toggleCollapseFolder = (folderId: string) => {
-    setCollapsedFolders((prev) => ({ ...prev, [folderId]: !prev[folderId] }));
+  const toggleExpandFolder = (folderId: string) => {
+    setExpandedFolders((prev) => ({ ...prev, [folderId]: !prev[folderId] }));
+  };
+
+  const handleExpandAll = () => {
+    const allExp: Record<string, boolean> = {};
+    folders.forEach((f) => {
+      allExp[f.id] = true;
+    });
+    allExp['unfiled'] = true;
+    setExpandedFolders(allExp);
+  };
+
+  const handleCollapseAll = () => {
+    setExpandedFolders({});
   };
 
   // Notification permission tracking
@@ -1180,6 +1194,13 @@ export default function TasksPage() {
         const newTask = data as Task;
         setTasks((prev) => [newTask, ...prev]);
 
+        // Auto-expand folder so the newly created task is visible
+        if (targetFolderId) {
+          setExpandedFolders((prev) => ({ ...prev, [targetFolderId]: true }));
+        } else {
+          setExpandedFolders((prev) => ({ ...prev, unfiled: true }));
+        }
+
         if (reminderDateISO && new Date(reminderDateISO).getTime() > Date.now()) {
           scheduleBackgroundNotification({
             userId: user.id,
@@ -1676,7 +1697,27 @@ export default function TasksPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              {folders.length > 0 && (
+                <button
+                  type="button"
+                  onClick={Object.values(expandedFolders).some(Boolean) ? handleCollapseAll : handleExpandAll}
+                  className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all border border-slate-700 shadow-sm active:scale-95"
+                  title={Object.values(expandedFolders).some(Boolean) ? 'Collapse all folders' : 'Expand all folders'}
+                >
+                  {Object.values(expandedFolders).some(Boolean) ? (
+                    <>
+                      <ChevronUp className="w-3.5 h-3.5" />
+                      <span>Collapse All</span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="w-3.5 h-3.5" />
+                      <span>Expand All</span>
+                    </>
+                  )}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleOpenCreateFolder}
@@ -1728,7 +1769,8 @@ export default function TasksPage() {
             const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
             const colorCfg = FOLDER_COLORS[folder.color] || FOLDER_COLORS.blue;
             const countdown = folder.due_date ? getFolderCountdown(folder.due_date) : null;
-            const isCollapsed = Boolean(collapsedFolders[folder.id]);
+            const isExpanded = Boolean(expandedFolders[folder.id]);
+            const isCollapsed = !isExpanded;
             const IconComp = FOLDER_ICONS[folder.icon]?.icon || Folder;
 
             // Sort tasks pedagogically and by completion
@@ -1764,7 +1806,7 @@ export default function TasksPage() {
                 <div className="p-3.5 sm:p-4 bg-slate-900/90 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   {/* Left: Folder Info */}
                   <div
-                    onClick={() => toggleCollapseFolder(folder.id)}
+                    onClick={() => toggleExpandFolder(folder.id)}
                     className="flex items-center gap-3 cursor-pointer select-none group min-w-0 flex-1"
                   >
                     <div
@@ -1848,7 +1890,7 @@ export default function TasksPage() {
 
                     <button
                       type="button"
-                      onClick={() => toggleCollapseFolder(folder.id)}
+                      onClick={() => toggleExpandFolder(folder.id)}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
                       title={isCollapsed ? 'Expand folder' : 'Collapse folder'}
                     >
@@ -1904,13 +1946,14 @@ export default function TasksPage() {
             const completedCount = unfiledTasks.filter((t) => t.status === 'done').length;
             const totalCount = unfiledTasks.length;
             const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-            const isCollapsed = Boolean(collapsedFolders['unfiled']);
+            const isExpanded = Boolean(expandedFolders['unfiled']);
+            const isCollapsed = !isExpanded;
 
             return (
               <div className="rounded-2xl bg-slate-900/80 border border-slate-800 overflow-hidden shadow-sm hover:border-slate-700/80 transition-all">
                 <div className="p-3.5 sm:p-4 bg-slate-900/90 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div
-                    onClick={() => toggleCollapseFolder('unfiled')}
+                    onClick={() => toggleExpandFolder('unfiled')}
                     className="flex items-center gap-3 cursor-pointer select-none group min-w-0 flex-1"
                   >
                     <div className="p-2 rounded-xl border border-slate-700 bg-slate-800 text-slate-300 shrink-0">
@@ -1942,7 +1985,7 @@ export default function TasksPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => toggleCollapseFolder('unfiled')}
+                      onClick={() => toggleExpandFolder('unfiled')}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
                       title={isCollapsed ? 'Expand section' : 'Collapse section'}
                     >
