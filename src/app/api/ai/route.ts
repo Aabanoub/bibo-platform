@@ -44,10 +44,12 @@ Supported action schemas:
   {"type": "create_task", "data": {"title": string, "priority": "low" | "medium" | "high" | "urgent", "difficulty"?: "easy" | "medium" | "hard", "estimated_duration"?: number, "due_date"?: "YYYY-MM-DD", "description"?: string}}
 - distribute_tasks:
   {"type": "distribute_tasks", "data": {"folder_name"?: string, "deadline": "YYYY-MM-DD", "tasks": [{"title": string, "priority"?: "low" | "medium" | "high" | "urgent", "description"?: string}]}}
-  (CRITICAL SMART DISTRIBUTION RULE: When the user asks to schedule multiple tasks or lessons for an exam, subject, or deadline, DO NOT schedule all tasks for that exact final deadline day! Instead, evenly distribute the workload across the timeframe preceding the deadline — e.g., if 10 tasks are due on Dec 2nd, allocate ~1 task per day over the preceding 10 days to ensure a balanced workload.)
+  (CRITICAL SMART DISTRIBUTION & LESSON SEQUENCING RULES:
+   1. Workload balance: DO NOT schedule all tasks for that exact final deadline day! Evenly distribute the workload across the timeframe preceding the deadline — e.g., if 10 tasks are due on Dec 2nd, allocate ~1 task per day over the preceding 10 days.
+   2. Pedagogical order: If tasks are study lessons/chapters/lectures, YOU MUST ALWAYS arrange them in natural ascending numerical order (e.g. Lesson 1, Lesson 2, Lesson 3... never Lesson 5 before Lesson 2!). Earlier lessons must be assigned to earlier days.)
 - smart_distribute_folder:
   {"type": "smart_distribute_folder", "data": {"folder_name"?: string, "folder_id"?: string, "deadline"?: "YYYY-MM-DD"}}
-  (Use this when the user asks to balance/redistribute the workload of existing tasks inside a folder or exam subject across days leading up to the deadline).
+  (Use this when the user asks to balance/redistribute the workload of existing tasks inside a folder or exam subject across days leading up to the deadline. Always arranges lessons sequentially so Lesson 1 is studied before Lesson 2).
 - create_note:
   {"type": "create_note", "data": {"title": string, "content": string, "tags"?: string[]}}
 - complete_habit:

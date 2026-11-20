@@ -7,6 +7,7 @@ import {
   SmartDistributionPlan,
   TaskInput,
 } from '@/lib/smart-distribution';
+import { extractLessonSequence, sortTasksByLessonSequence } from '@/lib/lesson-sequencing';
 import {
   X,
   Sparkles,
@@ -103,14 +104,14 @@ export default function SmartDistributeModal({
   // Get candidate tasks based on selected folder
   const candidateTasks: TaskInput[] = useMemo(() => {
     if (mode === 'create') {
-      // Parse batch text lines
+      // Parse batch text lines (strip bullets, preserve numbers like "1. Grammar" or "Lesson 1")
       const lines = batchText
         .split('\n')
         .map((l) => l.trim())
         .filter(Boolean);
       return lines.map((line, idx) => ({
         id: `draft-${idx}`,
-        title: line.replace(/^[-*•\d.)\s]+/, '').trim() || line,
+        title: line.replace(/^[-*•\s]+/, '').trim() || line,
         status: 'todo' as const,
         priority: 'medium' as const,
       }));
@@ -139,8 +140,9 @@ export default function SmartDistributeModal({
       };
     }
 
-    return calculateSmartDistribution<TaskInput>(candidateTasks, deadline);
-  }, [candidateTasks, deadline]);
+    const folderMap = new Map(folders.map((f) => [f.id, f]));
+    return calculateSmartDistribution<TaskInput>(candidateTasks, deadline, new Date(), folderMap);
+  }, [candidateTasks, deadline, folders]);
 
   if (!isOpen) return null;
 
@@ -401,6 +403,15 @@ export default function SmartDistributeModal({
                 </span>
               )}
             </div>
+
+            {plan.schedule.some((i) => extractLessonSequence(i.task.title).sequenceNumber !== null) && (
+              <div className="mb-2.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2 text-[11px] text-emerald-300">
+                <span>📚</span>
+                <span>
+                  <strong>Pedagogical Order Enforced:</strong> Lessons are arranged in ascending sequence (e.g. Lesson 1 → Lesson 5) so earlier material is always studied first.
+                </span>
+              </div>
+            )}
 
             {plan.schedule.length === 0 ? (
               <div className="p-8 text-center rounded-2xl bg-slate-950/40 border border-slate-800 text-slate-500">

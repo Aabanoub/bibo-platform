@@ -15,6 +15,7 @@ import {
   SchedulingPreferences,
   DEFAULT_PREFERENCES,
 } from './daily-planner';
+import { sortTasksByLessonSequence } from './lesson-sequencing';
 
 export interface RescheduleResult {
   updatedSessions: DailyScheduleItem[];
@@ -147,14 +148,12 @@ export function recoverUnfinishedTasks(
     };
   }
 
-  // Sort by urgency: highest priority and closest deadlines first
-  const sorted = [...unfinishedTasks].sort((a, b) => {
-    const prioWeight = { urgent: 4, high: 3, medium: 2, low: 1 };
-    return (prioWeight[b.priority] || 2) - (prioWeight[a.priority] || 2);
-  });
+  // Enforce pedagogical sequence so earlier lessons precede later lessons
+  const folderMap = new Map(folders.map((f) => [f.id, f]));
+  const sequentiallySorted = sortTasksByLessonSequence(unfinishedTasks, folderMap);
 
   let dayIdx = 0;
-  for (const task of sorted) {
+  for (const task of sequentiallySorted) {
     const targetDay = availableDays[dayIdx % availableDays.length];
     scheduleMap.get(targetDay)?.push(task);
     dayIdx++;

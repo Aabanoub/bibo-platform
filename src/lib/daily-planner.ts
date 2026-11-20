@@ -11,6 +11,7 @@ import type {
   TaskDifficulty,
   TaskPriority,
 } from '@/types';
+import { extractLessonSequence } from './lesson-sequencing';
 
 export interface SchedulingPreferences {
   startTime: string; // "09:00"
@@ -240,10 +241,41 @@ export function generateDeterministicDailyPlan(input: DailyPlannerInput): Genera
   const highFocusStartMin = timeToMinutes(prefs.highFocusStart);
   const highFocusEndMin = timeToMinutes(prefs.highFocusEnd);
 
-  // Prioritize placing hard tasks during high-focus time if possible
-  const hardTasks = scoredTasks.filter((t) => t.difficulty === 'hard');
-  const otherTasks = scoredTasks.filter((t) => t.difficulty !== 'hard');
-  const orderedQueue = [...hardTasks, ...otherTasks];
+  // Pedagogical Lesson Sequencing & Urgency Ordering
+  // CRITICAL RULE: Within the same subject or series, earlier lessons MUST be
+  // scheduled before later lessons (Lesson 1 -> 2 -> ... -> N).
+  // A student cannot study Lesson 5 before Lesson 2, even if Lesson 5 is labeled "hard".
+  const enrichedScoredTasks = scoredTasks.map((item) => ({
+    ...item,
+    lessonInfo: extractLessonSequence(item.task.title, item.folder?.name),
+  }));
+
+  enrichedScoredTasks.sort((a, b) => {
+    // 1. Same subject/series pedagogical ordering
+    if (a.lessonInfo.seriesKey === b.lessonInfo.seriesKey) {
+      if (a.lessonInfo.sequenceNumber !== null && b.lessonInfo.sequenceNumber !== null) {
+        if (a.lessonInfo.sequenceNumber !== b.lessonInfo.sequenceNumber) {
+          return a.lessonInfo.sequenceNumber - b.lessonInfo.sequenceNumber;
+        }
+      } else if (a.lessonInfo.sequenceNumber !== null && b.lessonInfo.sequenceNumber === null) {
+        return -1;
+      } else if (a.lessonInfo.sequenceNumber === null && b.lessonInfo.sequenceNumber !== null) {
+        return 1;
+      }
+    }
+
+    // 2. Between different subjects or non-series tasks:
+    // Significant urgency / imminent deadline differences take precedence
+    if (Math.abs(b.urgencyScore - a.urgencyScore) > 300) {
+      return b.urgencyScore - a.urgencyScore;
+    }
+
+    // 3. Secondary preference: Hard difficulty placed earlier in the day
+    const diffWeight: Record<string, number> = { hard: 3, medium: 2, easy: 1 };
+    return (diffWeight[b.difficulty] || 2) - (diffWeight[a.difficulty] || 2);
+  });
+
+  const orderedQueue = enrichedScoredTasks;
 
   for (const item of orderedQueue) {
     // Check daily maximum study capacity
@@ -370,8 +402,15 @@ export function generateDeterministicDailyPlan(input: DailyPlannerInput): Genera
     : undefined;
 
   const insights: string[] = [];
-  if (hardTasks.length > 0) {
-    insights.push(`Allocated ${hardTasks.length} demanding task${hardTasks.length === 1 ? '' : 's'} to high-focus morning slots.`);
+  const hardTasksCount = scoredTasks.filter((t) => t.difficulty === 'hard').length;
+  if (hardTasksCount > 0) {
+    insights.push(`Allocated ${hardTasksCount} demanding task${hardTasksCount === 1 ? '' : 's'} to high-focus morning slots.`);
+  }
+  const sequentialLessonsCount = enrichedScoredTasks.filter(
+    (t) => t.lessonInfo.sequenceNumber !== null
+  ).length;
+  if (sequentialLessonsCount > 1) {
+    insights.push('Preserved natural pedagogical progression: earlier lessons are scheduled before later lessons.');
   }
   if (allSessions.some((s) => s.session_type === 'break')) {
     insights.push('Scheduled mindful breaks between long sessions to sustain cognitive stamina.');

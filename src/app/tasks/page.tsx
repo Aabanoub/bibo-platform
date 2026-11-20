@@ -10,6 +10,7 @@ import SmartDistributeModal from '@/components/SmartDistributeModal';
 import DailyPlannerView from '@/components/DailyPlannerView';
 import WeeklyForecastView from '@/components/WeeklyForecastView';
 import type { SchedulingPreferences } from '@/lib/daily-planner';
+import { extractLessonSequence } from '@/lib/lesson-sequencing';
 import {
   Plus,
   Trash2,
@@ -1279,6 +1280,21 @@ export default function TasksPage() {
 
       const folderA = a.folder_id ? foldersMap.get(a.folder_id) : undefined;
       const folderB = b.folder_id ? foldersMap.get(b.folder_id) : undefined;
+
+      // PEDAGOGICAL LESSON SEQUENCING:
+      // If both tasks belong to the same subject or study folder:
+      // Earlier lessons MUST strictly precede later lessons (Lesson 1 < Lesson 2 < Lesson 5)
+      const lessonA = extractLessonSequence(a.title, folderA?.name);
+      const lessonB = extractLessonSequence(b.title, folderB?.name);
+
+      if (
+        lessonA.seriesKey === lessonB.seriesKey &&
+        lessonA.sequenceNumber !== null &&
+        lessonB.sequenceNumber !== null &&
+        lessonA.sequenceNumber !== lessonB.sequenceNumber
+      ) {
+        return lessonA.sequenceNumber - lessonB.sequenceNumber;
+      }
 
       if (sortBy === 'smart') {
         const scoreA = calculateTaskScore(a, folderA);

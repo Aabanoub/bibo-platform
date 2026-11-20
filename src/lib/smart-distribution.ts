@@ -3,6 +3,8 @@
 // Distributes workload evenly across the timeframe preceding a deadline/exam.
 // ============================================================================
 
+import { sortTasksByLessonSequence, extractLessonSequence } from './lesson-sequencing';
+
 export interface TaskInput {
   id?: string;
   title: string;
@@ -11,6 +13,7 @@ export interface TaskInput {
   status?: 'todo' | 'in_progress' | 'done';
   due_date?: string | null;
   folder_id?: string | null;
+  [key: string]: any;
 }
 
 export interface ScheduledDistributionItem<T extends TaskInput = TaskInput> {
@@ -46,10 +49,14 @@ export interface SmartDistributionPlan<T extends TaskInput = TaskInput> {
 export function calculateSmartDistribution<T extends TaskInput>(
   tasks: T[],
   deadlineInput: string | Date,
-  startDateInput: Date = new Date()
+  startDateInput: Date = new Date(),
+  folderMap?: Map<string, { name: string }>
 ): SmartDistributionPlan<T> {
   const pendingTasks = tasks.filter((t) => t.status !== 'done');
-  const totalTasks = pendingTasks.length;
+  
+  // Enforce pedagogical lesson sequencing (Lesson 1 before Lesson 2, Lesson 2 before Lesson 5)
+  const sequentiallyOrderedTasks = sortTasksByLessonSequence(pendingTasks, folderMap);
+  const totalTasks = sequentiallyOrderedTasks.length;
 
   // Normalize startDate to midnight
   const start = new Date(startDateInput);
@@ -72,7 +79,7 @@ export function calculateSmartDistribution<T extends TaskInput>(
   if (totalTasks === 0 || totalDays <= 0) {
     const todayStr = start.toISOString().split('T')[0];
     return {
-      schedule: pendingTasks.map((task) => ({
+      schedule: sequentiallyOrderedTasks.map((task) => ({
         task,
         suggestedDueDate: deadlineStr || todayStr,
         dayOffset: 0,
@@ -108,7 +115,7 @@ export function calculateSmartDistribution<T extends TaskInput>(
   const startDayOffset = totalDays > 1 ? 1 : 0;
   const effectiveStudyDays = totalDays > 1 ? Math.max(1, studyDays) : 1;
 
-  const schedule: ScheduledDistributionItem<T>[] = pendingTasks.map((task, index) => {
+  const schedule: ScheduledDistributionItem<T>[] = sequentiallyOrderedTasks.map((task, index) => {
     // Distribute index evenly across study days
     // fraction from 0 to 1
     const progress = totalTasks === 1 ? 0 : index / (totalTasks - 1 || 1);
@@ -138,10 +145,14 @@ export function calculateSmartDistribution<T extends TaskInput>(
     };
   });
 
+  const hasSequentialLessons = sequentiallyOrderedTasks.some(
+    (t) => extractLessonSequence(t.title).sequenceNumber !== null
+  );
+
   const summary =
     totalDays === 1
       ? `${totalTasks} task${totalTasks === 1 ? '' : 's'} scheduled for deadline day (${deadlineFormatted}).`
-      : `${totalTasks} task${totalTasks === 1 ? '' : 's'} evenly distributed at ~${tasksPerDay} per day over ${studyDays} day${studyDays === 1 ? '' : 's'}, leaving ${reviewBufferDays} review buffer day${reviewBufferDays === 1 ? '' : 's'} before ${deadlineFormatted}.`;
+      : `${totalTasks} task${totalTasks === 1 ? '' : 's'} ${hasSequentialLessons ? 'sequenced in pedagogical order (e.g. Lesson 1 → Lesson N) and ' : ''}evenly distributed at ~${tasksPerDay} per day over ${studyDays} day${studyDays === 1 ? '' : 's'}, leaving ${reviewBufferDays} review buffer day${reviewBufferDays === 1 ? '' : 's'} before ${deadlineFormatted}.`;
 
   return {
     schedule,
