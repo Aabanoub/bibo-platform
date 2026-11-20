@@ -392,14 +392,18 @@ export default function TasksPage() {
       } = await supabase.auth.getUser();
       if (!user) return;
 
+      const itemsForToday = newItems.filter((i) => !i.date || i.date === plannerDate);
+      const itemsForOtherDates = newItems.filter((i) => i.date && i.date !== plannerDate);
+
+      // 1. Wipe and re-save items for today's selected date
       await supabase
         .from('daily_schedule_items')
         .delete()
         .eq('user_id', user.id)
         .eq('date', plannerDate);
 
-      if (newItems.length > 0) {
-        const payload = newItems.map((item, idx) => ({
+      if (itemsForToday.length > 0) {
+        const payload = itemsForToday.map((item, idx) => ({
           user_id: user.id,
           date: plannerDate,
           task_id: item.task_id || null,
@@ -420,11 +424,41 @@ export default function TasksPage() {
           .insert(payload)
           .select();
 
-        if (!insertErr && inserted) {
+        if (insertErr) {
+          console.error('Error saving schedule for today:', insertErr);
+          setError(insertErr.message);
+        } else if (inserted) {
           setScheduleItems(inserted as DailyScheduleItem[]);
         }
       } else {
         setScheduleItems([]);
+      }
+
+      // 2. Persist items moved to other dates (e.g. moved to tomorrow)
+      if (itemsForOtherDates.length > 0) {
+        const payloadOther = itemsForOtherDates.map((item, idx) => ({
+          user_id: user.id,
+          date: item.date,
+          task_id: item.task_id || null,
+          session_type: item.session_type,
+          start_time: item.start_time,
+          end_time: item.end_time,
+          duration_minutes: item.duration_minutes,
+          title: item.title,
+          difficulty: item.difficulty || 'medium',
+          is_locked: false,
+          is_completed: false,
+          actual_duration_minutes: 0,
+          sort_order: idx,
+        }));
+
+        const { error: otherErr } = await supabase
+          .from('daily_schedule_items')
+          .insert(payloadOther);
+
+        if (otherErr) {
+          console.error('Error saving moved schedule items:', otherErr);
+        }
       }
     } catch (e) {
       console.error('handleSaveSchedule error:', e);

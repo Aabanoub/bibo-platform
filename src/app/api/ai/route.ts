@@ -41,7 +41,7 @@ Supported action schemas:
   {"type": "create_transaction", "data": {"amount": number, "type": "expense" | "income", "category": string, "description": string, "date"?: "YYYY-MM-DD"}}
   (Standard categories: Food, Groceries, Transport, Utilities, Housing, Entertainment, Shopping, Health, Salary, Investment, Other. Default type is "expense" unless income/salary.)
 - create_task:
-  {"type": "create_task", "data": {"title": string, "priority": "low" | "medium" | "high" | "urgent", "due_date"?: "YYYY-MM-DD", "description"?: string}}
+  {"type": "create_task", "data": {"title": string, "priority": "low" | "medium" | "high" | "urgent", "difficulty"?: "easy" | "medium" | "hard", "estimated_duration"?: number, "due_date"?: "YYYY-MM-DD", "description"?: string}}
 - distribute_tasks:
   {"type": "distribute_tasks", "data": {"folder_name"?: string, "deadline": "YYYY-MM-DD", "tasks": [{"title": string, "priority"?: "low" | "medium" | "high" | "urgent", "description"?: string}]}}
   (CRITICAL SMART DISTRIBUTION RULE: When the user asks to schedule multiple tasks or lessons for an exam, subject, or deadline, DO NOT schedule all tasks for that exact final deadline day! Instead, evenly distribute the workload across the timeframe preceding the deadline — e.g., if 10 tasks are due on Dec 2nd, allocate ~1 task per day over the preceding 10 days to ensure a balanced workload.)
@@ -135,6 +135,13 @@ async function executeAction(
       const priority = ['urgent', 'high', 'medium', 'low'].includes(action.data.priority)
         ? action.data.priority
         : 'medium';
+      const difficulty = ['easy', 'medium', 'hard'].includes(action.data.difficulty)
+        ? action.data.difficulty
+        : 'medium';
+      const estimated_duration =
+        typeof action.data.estimated_duration === 'number' && action.data.estimated_duration > 0
+          ? Math.round(action.data.estimated_duration)
+          : 30;
       const due_date = action.data.due_date ? new Date(action.data.due_date).toISOString() : null;
 
       const { data, error } = await supabase
@@ -143,6 +150,8 @@ async function executeAction(
           user_id: userId,
           title,
           priority,
+          difficulty,
+          estimated_duration,
           status: 'todo',
           due_date,
           description: action.data.description || null,
