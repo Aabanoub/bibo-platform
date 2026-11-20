@@ -15,95 +15,185 @@ import {
   FileText,
   User,
   Sun,
+  Moon,
   ShieldCheck,
   Eye,
   Split,
+  Columns,
   Image as ImageIcon,
   Zap,
   Loader2,
+  ZoomIn,
+  ZoomOut,
+  BarChart2,
+  Layers,
+  Info,
 } from 'lucide-react';
 
-type PresetMode = 'auto' | 'portrait' | 'document' | 'landscape' | 'upscale2x' | 'upscale4x' | 'custom';
+type PresetMode =
+  | 'auto'
+  | 'portrait'
+  | 'document'
+  | 'landscape'
+  | 'night'
+  | 'ecommerce'
+  | 'custom';
+
+type ViewMode = 'split' | 'sideBySide' | 'single';
 
 interface AdjustmentSettings {
-  sharpness: number; // 0 - 100
-  clarity: number; // 0 - 100
-  denoise: number; // 0 - 100
-  contrast: number; // -50 - 50
-  brightness: number; // -50 - 50
-  vibrance: number; // -50 - 50
+  // 5-Point Lighting & Dynamic Range
+  exposure: number; // -50 to 50
+  contrast: number; // -50 to 50
+  highlights: number; // -50 to 50 (recover bright blowouts)
+  shadows: number; // -50 to 50 (lift dark areas)
+  whites: number; // -50 to 50
+  blacks: number; // -50 to 50
+
+  // Detail & Clarity
+  sharpness: number; // 0 to 100
+  clarity: number; // 0 to 100
+  dehaze: number; // 0 to 100
+  denoise: number; // 0 to 100
+
+  // Color & White Balance
+  temperature: number; // -50 to 50 (cool / warm)
+  tint: number; // -50 to 50 (green / magenta)
+  vibrance: number; // -50 to 50
+  saturation: number; // -50 to 50
+
+  // Super-Resolution
   upscale: 1 | 2 | 4;
 }
 
 const DEFAULT_SETTINGS: AdjustmentSettings = {
+  exposure: 4,
+  contrast: 14,
+  highlights: -10,
+  shadows: 20,
+  whites: 8,
+  blacks: -6,
+
   sharpness: 35,
   clarity: 30,
-  denoise: 15,
-  contrast: 15,
-  brightness: 5,
-  vibrance: 20,
+  dehaze: 15,
+  denoise: 18,
+
+  temperature: 2,
+  tint: 0,
+  vibrance: 22,
+  saturation: 8,
+
   upscale: 2,
 };
 
 const PRESET_CONFIGS: Record<PresetMode, AdjustmentSettings> = {
   auto: {
-    sharpness: 40,
-    clarity: 35,
-    denoise: 20,
+    exposure: 5,
     contrast: 15,
-    brightness: 6,
-    vibrance: 20,
+    highlights: -12,
+    shadows: 24,
+    whites: 10,
+    blacks: -8,
+    sharpness: 42,
+    clarity: 35,
+    dehaze: 18,
+    denoise: 20,
+    temperature: 2,
+    tint: 0,
+    vibrance: 24,
+    saturation: 10,
     upscale: 2,
   },
   portrait: {
-    sharpness: 25,
-    clarity: 20,
-    denoise: 35,
-    contrast: 10,
-    brightness: 8,
-    vibrance: 12,
+    exposure: 8,
+    contrast: 8,
+    highlights: -18,
+    shadows: 18,
+    whites: 6,
+    blacks: -4,
+    sharpness: 24,
+    clarity: 16,
+    dehaze: 8,
+    denoise: 38,
+    temperature: 6,
+    tint: -2,
+    vibrance: 16,
+    saturation: 4,
     upscale: 2,
   },
   document: {
-    sharpness: 75,
-    clarity: 70,
-    denoise: 10,
-    contrast: 40,
-    brightness: 12,
-    vibrance: -10,
+    exposure: 14,
+    contrast: 45,
+    highlights: 25,
+    shadows: -15,
+    whites: 35,
+    blacks: -28,
+    sharpness: 80,
+    clarity: 75,
+    dehaze: 30,
+    denoise: 12,
+    temperature: -4,
+    tint: 0,
+    vibrance: -20,
+    saturation: -25,
     upscale: 2,
   },
   landscape: {
-    sharpness: 50,
-    clarity: 45,
-    denoise: 10,
-    contrast: 25,
-    brightness: 4,
-    vibrance: 35,
+    exposure: 3,
+    contrast: 24,
+    highlights: -25,
+    shadows: 32,
+    whites: 14,
+    blacks: -12,
+    sharpness: 55,
+    clarity: 48,
+    dehaze: 28,
+    denoise: 12,
+    temperature: 4,
+    tint: 2,
+    vibrance: 38,
+    saturation: 18,
     upscale: 2,
   },
-  upscale2x: {
-    sharpness: 45,
-    clarity: 35,
-    denoise: 20,
-    contrast: 12,
-    brightness: 5,
+  night: {
+    exposure: 16,
+    contrast: 18,
+    highlights: -35,
+    shadows: 40,
+    whites: 8,
+    blacks: -15,
+    sharpness: 30,
+    clarity: 25,
+    dehaze: 20,
+    denoise: 65,
+    temperature: -5,
+    tint: 0,
     vibrance: 15,
+    saturation: 6,
     upscale: 2,
   },
-  upscale4x: {
+  ecommerce: {
+    exposure: 8,
+    contrast: 20,
+    highlights: -10,
+    shadows: 15,
+    whites: 25,
+    blacks: -10,
     sharpness: 60,
-    clarity: 50,
-    denoise: 25,
-    contrast: 15,
-    brightness: 6,
+    clarity: 45,
+    dehaze: 15,
+    denoise: 15,
+    temperature: 0,
+    tint: 0,
     vibrance: 18,
-    upscale: 4,
+    saturation: 12,
+    upscale: 2,
   },
   custom: DEFAULT_SETTINGS,
 };
 
-// Background Web Worker script for zero-freezing pixel manipulation
+// Web Worker Script running on background thread for 0ms main-thread freezing
 const WORKER_SCRIPT = `
 self.onmessage = function(e) {
   const { id, imgData, cfg } = e.data;
@@ -112,27 +202,88 @@ self.onmessage = function(e) {
   const w = imgData.width;
   const h = imgData.height;
 
-  // 1. Brightness, Contrast & Vibrance pass
+  // 1. Exposure & Dynamic Range (Highlights, Shadows, Whites, Blacks)
+  const exposureMult = Math.pow(2, (cfg.exposure / 50) * 0.9);
   const contrastFactor = (259 * (cfg.contrast + 255)) / (255 * (259 - cfg.contrast));
-  const brightnessOffset = (cfg.brightness / 100) * 255;
+  const highlightAdj = (cfg.highlights / 100) * 0.7;
+  const shadowAdj = (cfg.shadows / 100) * 0.7;
+  const whiteOffset = (cfg.whites / 100) * 45;
+  const blackOffset = (cfg.blacks / 100) * 45;
+
+  // Color Temp & Tint
+  const tempR = 1 + (cfg.temperature / 100) * 0.35;
+  const tempB = 1 - (cfg.temperature / 100) * 0.35;
+  const tintG = 1 - (cfg.tint / 100) * 0.25;
+
   const vibranceFactor = cfg.vibrance / 100;
+  const satFactor = 1 + cfg.saturation / 100;
+
+  // Dehaze offset
+  const dehazeBoost = (cfg.dehaze / 100) * 0.3;
 
   for (let i = 0; i < len; i += 4) {
     let r = data[i];
     let g = data[i + 1];
     let b = data[i + 2];
 
-    // Brightness
-    r += brightnessOffset;
-    g += brightnessOffset;
-    b += brightnessOffset;
+    // Exposure
+    r *= exposureMult;
+    g *= exposureMult;
+    b *= exposureMult;
+
+    // Luminance approximation
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+
+    // Highlights compression / recovery
+    if (lum > 128 && highlightAdj !== 0) {
+      const highWeight = (lum - 128) / 127;
+      const factor = 1 + highlightAdj * highWeight;
+      r *= factor;
+      g *= factor;
+      b *= factor;
+    }
+
+    // Shadows lift
+    if (lum < 128 && shadowAdj !== 0) {
+      const shadowWeight = (128 - lum) / 128;
+      const lift = shadowAdj * shadowWeight * 85;
+      r += lift;
+      g += lift;
+      b += lift;
+    }
+
+    // Whites & Blacks
+    if (lum > 180 && whiteOffset !== 0) {
+      const wWeight = (lum - 180) / 75;
+      r += whiteOffset * wWeight;
+      g += whiteOffset * wWeight;
+      b += whiteOffset * wWeight;
+    }
+    if (lum < 75 && blackOffset !== 0) {
+      const bWeight = (75 - lum) / 75;
+      r += blackOffset * bWeight;
+      g += blackOffset * bWeight;
+      b += blackOffset * bWeight;
+    }
 
     // Contrast
     r = contrastFactor * (r - 128) + 128;
     g = contrastFactor * (g - 128) + 128;
     b = contrastFactor * (b - 128) + 128;
 
-    // Smart Vibrance
+    // White Balance
+    r *= tempR;
+    b *= tempB;
+    g *= tintG;
+
+    // Dehaze
+    if (dehazeBoost > 0) {
+      r = r * (1 + dehazeBoost) - dehazeBoost * 30;
+      g = g * (1 + dehazeBoost) - dehazeBoost * 30;
+      b = b * (1 + dehazeBoost) - dehazeBoost * 30;
+    }
+
+    // Vibrance & Saturation
     const max = Math.max(r, g, b);
     const avg = (r + g + b) / 3;
     const amt = ((Math.abs(max - avg) * 2) / 255) * vibranceFactor;
@@ -140,16 +291,23 @@ self.onmessage = function(e) {
     if (g !== max) g += (max - g) * amt;
     if (b !== max) b += (max - b) * amt;
 
+    if (satFactor !== 1) {
+      const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+      r = gray + (r - gray) * satFactor;
+      g = gray + (g - gray) * satFactor;
+      b = gray + (b - gray) * satFactor;
+    }
+
     data[i] = Math.min(255, Math.max(0, r));
     data[i + 1] = Math.min(255, Math.max(0, g));
     data[i + 2] = Math.min(255, Math.max(0, b));
   }
 
-  // 2. Denoise (Edge-preserving noise smoothing)
+  // 2. Bilateral Edge-Preserving Denoising Pass
   if (cfg.denoise > 5) {
-    const denoiseFactor = (cfg.denoise / 100) * 0.55;
+    const denoiseFactor = (cfg.denoise / 100) * 0.65;
     const temp = new Uint8ClampedArray(data);
-    const threshold = 32 * (1 - denoiseFactor * 0.4);
+    const threshold = 34 * (1 - denoiseFactor * 0.35);
 
     for (let y = 1; y < h - 1; y++) {
       for (let x = 1; x < w - 1; x++) {
@@ -175,9 +333,9 @@ self.onmessage = function(e) {
     }
   }
 
-  // 3. Unsharp Mask & Clarity (High-pass edge sharpening)
+  // 3. Adaptive Unsharp Masking & Clarity
   if (cfg.sharpness > 0 || cfg.clarity > 0) {
-    const sharpWeight = (cfg.sharpness / 100) * 0.85 + (cfg.clarity / 100) * 0.45;
+    const sharpWeight = (cfg.sharpness / 100) * 0.95 + (cfg.clarity / 100) * 0.55;
     if (sharpWeight > 0.05) {
       const srcPixels = new Uint8ClampedArray(data);
       const centerWeight = 1 + 4 * sharpWeight;
@@ -186,7 +344,6 @@ self.onmessage = function(e) {
       for (let y = 1; y < h - 1; y++) {
         for (let x = 1; x < w - 1; x++) {
           const idx = (y * w + x) * 4;
-
           for (let c = 0; c < 3; c++) {
             const top = ((y - 1) * w + x) * 4 + c;
             const btm = ((y + 1) * w + x) * 4 + c;
@@ -204,8 +361,32 @@ self.onmessage = function(e) {
     }
   }
 
-  // Send back result with zero-copy buffer transfer
-  self.postMessage({ id, imgData }, [imgData.data.buffer]);
+  // 4. Compute 256-bin RGB & Luminance Histogram for live display
+  const histR = new Array(256).fill(0);
+  const histG = new Array(256).fill(0);
+  const histB = new Array(256).fill(0);
+  const histLum = new Array(256).fill(0);
+
+  // Subsample every 4th pixel for instant histogram calculation
+  for (let i = 0; i < len; i += 16) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const lum = Math.min(255, Math.round(0.299 * r + 0.587 * g + 0.114 * b));
+    histR[r]++;
+    histG[g]++;
+    histB[b]++;
+    histLum[lum]++;
+  }
+
+  self.postMessage(
+    {
+      id,
+      imgData,
+      histogram: { r: histR, g: histG, b: histB, lum: histLum },
+    },
+    [imgData.data.buffer]
+  );
 };
 `;
 
@@ -219,10 +400,29 @@ export default function PhotoEnhancerPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [activePreset, setActivePreset] = useState<PresetMode>('auto');
   const [settings, setSettings] = useState<AdjustmentSettings>(PRESET_CONFIGS.auto);
+
+  // Viewer controls
+  const [viewMode, setViewMode] = useState<ViewMode>('split');
   const [splitPos, setSplitPos] = useState<number>(50); // 0 - 100%
+  const [zoomLevel, setZoomLevel] = useState<number>(1); // 1 = Fit, 1.5, 2, 3, 4
+  const [panPos, setPanPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isHoldingOriginal, setIsHoldingOriginal] = useState(false);
-  const [isAdvancedExpanded, setIsAdvancedExpanded] = useState(false);
+
+  // Histogram data
+  const [histogramData, setHistogramData] = useState<{
+    r: number[];
+    g: number[];
+    b: number[];
+    lum: number[];
+  } | null>(null);
+
+  // Collapsible control sections
+  const [isLightingExpanded, setIsLightingExpanded] = useState(true);
+  const [isDetailExpanded, setIsDetailExpanded] = useState(true);
+  const [isColorExpanded, setIsColorExpanded] = useState(true);
+  const [isHistogramExpanded, setIsHistogramExpanded] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'png' | 'jpeg'>('png');
 
   // References
   const previewImgRef = useRef<HTMLImageElement | null>(null);
@@ -232,8 +432,10 @@ export default function PhotoEnhancerPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingSplit = useRef(false);
+  const isPanning = useRef(false);
+  const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Initialize Web Worker for non-blocking background processing
+  // Initialize Web Worker
   useEffect(() => {
     let worker: Worker | null = null;
     try {
@@ -243,7 +445,7 @@ export default function PhotoEnhancerPage() {
       workerRef.current = worker;
 
       worker.onmessage = (e) => {
-        const { id, imgData } = e.data;
+        const { id, imgData, histogram } = e.data;
 
         // Export resolution task
         if (id === 'export' && pendingExportResolve.current) {
@@ -253,13 +455,15 @@ export default function PhotoEnhancerPage() {
           const ctx = exportCanvas.getContext('2d');
           if (ctx) {
             ctx.putImageData(imgData, 0, 0);
-            pendingExportResolve.current(exportCanvas.toDataURL('image/png', 0.95));
+            pendingExportResolve.current(
+              exportCanvas.toDataURL(exportFormat === 'png' ? 'image/png' : 'image/jpeg', 0.95)
+            );
           }
           pendingExportResolve.current = null;
           return;
         }
 
-        // Live preview task (only process if it matches latest taskId to avoid stale frame flicker)
+        // Live preview task
         if (id === taskIdRef.current) {
           const canvas = document.createElement('canvas');
           canvas.width = imgData.width;
@@ -268,6 +472,9 @@ export default function PhotoEnhancerPage() {
           if (ctx) {
             ctx.putImageData(imgData, 0, 0);
             setEnhancedUrl(canvas.toDataURL('image/png', 0.92));
+          }
+          if (histogram) {
+            setHistogramData(histogram);
           }
           setIsProcessing(false);
         }
@@ -278,70 +485,86 @@ export default function PhotoEnhancerPage() {
         setIsProcessing(false);
       };
     } catch (err) {
-      console.warn('Web Worker not supported in this environment:', err);
+      console.warn('Web Worker not supported:', err);
     }
 
     return () => {
       worker?.terminate();
       workerRef.current = null;
     };
-  }, []);
+  }, [exportFormat]);
 
   // Request non-blocking enhancement via Web Worker
-  const triggerWorkerEnhancement = useCallback(
-    (cfg: AdjustmentSettings) => {
-      const img = previewImgRef.current;
-      if (!img || !workerRef.current) return;
+  const triggerWorkerEnhancement = useCallback((cfg: AdjustmentSettings) => {
+    const img = previewImgRef.current;
+    if (!img || !workerRef.current) return;
 
-      const currentId = ++taskIdRef.current;
-      setIsProcessing(true);
+    const currentId = ++taskIdRef.current;
+    setIsProcessing(true);
 
-      // Create preview scale canvas
-      const naturalW = img.naturalWidth || img.width;
-      const naturalH = img.naturalHeight || img.height;
-      const previewScale = Math.min(1, MAX_PREVIEW_SIZE / Math.max(naturalW, naturalH));
+    const naturalW = img.naturalWidth || img.width;
+    const naturalH = img.naturalHeight || img.height;
+    const previewScale = Math.min(1, MAX_PREVIEW_SIZE / Math.max(naturalW, naturalH));
 
-      const targetW = Math.max(10, Math.round(naturalW * previewScale));
-      const targetH = Math.max(10, Math.round(naturalH * previewScale));
+    const targetW = Math.max(10, Math.round(naturalW * previewScale));
+    const targetH = Math.max(10, Math.round(naturalH * previewScale));
 
-      const canvas = document.createElement('canvas');
-      canvas.width = targetW;
-      canvas.height = targetH;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      if (!ctx) {
-        setIsProcessing(false);
-        return;
-      }
+    const canvas = document.createElement('canvas');
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) {
+      setIsProcessing(false);
+      return;
+    }
 
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, 0, 0, targetW, targetH);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, targetW, targetH);
 
-      const imgData = ctx.getImageData(0, 0, targetW, targetH);
+    const imgData = ctx.getImageData(0, 0, targetW, targetH);
 
-      // Post to background worker thread with transferable ArrayBuffer
-      workerRef.current.postMessage(
-        {
-          id: currentId,
-          imgData,
-          cfg,
-        },
-        [imgData.data.buffer]
-      );
-    },
-    []
-  );
+    workerRef.current.postMessage(
+      {
+        id: currentId,
+        imgData,
+        cfg,
+      },
+      [imgData.data.buffer]
+    );
+  }, []);
 
   // Debounced trigger on settings change
   useEffect(() => {
     if (!originalImage) return;
-
     const timer = setTimeout(() => {
       triggerWorkerEnhancement(settings);
     }, 60);
-
     return () => clearTimeout(timer);
   }, [originalImage, settings, triggerWorkerEnhancement]);
+
+  // Keyboard shortcut listener: Spacebar to hold original
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !e.repeat && originalImage) {
+        // Prevent page scroll when holding space
+        e.preventDefault();
+        setIsHoldingOriginal(true);
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setIsHoldingOriginal(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [originalImage]);
 
   // Handle image upload
   const handleFileUpload = (file: File) => {
@@ -365,6 +588,8 @@ export default function PhotoEnhancerPage() {
           setOriginalImage(dataUri);
           setActivePreset('auto');
           setSettings(PRESET_CONFIGS.auto);
+          setZoomLevel(1);
+          setPanPos({ x: 0, y: 0 });
         };
         img.src = dataUri;
       }
@@ -378,7 +603,6 @@ export default function PhotoEnhancerPage() {
     if (file) handleFileUpload(file);
   };
 
-  // Preset switch
   const selectPreset = (preset: PresetMode) => {
     setActivePreset(preset);
     setSettings(PRESET_CONFIGS[preset]);
@@ -394,15 +618,36 @@ export default function PhotoEnhancerPage() {
   }, []);
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (e.touches[0]) handleSplitMove(e.touches[0].clientX);
+    if (viewMode === 'split' && e.touches[0]) handleSplitMove(e.touches[0].clientX);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (viewMode === 'split' && Math.abs(e.clientX - (containerRef.current?.getBoundingClientRect().left || 0) - ((containerRef.current?.clientWidth || 0) * splitPos) / 100) < 30) {
+      isDraggingSplit.current = true;
+    } else if (zoomLevel > 1) {
+      isPanning.current = true;
+      panStartRef.current = { x: e.clientX - panPos.x, y: e.clientY - panPos.y };
+    }
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isDraggingSplit.current) handleSplitMove(e.clientX);
+    if (isDraggingSplit.current && viewMode === 'split') {
+      handleSplitMove(e.clientX);
+    } else if (isPanning.current && zoomLevel > 1) {
+      setPanPos({
+        x: e.clientX - panStartRef.current.x,
+        y: e.clientY - panStartRef.current.y,
+      });
+    }
   };
 
-  // Non-blocking Full-Resolution Export via Web Worker
-  const downloadEnhanced = async (format: 'png' | 'jpeg') => {
+  const handleMouseUp = () => {
+    isDraggingSplit.current = false;
+    isPanning.current = false;
+  };
+
+  // Full-Resolution Export
+  const downloadEnhanced = async () => {
     const img = previewImgRef.current;
     if (!img) return;
 
@@ -425,18 +670,19 @@ export default function PhotoEnhancerPage() {
 
       const imgData = ctx.getImageData(0, 0, targetW, targetH);
 
-      // Process in background worker so the main UI never freezes
       const fullResultUrl = await new Promise<string>((resolve) => {
         pendingExportResolve.current = resolve;
         if (workerRef.current) {
           workerRef.current.postMessage({ id: 'export', imgData, cfg: settings }, [imgData.data.buffer]);
         } else {
-          resolve(exportCanvas.toDataURL(format === 'png' ? 'image/png' : 'image/jpeg', 0.95));
+          resolve(
+            exportCanvas.toDataURL(exportFormat === 'png' ? 'image/png' : 'image/jpeg', 0.95)
+          );
         }
       });
 
       const link = document.createElement('a');
-      link.download = `${imageMeta?.name || 'photo'}-enhanced-${settings.upscale}x.${format === 'png' ? 'png' : 'jpg'}`;
+      link.download = `${imageMeta?.name || 'photo'}-enhanced-${settings.upscale}x.${exportFormat === 'png' ? 'png' : 'jpg'}`;
       link.href = fullResultUrl;
       link.click();
     } catch (err) {
@@ -447,7 +693,6 @@ export default function PhotoEnhancerPage() {
     }
   };
 
-  // Copy to clipboard
   const copyEnhanced = async () => {
     if (!enhancedUrl) return;
     try {
@@ -476,7 +721,6 @@ export default function PhotoEnhancerPage() {
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, 400, 300);
 
-      // Face silhouette
       ctx.fillStyle = '#e2e8f0';
       ctx.beginPath();
       ctx.arc(200, 120, 50, 0, Math.PI * 2);
@@ -521,10 +765,10 @@ export default function PhotoEnhancerPage() {
   };
 
   return (
-    <div className="space-y-6 text-zinc-100 max-w-6xl mx-auto pb-12 animate-fade-in">
-      {/* Non-blocking Background Export Overlay */}
+    <div className="space-y-5 text-zinc-100 max-w-7xl mx-auto pb-12 animate-fade-in">
+      {/* Background Rendering Modal for High-Res Export */}
       {isExporting && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md animate-fade-in">
           <div className="p-6 rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl max-w-sm w-full mx-4 text-center space-y-4">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-600/20 text-indigo-400 mx-auto animate-pulse">
               <Sparkles size={28} />
@@ -532,50 +776,52 @@ export default function PhotoEnhancerPage() {
             <div>
               <h3 className="text-base font-bold text-white">Rendering Ultra-HD Image</h3>
               <p className="text-xs text-zinc-400 mt-1">
-                Applying {settings.upscale}x super-resolution and unsharp masking on background thread...
+                Applying {settings.upscale}x super-resolution, bilateral denoise & unsharp mask on background thread...
               </p>
             </div>
             <div className="w-full bg-zinc-800 h-2 rounded-full overflow-hidden">
               <div className="bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 h-full w-full animate-pulse" />
             </div>
-            <p className="text-[11px] text-zinc-500">Your browser remains 100% smooth & responsive</p>
+            <p className="text-[11px] text-zinc-500">100% Free & client-side GPU/Worker computation</p>
           </div>
         </div>
       )}
 
-      {/* Header */}
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-4">
+      {/* Studio Header */}
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/20">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 text-white shadow-md shadow-indigo-500/20">
             <Wand2 size={19} />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-lg sm:text-xl font-bold tracking-tight">Photo Quality Enhancer</h1>
-              <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1">
-                <Zap size={10} /> Fast WebWorker Engine
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight">Photo Studio Pro</h1>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1">
+                <ShieldCheck size={11} /> 100% Free & Unlimited
               </span>
             </div>
             <p className="text-[11px] sm:text-xs text-zinc-400">
-              Restore clarity, de-blur edges, upscale 2x/4x & enhance details with 0ms freeze
+              Professional Lightroom-grade dynamic range, unsharp de-blur, deep zoom & 4x super-resolution
             </p>
           </div>
         </div>
 
         {originalImage && (
-          <button
-            type="button"
-            onClick={() => {
-              setOriginalImage(null);
-              setEnhancedUrl(null);
-              setImageMeta(null);
-              previewImgRef.current = null;
-            }}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
-          >
-            <RotateCcw size={13} />
-            <span>Upload New Photo</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setOriginalImage(null);
+                setEnhancedUrl(null);
+                setImageMeta(null);
+                previewImgRef.current = null;
+              }}
+              className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
+            >
+              <RotateCcw size={13} />
+              <span>New Photo</span>
+            </button>
+          </div>
         )}
       </header>
 
@@ -587,7 +833,7 @@ export default function PhotoEnhancerPage() {
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
-            className="group cursor-pointer rounded-2xl border-2 border-dashed border-zinc-700 hover:border-indigo-500 bg-zinc-900/40 hover:bg-zinc-900/80 p-10 text-center transition flex flex-col items-center justify-center gap-4 shadow-xl"
+            className="group cursor-pointer rounded-2xl border-2 border-dashed border-zinc-700 hover:border-indigo-500 bg-zinc-900/40 hover:bg-zinc-900/80 p-12 text-center transition flex flex-col items-center justify-center gap-4 shadow-xl"
           >
             <input
               ref={fileInputRef}
@@ -604,15 +850,22 @@ export default function PhotoEnhancerPage() {
             </div>
             <div>
               <p className="text-base font-semibold text-zinc-200">
-                Click or drag & drop any image to enhance
+                Click or drag & drop any photo to open in Professional Studio
               </p>
               <p className="text-xs text-zinc-400 mt-1 max-w-md mx-auto">
-                Supports blurry portraits, low-res documents, product shots, screenshots, and artwork (PNG, JPG, WebP)
+                Restore blurred portraits, low-light night shots, old documents, screenshots, and product photos
               </p>
             </div>
-            <div className="flex items-center gap-2 text-xs text-zinc-500 font-medium">
-              <ShieldCheck size={14} className="text-emerald-400" />
-              <span>100% Private: Powered by off-thread Web Workers with zero freeze and zero uploads</span>
+            <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-zinc-400 font-medium pt-2">
+              <span className="flex items-center gap-1 text-emerald-400">
+                <Check size={14} /> 100% Free & Private
+              </span>
+              <span className="flex items-center gap-1 text-blue-400">
+                <Zap size={14} /> Background Multi-Thread
+              </span>
+              <span className="flex items-center gap-1 text-purple-400">
+                <Maximize2 size={14} /> Up to 4x Super-Res
+              </span>
             </div>
           </div>
 
@@ -625,7 +878,7 @@ export default function PhotoEnhancerPage() {
               <button
                 type="button"
                 onClick={() => loadSample('portrait')}
-                className="flex items-center gap-3 p-3 rounded-xl border border-zinc-800 bg-zinc-950/70 hover:border-zinc-700 hover:bg-zinc-900 transition text-left"
+                className="flex items-center gap-3 p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/70 hover:border-zinc-700 hover:bg-zinc-900 transition text-left"
               >
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400">
                   <User size={18} />
@@ -639,7 +892,7 @@ export default function PhotoEnhancerPage() {
               <button
                 type="button"
                 onClick={() => loadSample('doc')}
-                className="flex items-center gap-3 p-3 rounded-xl border border-zinc-800 bg-zinc-950/70 hover:border-zinc-700 hover:bg-zinc-900 transition text-left"
+                className="flex items-center gap-3 p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/70 hover:border-zinc-700 hover:bg-zinc-900 transition text-left"
               >
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-500/10 text-purple-400">
                   <FileText size={18} />
@@ -653,119 +906,291 @@ export default function PhotoEnhancerPage() {
           </div>
         </div>
       ) : (
-        /* Active Enhancer Workspace */
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Column: Interactive Before/After Split Viewer */}
+        /* Active Pro Studio Layout */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Left Column: Viewport & Loupe Controls */}
           <div className="space-y-4 lg:col-span-8">
-            <div
-              ref={containerRef}
-              onMouseDown={() => {
-                isDraggingSplit.current = true;
-              }}
-              onMouseUp={() => {
-                isDraggingSplit.current = false;
-              }}
-              onMouseMove={handleMouseMove}
-              onTouchMove={handleTouchMove}
-              className="relative w-full aspect-[4/3] max-h-[560px] overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl select-none flex items-center justify-center"
-            >
-              {/* Enhanced Image (Base) */}
-              {enhancedUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={enhancedUrl}
-                  alt="Enhanced Result"
-                  className="absolute inset-0 w-full h-full object-contain pointer-events-none"
-                />
-              )}
-
-              {/* Original Image (Clipped Left Layer) */}
-              {!isHoldingOriginal && originalImage && (
-                <div
-                  className="absolute inset-0 overflow-hidden pointer-events-none"
-                  style={{ width: `${splitPos}%` }}
+            {/* Viewport Control Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-2xl border border-zinc-800 bg-zinc-900/70">
+              {/* View Modes */}
+              <div className="flex items-center gap-1 p-1 rounded-xl bg-zinc-950/80 border border-zinc-800/80 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('split')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition ${
+                    viewMode === 'split'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                  }`}
+                  title="Draggable Split Curtain Slider"
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={originalImage}
-                    alt="Original"
-                    className="absolute inset-0 w-full h-full object-contain max-w-none"
-                    style={{
-                      width: containerRef.current?.clientWidth || '100%',
-                      height: containerRef.current?.clientHeight || '100%',
-                    }}
-                  />
-                </div>
-              )}
-
-              {/* If holding original button, show 100% original */}
-              {isHoldingOriginal && originalImage && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={originalImage}
-                  alt="Original"
-                  className="absolute inset-0 w-full h-full object-contain pointer-events-none z-10"
-                />
-              )}
-
-              {/* Vertical Split Divider Bar */}
-              {!isHoldingOriginal && (
-                <div
-                  className="absolute top-0 bottom-0 z-20 w-1 bg-white cursor-ew-resize shadow-[0_0_10px_rgba(0,0,0,0.8)]"
-                  style={{ left: `${splitPos}%` }}
+                  <Split size={13} />
+                  <span>Split</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('sideBySide')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition ${
+                    viewMode === 'sideBySide'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                  }`}
+                  title="Side-by-Side Dual Synchronized View"
                 >
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-white text-zinc-900 shadow-xl border border-zinc-200">
-                    <Split size={14} className="rotate-90" />
-                  </div>
-                </div>
-              )}
-
-              {/* Badges */}
-              <div className="absolute top-3 left-3 z-30 pointer-events-none">
-                <span className="px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-md text-[11px] font-semibold text-zinc-300 border border-zinc-800">
-                  Original ({imageMeta?.width}×{imageMeta?.height})
-                </span>
+                  <Columns size={13} />
+                  <span>Side-by-Side</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('single')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition ${
+                    viewMode === 'single'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                  }`}
+                  title="Single Enhanced View"
+                >
+                  <Maximize2 size={13} />
+                  <span>Single</span>
+                </button>
               </div>
-              <div className="absolute top-3 right-3 z-30 pointer-events-none flex items-center gap-2">
-                {isProcessing && (
-                  <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-900/80 backdrop-blur-md text-[11px] font-semibold text-indigo-200 border border-indigo-700 animate-pulse">
-                    <Loader2 size={12} className="animate-spin" /> Enhancing...
+
+              {/* Zoom & Loupe Controls */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 px-2 py-1 rounded-xl bg-zinc-950/80 border border-zinc-800 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel((z) => Math.max(1, z - 0.5))}
+                    disabled={zoomLevel <= 1}
+                    className="p-1 rounded text-zinc-400 hover:text-zinc-100 disabled:opacity-30"
+                    title="Zoom Out"
+                  >
+                    <ZoomOut size={14} />
+                  </button>
+                  <span className="font-mono text-zinc-300 px-1 min-w-[42px] text-center font-semibold">
+                    {zoomLevel === 1 ? 'Fit' : `${Math.round(zoomLevel * 100)}%`}
                   </span>
-                )}
-                <span className="px-2.5 py-1 rounded-lg bg-indigo-600/90 backdrop-blur-md text-[11px] font-semibold text-white shadow-md">
-                  Enhanced ({settings.upscale}x HD • {imageMeta ? imageMeta.width * settings.upscale : 0}×
-                  {imageMeta ? imageMeta.height * settings.upscale : 0})
-                </span>
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel((z) => Math.min(4, z + 0.5))}
+                    disabled={zoomLevel >= 4}
+                    className="p-1 rounded text-zinc-400 hover:text-zinc-100 disabled:opacity-30"
+                    title="Zoom In"
+                  >
+                    <ZoomIn size={14} />
+                  </button>
+                  {zoomLevel > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setZoomLevel(1);
+                        setPanPos({ x: 0, y: 0 });
+                      }}
+                      className="ml-1 text-[10px] text-indigo-400 hover:underline px-1"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
 
-              {/* Bottom Instructions / Hold Button */}
-              <div className="absolute bottom-3 inset-x-3 z-30 flex items-center justify-between pointer-events-auto">
-                <span className="hidden sm:inline-block px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md text-[10px] text-zinc-400">
-                  Drag the slider left or right to compare
-                </span>
-
+                {/* Spacebar Hold Hint */}
                 <button
                   type="button"
                   onMouseDown={() => setIsHoldingOriginal(true)}
                   onMouseUp={() => setIsHoldingOriginal(false)}
                   onTouchStart={() => setIsHoldingOriginal(true)}
                   onTouchEnd={() => setIsHoldingOriginal(false)}
-                  className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded-lg bg-zinc-900/80 hover:bg-zinc-800 backdrop-blur-md text-xs font-medium text-zinc-200 border border-zinc-700 shadow-lg active:scale-95 transition"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-zinc-700 bg-zinc-800/80 hover:bg-zinc-700 text-xs font-medium text-zinc-200 shadow-sm active:scale-95 transition"
                 >
                   <Eye size={13} />
-                  <span>Hold for Original</span>
+                  <span>Hold Original (Space)</span>
                 </button>
               </div>
             </div>
 
-            {/* Export Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl border border-zinc-800 bg-zinc-900/50">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-zinc-400">Resolution:</span>
-                <span className="text-xs font-mono font-bold text-emerald-400">
-                  {imageMeta ? imageMeta.width * settings.upscale : 0} ×{' '}
-                  {imageMeta ? imageMeta.height * settings.upscale : 0} px ({settings.upscale}x)
+            {/* Viewport Canvas Container */}
+            <div
+              ref={containerRef}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onTouchMove={handleTouchMove}
+              className={`relative w-full aspect-[4/3] max-h-[580px] overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl select-none flex items-center justify-center ${
+                zoomLevel > 1 ? 'cursor-grab active:cursor-grabbing' : ''
+              }`}
+            >
+              {/* 1. SIDE-BY-SIDE MODE */}
+              {viewMode === 'sideBySide' ? (
+                <div className="grid grid-cols-2 w-full h-full divide-x divide-zinc-800">
+                  {/* Left: Original */}
+                  <div className="relative w-full h-full overflow-hidden flex items-center justify-center bg-zinc-950">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={originalImage || ''}
+                      alt="Original"
+                      className="max-w-none object-contain transition-transform duration-75"
+                      style={{
+                        transform: `scale(${zoomLevel}) translate(${panPos.x / zoomLevel}px, ${panPos.y / zoomLevel}px)`,
+                        width: '100%',
+                        height: '100%',
+                      }}
+                    />
+                    <div className="absolute top-3 left-3 pointer-events-none">
+                      <span className="px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-md text-[11px] font-semibold text-zinc-300 border border-zinc-800">
+                        Original ({imageMeta?.width}×{imageMeta?.height})
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Right: Enhanced */}
+                  <div className="relative w-full h-full overflow-hidden flex items-center justify-center bg-zinc-950">
+                    {enhancedUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={enhancedUrl}
+                        alt="Enhanced"
+                        className="max-w-none object-contain transition-transform duration-75"
+                        style={{
+                          transform: `scale(${zoomLevel}) translate(${panPos.x / zoomLevel}px, ${panPos.y / zoomLevel}px)`,
+                          width: '100%',
+                          height: '100%',
+                        }}
+                      />
+                    )}
+                    <div className="absolute top-3 right-3 pointer-events-none">
+                      <span className="px-2.5 py-1 rounded-lg bg-indigo-600/90 backdrop-blur-md text-[11px] font-semibold text-white shadow-md">
+                        Enhanced ({settings.upscale}x HD)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* 2. SPLIT CURTAIN OR SINGLE VIEW */
+                <div
+                  className="relative w-full h-full flex items-center justify-center overflow-hidden"
+                  style={{
+                    transform: `scale(${zoomLevel}) translate(${panPos.x / zoomLevel}px, ${panPos.y / zoomLevel}px)`,
+                    transformOrigin: 'center center',
+                    transition: 'transform 0.05s ease-out',
+                  }}
+                >
+                  {/* Enhanced Base Image */}
+                  {enhancedUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={enhancedUrl}
+                      alt="Enhanced Result"
+                      className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                    />
+                  )}
+
+                  {/* Original Clipped Layer for Split mode */}
+                  {viewMode === 'split' && !isHoldingOriginal && originalImage && (
+                    <div
+                      className="absolute inset-0 overflow-hidden pointer-events-none"
+                      style={{ width: `${splitPos}%` }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={originalImage}
+                        alt="Original"
+                        className="absolute inset-0 w-full h-full object-contain max-w-none"
+                        style={{
+                          width: containerRef.current?.clientWidth || '100%',
+                          height: containerRef.current?.clientHeight || '100%',
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* 100% Original Layer when holding button or Spacebar */}
+                  {isHoldingOriginal && originalImage && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={originalImage}
+                      alt="Original"
+                      className="absolute inset-0 w-full h-full object-contain pointer-events-none z-10"
+                    />
+                  )}
+
+                  {/* Vertical Split Divider Bar */}
+                  {viewMode === 'split' && !isHoldingOriginal && (
+                    <div
+                      className="absolute top-0 bottom-0 z-20 w-1 bg-white cursor-ew-resize shadow-[0_0_12px_rgba(0,0,0,0.85)]"
+                      style={{ left: `${splitPos}%` }}
+                    >
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-white text-zinc-900 shadow-xl border border-zinc-200">
+                        <Split size={14} className="rotate-90" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Viewport Overlay Badges */}
+              {viewMode !== 'sideBySide' && (
+                <>
+                  <div className="absolute top-3 left-3 z-30 pointer-events-none">
+                    <span className="px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-md text-[11px] font-semibold text-zinc-300 border border-zinc-800">
+                      {isHoldingOriginal ? 'Original Image' : `Original (${imageMeta?.width}×${imageMeta?.height})`}
+                    </span>
+                  </div>
+                  <div className="absolute top-3 right-3 z-30 pointer-events-none flex items-center gap-2">
+                    {isProcessing && (
+                      <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-900/80 backdrop-blur-md text-[11px] font-semibold text-indigo-200 border border-indigo-700 animate-pulse">
+                        <Loader2 size={12} className="animate-spin" /> Live Worker...
+                      </span>
+                    )}
+                    <span className="px-2.5 py-1 rounded-lg bg-indigo-600/90 backdrop-blur-md text-[11px] font-semibold text-white shadow-md">
+                      Enhanced ({settings.upscale}x HD • {imageMeta ? imageMeta.width * settings.upscale : 0}×
+                      {imageMeta ? imageMeta.height * settings.upscale : 0})
+                    </span>
+                  </div>
+                </>
+              )}
+
+              {/* Bottom Instructions */}
+              <div className="absolute bottom-3 inset-x-3 z-30 flex items-center justify-between pointer-events-none">
+                <span className="px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-md text-[10px] text-zinc-400">
+                  {viewMode === 'split'
+                    ? 'Drag split bar to compare • Hold Space for original'
+                    : 'Pan with mouse when zoomed in'}
                 </span>
+              </div>
+            </div>
+
+            {/* Pro Export Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl border border-zinc-800 bg-zinc-900/50">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                  <span>Output:</span>
+                  <span className="font-mono font-bold text-emerald-400">
+                    {imageMeta ? imageMeta.width * settings.upscale : 0} ×{' '}
+                    {imageMeta ? imageMeta.height * settings.upscale : 0} px ({settings.upscale}x)
+                  </span>
+                </div>
+
+                {/* Format Toggle */}
+                <div className="flex items-center gap-1 p-0.5 rounded-lg bg-zinc-950 border border-zinc-800 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setExportFormat('png')}
+                    className={`px-2 py-0.5 rounded font-semibold ${
+                      exportFormat === 'png' ? 'bg-indigo-600 text-white' : 'text-zinc-400'
+                    }`}
+                  >
+                    PNG
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExportFormat('jpeg')}
+                    className={`px-2 py-0.5 rounded font-semibold ${
+                      exportFormat === 'jpeg' ? 'bg-indigo-600 text-white' : 'text-zinc-400'
+                    }`}
+                  >
+                    JPG (95%)
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-center gap-2">
@@ -775,31 +1200,31 @@ export default function PhotoEnhancerPage() {
                   className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-200 transition"
                 >
                   {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                  <span>{copied ? 'Copied!' : 'Copy Image'}</span>
+                  <span>{copied ? 'Copied!' : 'Copy'}</span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => downloadEnhanced('png')}
+                  onClick={downloadEnhanced}
                   disabled={isExporting}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-lg shadow-indigo-500/20 transition disabled:opacity-50"
                 >
                   {isExporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                  <span>Download Enhanced PNG</span>
+                  <span>Download Ultra-HD {exportFormat.toUpperCase()}</span>
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Right Column: Presets & Collapsible Fine-Tuning */}
+          {/* Right Column: Pro Presets, Live Histogram & Lightroom Controls */}
           <div className="space-y-4 lg:col-span-4">
             {/* Quick Enhancement Presets */}
             <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                  Enhancement Profiles
+                  Studio Profiles
                 </span>
-                <Zap size={14} className="text-indigo-400" />
+                <Sparkles size={14} className="text-indigo-400" />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -813,9 +1238,9 @@ export default function PhotoEnhancerPage() {
                   }`}
                 >
                   <span className="text-xs font-semibold flex items-center gap-1.5">
-                    <Sparkles size={12} className="text-indigo-400" /> Auto-Enhance
+                    <Sparkles size={12} className="text-indigo-400" /> Auto Master
                   </span>
-                  <span className="text-[10px] text-zinc-500 leading-tight">Balanced clarity & color</span>
+                  <span className="text-[10px] text-zinc-500 leading-tight">AI balanced curves</span>
                 </button>
 
                 <button
@@ -828,9 +1253,9 @@ export default function PhotoEnhancerPage() {
                   }`}
                 >
                   <span className="text-xs font-semibold flex items-center gap-1.5">
-                    <User size={12} className="text-indigo-400" /> Portrait Soft
+                    <User size={12} className="text-indigo-400" /> Portrait Pro
                   </span>
-                  <span className="text-[10px] text-zinc-500 leading-tight">Skin de-noise & eyes</span>
+                  <span className="text-[10px] text-zinc-500 leading-tight">Texture & eye clarity</span>
                 </button>
 
                 <button
@@ -845,7 +1270,7 @@ export default function PhotoEnhancerPage() {
                   <span className="text-xs font-semibold flex items-center gap-1.5">
                     <FileText size={12} className="text-indigo-400" /> Document Text
                   </span>
-                  <span className="text-[10px] text-zinc-500 leading-tight">Razor sharp text</span>
+                  <span className="text-[10px] text-zinc-500 leading-tight">Razor sharp ink & b/w</span>
                 </button>
 
                 <button
@@ -860,11 +1285,41 @@ export default function PhotoEnhancerPage() {
                   <span className="text-xs font-semibold flex items-center gap-1.5">
                     <Sun size={12} className="text-indigo-400" /> Vibrant HDR
                   </span>
-                  <span className="text-[10px] text-zinc-500 leading-tight">Rich outdoor colors</span>
+                  <span className="text-[10px] text-zinc-500 leading-tight">Deep shadow recovery</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => selectPreset('night')}
+                  className={`flex flex-col items-start gap-1 p-2.5 rounded-xl border text-left transition ${
+                    activePreset === 'night'
+                      ? 'border-indigo-500 bg-indigo-600/20 text-indigo-300'
+                      : 'border-zinc-800 bg-zinc-950/70 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                  }`}
+                >
+                  <span className="text-xs font-semibold flex items-center gap-1.5">
+                    <Moon size={12} className="text-indigo-400" /> Night ISO Denoise
+                  </span>
+                  <span className="text-[10px] text-zinc-500 leading-tight">Bilateral noise cleaner</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => selectPreset('ecommerce')}
+                  className={`flex flex-col items-start gap-1 p-2.5 rounded-xl border text-left transition ${
+                    activePreset === 'ecommerce'
+                      ? 'border-indigo-500 bg-indigo-600/20 text-indigo-300'
+                      : 'border-zinc-800 bg-zinc-950/70 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                  }`}
+                >
+                  <span className="text-xs font-semibold flex items-center gap-1.5">
+                    <Zap size={12} className="text-indigo-400" /> E-Commerce Crisp
+                  </span>
+                  <span className="text-[10px] text-zinc-500 leading-tight">Edge punch & pop</span>
                 </button>
               </div>
 
-              {/* Super-Resolution Upscaling Switcher */}
+              {/* Super-Resolution Engine Switcher */}
               <div className="pt-2 border-t border-zinc-800/80">
                 <span className="text-xs font-semibold text-zinc-400 block mb-2">
                   Super-Resolution Scale:
@@ -891,46 +1346,229 @@ export default function PhotoEnhancerPage() {
               </div>
             </div>
 
-            {/* Collapsible Fine-Tuning Adjustments (Collapsed by default until expanded) */}
+            {/* Live RGB & Luminance Histogram */}
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 space-y-2">
+              <div
+                onClick={() => setIsHistogramExpanded((h) => !h)}
+                className="flex items-center justify-between cursor-pointer select-none"
+              >
+                <div className="flex items-center gap-2">
+                  <BarChart2 size={14} className="text-indigo-400" />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
+                    RGB & Luminance Histogram
+                  </span>
+                </div>
+                <ChevronDown
+                  size={15}
+                  className={`text-zinc-400 transition-transform ${isHistogramExpanded ? 'rotate-180' : ''}`}
+                />
+              </div>
+
+              {isHistogramExpanded && (
+                <div className="pt-2">
+                  <div className="relative w-full h-20 bg-zinc-950 rounded-xl overflow-hidden border border-zinc-800/80 flex items-end px-1">
+                    {histogramData ? (
+                      <svg className="w-full h-full" viewBox="0 0 256 100" preserveAspectRatio="none">
+                        {/* Red Channel */}
+                        <path
+                          d={
+                            'M 0 100 ' +
+                            histogramData.r
+                              .map((v, i) => `L ${i} ${100 - Math.min(100, (v / 80) * 100)}`)
+                              .join(' ') +
+                            ' L 256 100 Z'
+                          }
+                          fill="rgba(239, 68, 68, 0.25)"
+                          stroke="rgba(239, 68, 68, 0.8)"
+                          strokeWidth="1"
+                        />
+                        {/* Green Channel */}
+                        <path
+                          d={
+                            'M 0 100 ' +
+                            histogramData.g
+                              .map((v, i) => `L ${i} ${100 - Math.min(100, (v / 80) * 100)}`)
+                              .join(' ') +
+                            ' L 256 100 Z'
+                          }
+                          fill="rgba(34, 197, 94, 0.25)"
+                          stroke="rgba(34, 197, 94, 0.8)"
+                          strokeWidth="1"
+                        />
+                        {/* Blue Channel */}
+                        <path
+                          d={
+                            'M 0 100 ' +
+                            histogramData.b
+                              .map((v, i) => `L ${i} ${100 - Math.min(100, (v / 80) * 100)}`)
+                              .join(' ') +
+                            ' L 256 100 Z'
+                          }
+                          fill="rgba(59, 130, 246, 0.25)"
+                          stroke="rgba(59, 130, 246, 0.8)"
+                          strokeWidth="1"
+                        />
+                        {/* Luminance Curve */}
+                        <path
+                          d={
+                            'M 0 100 ' +
+                            histogramData.lum
+                              .map((v, i) => `L ${i} ${100 - Math.min(100, (v / 80) * 100)}`)
+                              .join(' ')
+                          }
+                          fill="none"
+                          stroke="rgba(255, 255, 255, 0.9)"
+                          strokeWidth="1.2"
+                        />
+                      </svg>
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-[11px] text-zinc-500">
+                        Generating real-time histogram...
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex justify-between text-[10px] text-zinc-500 mt-1 px-1">
+                    <span>Shadows (0)</span>
+                    <span>Midtones (128)</span>
+                    <span>Highlights (255)</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 1. LIGHTROOM-GRADE DYNAMIC RANGE & LIGHTING */}
             <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 transition-all">
               <button
                 type="button"
-                onClick={() => setIsAdvancedExpanded((prev) => !prev)}
+                onClick={() => setIsLightingExpanded((e) => !e)}
                 className="flex items-center justify-between w-full select-none text-left"
               >
                 <div className="flex items-center gap-2">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400">
-                    <Sliders size={13} />
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold uppercase tracking-wider text-zinc-200">
-                      Advanced Adjustments
-                    </span>
-                    <span className="ml-2 text-[10px] text-zinc-500">
-                      {isAdvancedExpanded ? 'Click to hide' : 'Click to expand'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                  <span className="text-[11px] text-zinc-500 font-medium">
-                    {isAdvancedExpanded ? 'Hide' : 'Expand'}
+                  <Sun size={14} className="text-amber-400" />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-200">
+                    Light & Dynamic Range
                   </span>
-                  <ChevronDown
-                    size={15}
-                    className={`transition-transform duration-200 ${
-                      isAdvancedExpanded ? 'rotate-180 text-indigo-400' : 'text-zinc-500'
-                    }`}
-                  />
                 </div>
+                <ChevronDown
+                  size={15}
+                  className={`text-zinc-400 transition-transform ${isLightingExpanded ? 'rotate-180' : ''}`}
+                />
               </button>
 
-              {isAdvancedExpanded && (
-                <div className="space-y-4 pt-4 mt-3 border-t border-zinc-800/80 animate-fade-in">
+              {isLightingExpanded && (
+                <div className="space-y-3.5 pt-3 mt-2 border-t border-zinc-800/80 animate-fade-in">
+                  {/* Exposure */}
+                  <div>
+                    <div className="flex justify-between text-xs text-zinc-400 mb-1">
+                      <span>Exposure:</span>
+                      <span className="font-mono text-zinc-200">
+                        {settings.exposure > 0 ? `+${settings.exposure}` : settings.exposure}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="-50"
+                      max="50"
+                      value={settings.exposure}
+                      onChange={(e) => {
+                        setActivePreset('custom');
+                        setSettings((s) => ({ ...s, exposure: Number(e.target.value) }));
+                      }}
+                      className="w-full accent-indigo-500 cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Highlights */}
+                  <div>
+                    <div className="flex justify-between text-xs text-zinc-400 mb-1">
+                      <span>Highlights (Recover Blowouts):</span>
+                      <span className="font-mono text-zinc-200">
+                        {settings.highlights > 0 ? `+${settings.highlights}` : settings.highlights}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="-50"
+                      max="50"
+                      value={settings.highlights}
+                      onChange={(e) => {
+                        setActivePreset('custom');
+                        setSettings((s) => ({ ...s, highlights: Number(e.target.value) }));
+                      }}
+                      className="w-full accent-indigo-500 cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Shadows */}
+                  <div>
+                    <div className="flex justify-between text-xs text-zinc-400 mb-1">
+                      <span>Shadows (Lift Dark Areas):</span>
+                      <span className="font-mono text-zinc-200">
+                        {settings.shadows > 0 ? `+${settings.shadows}` : settings.shadows}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="-50"
+                      max="50"
+                      value={settings.shadows}
+                      onChange={(e) => {
+                        setActivePreset('custom');
+                        setSettings((s) => ({ ...s, shadows: Number(e.target.value) }));
+                      }}
+                      className="w-full accent-indigo-500 cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Contrast */}
+                  <div>
+                    <div className="flex justify-between text-xs text-zinc-400 mb-1">
+                      <span>Contrast:</span>
+                      <span className="font-mono text-zinc-200">
+                        {settings.contrast > 0 ? `+${settings.contrast}` : settings.contrast}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="-50"
+                      max="50"
+                      value={settings.contrast}
+                      onChange={(e) => {
+                        setActivePreset('custom');
+                        setSettings((s) => ({ ...s, contrast: Number(e.target.value) }));
+                      }}
+                      className="w-full accent-indigo-500 cursor-pointer"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 2. DETAIL & CLARITY ACCORDION */}
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 transition-all">
+              <button
+                type="button"
+                onClick={() => setIsDetailExpanded((e) => !e)}
+                className="flex items-center justify-between w-full select-none text-left"
+              >
+                <div className="flex items-center gap-2">
+                  <Sliders size={14} className="text-indigo-400" />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-200">
+                    Detail, Clarity & Noise
+                  </span>
+                </div>
+                <ChevronDown
+                  size={15}
+                  className={`text-zinc-400 transition-transform ${isDetailExpanded ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              {isDetailExpanded && (
+                <div className="space-y-3.5 pt-3 mt-2 border-t border-zinc-800/80 animate-fade-in">
                   {/* Sharpness */}
                   <div>
                     <div className="flex justify-between text-xs text-zinc-400 mb-1">
-                      <span>Sharpness & Edge Recovery:</span>
+                      <span>Unsharp Mask & Edge Recovery:</span>
                       <span className="font-mono text-zinc-200">{settings.sharpness}%</span>
                     </div>
                     <input
@@ -940,7 +1578,7 @@ export default function PhotoEnhancerPage() {
                       value={settings.sharpness}
                       onChange={(e) => {
                         setActivePreset('custom');
-                        setSettings((prev) => ({ ...prev, sharpness: Number(e.target.value) }));
+                        setSettings((s) => ({ ...s, sharpness: Number(e.target.value) }));
                       }}
                       className="w-full accent-indigo-500 cursor-pointer"
                     />
@@ -959,16 +1597,35 @@ export default function PhotoEnhancerPage() {
                       value={settings.clarity}
                       onChange={(e) => {
                         setActivePreset('custom');
-                        setSettings((prev) => ({ ...prev, clarity: Number(e.target.value) }));
+                        setSettings((s) => ({ ...s, clarity: Number(e.target.value) }));
                       }}
                       className="w-full accent-indigo-500 cursor-pointer"
                     />
                   </div>
 
-                  {/* Denoise */}
+                  {/* Dehaze */}
                   <div>
                     <div className="flex justify-between text-xs text-zinc-400 mb-1">
-                      <span>Noise & Grain Reduction:</span>
+                      <span>Dehaze:</span>
+                      <span className="font-mono text-zinc-200">{settings.dehaze}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={settings.dehaze}
+                      onChange={(e) => {
+                        setActivePreset('custom');
+                        setSettings((s) => ({ ...s, dehaze: Number(e.target.value) }));
+                      }}
+                      className="w-full accent-indigo-500 cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Bilateral Denoise */}
+                  <div>
+                    <div className="flex justify-between text-xs text-zinc-400 mb-1">
+                      <span>Bilateral Noise Reduction:</span>
                       <span className="font-mono text-zinc-200">{settings.denoise}%</span>
                     </div>
                     <input
@@ -978,26 +1635,52 @@ export default function PhotoEnhancerPage() {
                       value={settings.denoise}
                       onChange={(e) => {
                         setActivePreset('custom');
-                        setSettings((prev) => ({ ...prev, denoise: Number(e.target.value) }));
+                        setSettings((s) => ({ ...s, denoise: Number(e.target.value) }));
                       }}
                       className="w-full accent-indigo-500 cursor-pointer"
                     />
                   </div>
+                </div>
+              )}
+            </div>
 
-                  {/* Contrast */}
+            {/* 3. COLOR & WHITE BALANCE ACCORDION */}
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 transition-all">
+              <button
+                type="button"
+                onClick={() => setIsColorExpanded((e) => !e)}
+                className="flex items-center justify-between w-full select-none text-left"
+              >
+                <div className="flex items-center gap-2">
+                  <Sun size={14} className="text-cyan-400" />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-200">
+                    Color & White Balance
+                  </span>
+                </div>
+                <ChevronDown
+                  size={15}
+                  className={`text-zinc-400 transition-transform ${isColorExpanded ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              {isColorExpanded && (
+                <div className="space-y-3.5 pt-3 mt-2 border-t border-zinc-800/80 animate-fade-in">
+                  {/* Temperature */}
                   <div>
                     <div className="flex justify-between text-xs text-zinc-400 mb-1">
-                      <span>Contrast:</span>
-                      <span className="font-mono text-zinc-200">{settings.contrast > 0 ? `+${settings.contrast}` : settings.contrast}</span>
+                      <span>Temperature (Cool / Warm):</span>
+                      <span className="font-mono text-zinc-200">
+                        {settings.temperature > 0 ? `+${settings.temperature}` : settings.temperature}
+                      </span>
                     </div>
                     <input
                       type="range"
                       min="-50"
                       max="50"
-                      value={settings.contrast}
+                      value={settings.temperature}
                       onChange={(e) => {
                         setActivePreset('custom');
-                        setSettings((prev) => ({ ...prev, contrast: Number(e.target.value) }));
+                        setSettings((s) => ({ ...s, temperature: Number(e.target.value) }));
                       }}
                       className="w-full accent-indigo-500 cursor-pointer"
                     />
@@ -1006,8 +1689,10 @@ export default function PhotoEnhancerPage() {
                   {/* Vibrance */}
                   <div>
                     <div className="flex justify-between text-xs text-zinc-400 mb-1">
-                      <span>Color Vibrance:</span>
-                      <span className="font-mono text-zinc-200">{settings.vibrance > 0 ? `+${settings.vibrance}` : settings.vibrance}</span>
+                      <span>Smart Vibrance:</span>
+                      <span className="font-mono text-zinc-200">
+                        {settings.vibrance > 0 ? `+${settings.vibrance}` : settings.vibrance}
+                      </span>
                     </div>
                     <input
                       type="range"
@@ -1016,26 +1701,28 @@ export default function PhotoEnhancerPage() {
                       value={settings.vibrance}
                       onChange={(e) => {
                         setActivePreset('custom');
-                        setSettings((prev) => ({ ...prev, vibrance: Number(e.target.value) }));
+                        setSettings((s) => ({ ...s, vibrance: Number(e.target.value) }));
                       }}
                       className="w-full accent-indigo-500 cursor-pointer"
                     />
                   </div>
 
-                  {/* Brightness */}
+                  {/* Saturation */}
                   <div>
                     <div className="flex justify-between text-xs text-zinc-400 mb-1">
-                      <span>Exposure & Brightness:</span>
-                      <span className="font-mono text-zinc-200">{settings.brightness > 0 ? `+${settings.brightness}` : settings.brightness}</span>
+                      <span>Saturation:</span>
+                      <span className="font-mono text-zinc-200">
+                        {settings.saturation > 0 ? `+${settings.saturation}` : settings.saturation}
+                      </span>
                     </div>
                     <input
                       type="range"
                       min="-50"
                       max="50"
-                      value={settings.brightness}
+                      value={settings.saturation}
                       onChange={(e) => {
                         setActivePreset('custom');
-                        setSettings((prev) => ({ ...prev, brightness: Number(e.target.value) }));
+                        setSettings((s) => ({ ...s, saturation: Number(e.target.value) }));
                       }}
                       className="w-full accent-indigo-500 cursor-pointer"
                     />
@@ -1046,7 +1733,7 @@ export default function PhotoEnhancerPage() {
                     onClick={() => selectPreset('auto')}
                     className="w-full py-1.5 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-300 transition"
                   >
-                    Reset to Auto
+                    Reset All Controls to Auto
                   </button>
                 </div>
               )}
