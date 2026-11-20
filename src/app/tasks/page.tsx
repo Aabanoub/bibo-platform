@@ -1,7 +1,5 @@
 'use client';
 
-import Link from 'next/link';
-
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
 import type { Task, TaskPriority, TaskStatus, TaskFolder, TaskDifficulty, DailyScheduleItem } from '@/types';
@@ -44,7 +42,6 @@ import {
   GraduationCap,
   Layers,
   BarChart2,
-  Settings,
 } from 'lucide-react';
 import {
   requestNotificationPermission,
@@ -271,22 +268,6 @@ export default function TasksPage() {
       setActiveMainTab('tasks');
     }
   }, [tasksViewMode, activeMainTab]);
-
-  const switchTasksViewMode = (mode: 'ai_folders' | 'classic') => {
-    setTasksViewMode(mode);
-    if (mode === 'classic') {
-      setActiveMainTab('tasks');
-    }
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('tasks_view_mode', mode);
-      window.dispatchEvent(new CustomEvent('tasks_view_mode_changed', { detail: mode }));
-    }
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        supabase.auth.updateUser({ data: { tasks_view_mode: mode } }).catch(() => {});
-      }
-    });
-  };
 
   // Quick-Add state (for Classic View Mode)
   const [quickTitle, setQuickTitle] = useState('');
@@ -1892,44 +1873,6 @@ export default function TasksPage() {
 
       {(tasksViewMode === 'classic' || activeMainTab === 'tasks') && (
         <div className="space-y-5">
-          {/* ── TASKS VIEW MODE SWITCHER (AI SUBJECT FOLDERS vs CLASSIC FLAT LIST) ── */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-sm">
-            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-950/80 border border-slate-800/80 text-xs">
-              <button
-                type="button"
-                onClick={() => switchTasksViewMode('ai_folders')}
-                className={`px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center gap-1.5 ${
-                  tasksViewMode === 'ai_folders'
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-              >
-                <Sparkles className="w-3.5 h-3.5 text-purple-300" />
-                <span>AI Subject Folders</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => switchTasksViewMode('classic')}
-                className={`px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center gap-1.5 ${
-                  tasksViewMode === 'classic'
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5 text-cyan-300" />
-                <span>Classic Task List</span>
-              </button>
-            </div>
-
-            <Link
-              href="/settings"
-              className="text-[11px] text-slate-400 hover:text-blue-400 transition-colors flex items-center gap-1 px-2 py-1"
-            >
-              <Settings className="w-3 h-3 text-slate-500" />
-              <span>Change default in Settings</span>
-            </Link>
-          </div>
-
           {tasksViewMode === 'ai_folders' ? (
 <div className="space-y-6">
           {/* ── TOP ACTION BAR: FOLDERS & TASKS ── */}
