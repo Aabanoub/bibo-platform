@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Folder,
+  Sparkles,
 } from 'lucide-react';
 
 export function getFolderCountdown(dueDateStr: string | null) {
@@ -81,6 +82,7 @@ interface TaskFolderCardProps {
   onEdit: (folder: TaskFolder, e: React.MouseEvent) => void;
   onDelete: (folder: TaskFolder, e: React.MouseEvent) => void;
   onAddLesson: (folder: TaskFolder, e: React.MouseEvent) => void;
+  onSmartDistribute?: (folder: TaskFolder, e: React.MouseEvent) => void;
 }
 
 export default function TaskFolderCard({
@@ -92,6 +94,7 @@ export default function TaskFolderCard({
   onEdit,
   onDelete,
   onAddLesson,
+  onSmartDistribute,
 }: TaskFolderCardProps) {
   const colorCfg = FOLDER_COLORS[folder.color] || FOLDER_COLORS.blue;
   const IconComponent = FOLDER_ICONS[folder.icon]?.icon || Folder;
@@ -231,18 +234,32 @@ export default function TaskFolderCard({
           </div>
         </div>
 
-        {/* Direct Action: + Add Lesson button */}
-        <div className="flex items-center justify-between pt-1">
-          <button
-            type="button"
-            onClick={(e) => onAddLesson(folder, e)}
-            className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-400 hover:text-blue-300 py-1 px-2 rounded-lg hover:bg-blue-500/10 transition-colors"
-          >
-            <Plus className="w-3 h-3" />
-            <span>Add Lesson</span>
-          </button>
+        {/* Direct Action: + Add Lesson & Smart Distribute buttons */}
+        <div className="flex items-center justify-between pt-1 flex-wrap gap-1">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={(e) => onAddLesson(folder, e)}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-400 hover:text-blue-300 py-1 px-2 rounded-lg hover:bg-blue-500/10 transition-colors"
+            >
+              <Plus className="w-3 h-3" />
+              <span>Add Lesson</span>
+            </button>
 
-          <span className="inline-flex items-center gap-0.5 text-[10px] text-slate-400 group-hover:text-slate-200 transition-colors">
+            {onSmartDistribute && totalTasks > 0 && (
+              <button
+                type="button"
+                onClick={(e) => onSmartDistribute(folder, e)}
+                className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-400 hover:text-purple-300 py-1 px-2 rounded-lg hover:bg-purple-500/10 transition-colors"
+                title="Smart distribute workload across days before exam"
+              >
+                <Sparkles className="w-3 h-3 text-purple-400" />
+                <span>Smart Distribute</span>
+              </button>
+            )}
+          </div>
+
+          <span className="inline-flex items-center gap-0.5 text-[10px] text-slate-400 group-hover:text-slate-200 transition-colors ml-auto">
             {isSelected ? 'Viewing' : 'View'}
             <ChevronRight className="w-3 h-3" />
           </span>

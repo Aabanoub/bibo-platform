@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI, Content } from '@google/generative-ai';
 import { createServerClient } from '@/lib/supabase-server';
 import { fetchUserPlatformData, formatContextPrompt, UserPlatformData } from '@/lib/user-context';
+import { calculateSmartDistribution } from '@/lib/smart-distribution';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -40,6 +41,12 @@ Supported action schemas:
   (Standard categories: Food, Groceries, Transport, Utilities, Housing, Entertainment, Shopping, Health, Salary, Investment, Other. Default type is "expense" unless income/salary.)
 - create_task:
   {"type": "create_task", "data": {"title": string, "priority": "low" | "medium" | "high" | "urgent", "due_date"?: "YYYY-MM-DD", "description"?: string}}
+- distribute_tasks:
+  {"type": "distribute_tasks", "data": {"folder_name"?: string, "deadline": "YYYY-MM-DD", "tasks": [{"title": string, "priority"?: "low" | "medium" | "high" | "urgent", "description"?: string}]}}
+  (CRITICAL SMART DISTRIBUTION RULE: When the user asks to schedule multiple tasks or lessons for an exam, subject, or deadline, DO NOT schedule all tasks for that exact final deadline day! Instead, evenly distribute the workload across the timeframe preceding the deadline — e.g., if 10 tasks are due on Dec 2nd, allocate ~1 task per day over the preceding 10 days to ensure a balanced workload.)
+- smart_distribute_folder:
+  {"type": "smart_distribute_folder", "data": {"folder_name"?: string, "folder_id"?: string, "deadline"?: "YYYY-MM-DD"}}
+  (Use this when the user asks to balance/redistribute the workload of existing tasks inside a folder or exam subject across days leading up to the deadline).
 - create_note:
   {"type": "create_note", "data": {"title": string, "content": string, "tags"?: string[]}}
 - complete_habit:
@@ -239,6 +246,158 @@ async function executeAction(
         success: true,
         message: `Marked habit "${habitName}" as completed today!`,
         data,
+      };
+    }
+
+    if (action.type === 'distribute_tasks') {
+      const { folder_name, deadline, tasks: rawTasks } = action.data;
+      if (!Array.isArray(rawTasks) || rawTasks.length === 0) {
+        return { type: action.type, success: false, message: 'No tasks provided for smart distribution' };
+      }
+
+      // 1. Resolve or create Folder if folder_name is provided
+      let folderId: string | null = null;
+      let folderNameStr = folder_name?.trim();
+
+      if (folderNameStr) {
+        const { data: existingFolders } = await supabase
+          .from('task_folders')
+          .select('id, name, due_date')
+          .eq('user_id', userId)
+          .ilike('name', folderNameStr)
+          .limit(1);
+
+        if (existingFolders && existingFolders.length > 0) {
+          folderId = existingFolders[0].id;
+          folderNameStr = existingFolders[0].name;
+          if (!existingFolders[0].due_date && deadline) {
+            await supabase
+              .from('task_folders')
+              .update({ due_date: new Date(deadline).toISOString() })
+              .eq('id', folderId);
+          }
+        } else {
+          const { data: newFolder } = await supabase
+            .from('task_folders')
+            .insert({
+              user_id: userId,
+              name: folderNameStr,
+              due_date: deadline ? new Date(deadline).toISOString() : null,
+              color: 'blue',
+              icon: 'book',
+            })
+            .select()
+            .single();
+
+          if (newFolder) folderId = newFolder.id;
+        }
+      }
+
+      // 2. Compute smart distribution plan
+      const deadlineDate = deadline || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+      const plan = calculateSmartDistribution(
+        rawTasks.map((t: any) => ({
+          title: t.title?.trim() || 'Lesson',
+          priority: ['urgent', 'high', 'medium', 'low'].includes(t.priority) ? t.priority : 'medium',
+          description: t.description || null,
+        })),
+        deadlineDate
+      );
+
+      // 3. Batch insert distributed tasks
+      const tasksToInsert = plan.schedule.map((item) => ({
+        user_id: userId,
+        folder_id: folderId,
+        title: item.task.title,
+        priority: item.task.priority || 'medium',
+        status: 'todo',
+        due_date: new Date(item.suggestedDueDate).toISOString(),
+        description: item.task.description || null,
+      }));
+
+      const { data: insertedTasks, error: insertErr } = await supabase
+        .from('tasks')
+        .insert(tasksToInsert)
+        .select();
+
+      if (insertErr) {
+        console.error('Error inserting distributed tasks:', insertErr);
+        return { type: action.type, success: false, message: insertErr.message };
+      }
+
+      // In-app notification
+      await supabase.from('notifications').insert({
+        user_id: userId,
+        title: `✨ Smart Distributed ${insertedTasks.length} Tasks`,
+        message: plan.summary,
+        type: 'ai',
+        action_url: '/tasks',
+      });
+
+      return {
+        type: action.type,
+        success: true,
+        message: `Smart distributed ${insertedTasks.length} tasks across ${plan.studyDays} days leading to ${plan.deadlineFormatted}. (~${plan.tasksPerDay} tasks/day)`,
+        data: { plan, tasks: insertedTasks },
+      };
+    }
+
+    if (action.type === 'smart_distribute_folder') {
+      const { folder_name, folder_id, deadline } = action.data;
+
+      let folderQuery = supabase.from('task_folders').select('*').eq('user_id', userId);
+      if (folder_id) folderQuery = folderQuery.eq('id', folder_id);
+      else if (folder_name) folderQuery = folderQuery.ilike('name', `%${folder_name.trim()}%`);
+
+      const { data: foldersFound } = await folderQuery.limit(1);
+      const targetFolder = foldersFound?.[0];
+
+      const targetDeadline = deadline || targetFolder?.due_date;
+      if (!targetDeadline) {
+        return {
+          type: action.type,
+          success: false,
+          message: 'Please specify an exam/deadline date to distribute tasks across.',
+        };
+      }
+
+      const { data: folderTasks } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('folder_id', targetFolder?.id || folder_id)
+        .neq('status', 'done')
+        .order('created_at', { ascending: true });
+
+      if (!folderTasks || folderTasks.length === 0) {
+        return { type: action.type, success: false, message: 'No pending tasks found to distribute.' };
+      }
+
+      const plan = calculateSmartDistribution(folderTasks, targetDeadline);
+
+      for (const item of plan.schedule) {
+        await supabase
+          .from('tasks')
+          .update({
+            due_date: new Date(item.suggestedDueDate).toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', item.task.id);
+      }
+
+      await supabase.from('notifications').insert({
+        user_id: userId,
+        title: `✨ Smart Distributed "${targetFolder?.name || 'Folder'}" Tasks`,
+        message: plan.summary,
+        type: 'ai',
+        action_url: '/tasks',
+      });
+
+      return {
+        type: action.type,
+        success: true,
+        message: `Balanced ${folderTasks.length} tasks in "${targetFolder?.name || 'Folder'}": ${plan.summary}`,
+        data: plan,
       };
     }
 

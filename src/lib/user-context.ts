@@ -28,10 +28,14 @@ export interface UserPlatformData {
     is_pinned?: boolean;
     snippet?: string;
   }[];
+  folders?: {
+    name: string;
+    due_date?: string | null;
+  }[];
 }
 
 /**
- * Fetch the user's real-time platform data (Finance, Tasks, Habits, Notes)
+ * Fetch the user's real-time platform data (Finance, Tasks, Habits, Notes, Folders)
  * to give the AI assistant full awareness of their digital cockpit.
  */
 export async function fetchUserPlatformData(
@@ -41,7 +45,7 @@ export async function fetchUserPlatformData(
   const today = new Date().toISOString().split('T')[0];
 
   try {
-    const [txRes, tasksRes, habitsRes, habitLogsRes, notesRes] = await Promise.all([
+    const [txRes, tasksRes, habitsRes, habitLogsRes, notesRes, foldersRes] = await Promise.all([
       supabase
         .from('transactions')
         .select('amount, type, category, description, date')
@@ -69,6 +73,11 @@ export async function fetchUserPlatformData(
         .eq('user_id', userId)
         .order('updated_at', { ascending: false })
         .limit(10),
+      supabase
+        .from('task_folders')
+        .select('name, due_date')
+        .eq('user_id', userId)
+        .order('due_date', { ascending: true }),
     ]);
 
     const transactions = (txRes.data ?? []).map((t: any) => ({
@@ -95,6 +104,11 @@ export async function fetchUserPlatformData(
       snippet: n.content ? String(n.content).slice(0, 150) : '',
     }));
 
+    const folders = (foldersRes?.data ?? []).map((f: any) => ({
+      name: f.name || 'Untitled Folder',
+      due_date: f.due_date,
+    }));
+
     let totalIncome = 0;
     let totalExpenses = 0;
 
@@ -117,6 +131,7 @@ export async function fetchUserPlatformData(
         completedToday: completedHabitIds.has(h.id),
       })),
       notes,
+      folders,
     };
   } catch (err) {
     console.warn('fetchUserPlatformData warning:', err);
@@ -128,6 +143,7 @@ export async function fetchUserPlatformData(
       tasks: [],
       habits: [],
       notes: [],
+      folders: [],
     };
   }
 }
@@ -176,12 +192,26 @@ export function formatContextPrompt(
         .join('\n')
     : 'No notes created yet.';
 
+  const folderList = (data.folders || []).length
+    ? (data.folders || [])
+        .map((f) => {
+          const dueFmt = f.due_date
+            ? new Date(f.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : 'No exam date set';
+          return `- 📁 Folder / Subject: "${f.name}" (Exam / Due Date: ${dueFmt})`;
+        })
+        .join('\n')
+    : 'No exam / subject folders created yet.';
+
   return `
 ================================================================================
 CRITICAL CONTEXT & STRICT OVERRIDE FOR ${userName || 'Abanoub'}:
 Today is ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
 
 You are directly integrated with this user's personal web platform. You have FULL ACCESS to their live database below:
+
+📁 EXAM & SUBJECT FOLDERS (From Platform's Folders Database):
+${folderList}
 
 💰 LIVE FINANCIAL DATA (From Platform's Finance Database):
 - Total Recorded Income: ${currencyFmt(data.totalIncome)}
