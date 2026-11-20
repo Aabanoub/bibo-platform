@@ -19,7 +19,6 @@ import {
   AlertCircle,
   Loader2,
   X,
-  Search,
   Filter,
   Sparkles,
   ArrowUpDown,
@@ -222,7 +221,6 @@ export default function TasksPage() {
 
   // View & Filter states
   const [activeTab, setActiveTab] = useState<TabOption>('all');
-  const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('smart');
   const [filterPriority, setFilterPriority] = useState<TaskPriority | ''>('');
   const [showCompletedSection, setShowCompletedSection] = useState(false);
@@ -1054,19 +1052,10 @@ export default function TasksPage() {
       }
     }
 
-    // 1. Text Search & Priority Filter
-    list = list.filter((t) => {
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchTitle = t.title.toLowerCase().includes(q);
-        const matchDesc = t.description?.toLowerCase().includes(q);
-        const folder = t.folder_id ? foldersMap.get(t.folder_id) : undefined;
-        const matchFolder = folder?.name.toLowerCase().includes(q);
-        if (!matchTitle && !matchDesc && !matchFolder) return false;
-      }
-      if (filterPriority && t.priority !== filterPriority) return false;
-      return true;
-    });
+    // 1. Priority Filter
+    if (filterPriority) {
+      list = list.filter((t) => t.priority === filterPriority);
+    }
 
     // 2. Tab Filter
     if (activeTab === 'today') {
@@ -1118,7 +1107,7 @@ export default function TasksPage() {
 
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
-  }, [tasks, selectedFolderId, searchQuery, filterPriority, activeTab, sortBy, foldersMap]);
+  }, [tasks, selectedFolderId, filterPriority, activeTab, sortBy, foldersMap]);
 
   // Separate active vs completed for clean sectioning in 'all' view
   const activeDisplayed = useMemo(
@@ -1628,28 +1617,8 @@ export default function TasksPage() {
           </button>
         </div>
 
-        {/* Search & Smart Sorting Control */}
+        {/* Sorting & Smart Distribute Controls */}
         <div className="flex items-center gap-2">
-          {/* Quick Search Input */}
-          <div className="relative flex-1 sm:w-48 md:w-56">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search tasks or subjects..."
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-8 pr-7 py-1.5 text-xs text-white placeholder-slate-500 outline-none focus:border-blue-500"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
           {/* Smart Algorithm / Sorting Selector */}
           <div className="relative">
             <select
@@ -1704,17 +1673,15 @@ export default function TasksPage() {
               : 'No tasks found'}
           </h3>
           <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
-            {searchQuery
-              ? 'No tasks match your search filter.'
-              : selectedFolderId
-                ? 'Type in the box above to add lessons to this folder!'
-                : activeTab === 'today'
-                  ? 'No tasks due today. Great job keeping on top of your schedule!'
-                  : activeTab === 'upcoming'
-                    ? 'No upcoming scheduled tasks.'
-                    : activeTab === 'done'
-                      ? 'No completed tasks yet. Finish a task to see it here!'
-                      : 'Add your first task using the box above to get organized.'}
+            {selectedFolderId
+              ? 'Type in the box above to add lessons to this folder!'
+              : activeTab === 'today'
+                ? 'No tasks due today. Great job keeping on top of your schedule!'
+                : activeTab === 'upcoming'
+                  ? 'No upcoming scheduled tasks.'
+                  : activeTab === 'done'
+                    ? 'No completed tasks yet. Finish a task to see it here!'
+                    : 'Add your first task using the box above to get organized.'}
           </p>
         </div>
       ) : (
