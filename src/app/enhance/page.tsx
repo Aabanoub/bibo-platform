@@ -28,6 +28,7 @@ import {
   BarChart2,
   Layers,
   Info,
+  Grid,
 } from 'lucide-react';
 
 type PresetMode =
@@ -37,6 +38,7 @@ type PresetMode =
   | 'landscape'
   | 'night'
   | 'ecommerce'
+  | 'depixelate'
   | 'custom';
 
 type ViewMode = 'split' | 'sideBySide' | 'single';
@@ -55,6 +57,7 @@ interface AdjustmentSettings {
   clarity: number; // 0 to 100
   dehaze: number; // 0 to 100
   denoise: number; // 0 to 100
+  depixelate: number; // 0 to 100 (Anti-pixelation & block smoothing)
 
   // Color & White Balance
   temperature: number; // -50 to 50 (cool / warm)
@@ -78,6 +81,7 @@ const DEFAULT_SETTINGS: AdjustmentSettings = {
   clarity: 30,
   dehaze: 15,
   denoise: 18,
+  depixelate: 0,
 
   temperature: 2,
   tint: 0,
@@ -99,6 +103,7 @@ const PRESET_CONFIGS: Record<PresetMode, AdjustmentSettings> = {
     clarity: 35,
     dehaze: 18,
     denoise: 20,
+    depixelate: 0,
     temperature: 2,
     tint: 0,
     vibrance: 24,
@@ -116,6 +121,7 @@ const PRESET_CONFIGS: Record<PresetMode, AdjustmentSettings> = {
     clarity: 16,
     dehaze: 8,
     denoise: 38,
+    depixelate: 0,
     temperature: 6,
     tint: -2,
     vibrance: 16,
@@ -133,6 +139,7 @@ const PRESET_CONFIGS: Record<PresetMode, AdjustmentSettings> = {
     clarity: 75,
     dehaze: 30,
     denoise: 12,
+    depixelate: 0,
     temperature: -4,
     tint: 0,
     vibrance: -20,
@@ -150,6 +157,7 @@ const PRESET_CONFIGS: Record<PresetMode, AdjustmentSettings> = {
     clarity: 48,
     dehaze: 28,
     denoise: 12,
+    depixelate: 0,
     temperature: 4,
     tint: 2,
     vibrance: 38,
@@ -167,6 +175,7 @@ const PRESET_CONFIGS: Record<PresetMode, AdjustmentSettings> = {
     clarity: 25,
     dehaze: 20,
     denoise: 65,
+    depixelate: 10,
     temperature: -5,
     tint: 0,
     vibrance: 15,
@@ -184,11 +193,30 @@ const PRESET_CONFIGS: Record<PresetMode, AdjustmentSettings> = {
     clarity: 45,
     dehaze: 15,
     denoise: 15,
+    depixelate: 0,
     temperature: 0,
     tint: 0,
     vibrance: 18,
     saturation: 12,
     upscale: 2,
+  },
+  depixelate: {
+    exposure: 6,
+    contrast: 20,
+    highlights: -12,
+    shadows: 24,
+    whites: 14,
+    blacks: -8,
+    sharpness: 30,
+    clarity: 24,
+    dehaze: 12,
+    denoise: 35,
+    depixelate: 75,
+    temperature: 0,
+    tint: 0,
+    vibrance: 22,
+    saturation: 10,
+    upscale: 4,
   },
   custom: DEFAULT_SETTINGS,
 };
@@ -329,6 +357,63 @@ self.onmessage = function(e) {
 
           data[idx + c] = Math.round(center * (1 - denoiseFactor) + (sum / count) * denoiseFactor);
         }
+      }
+    }
+  }
+
+  // 2.5 De-Pixelate & Anti-Aliasing Pass (Directional Edge Interpolation for Blocky/Pixelated Images)
+  if (cfg.depixelate > 5) {
+    const depixFactor = cfg.depixelate / 100;
+    const temp = new Uint8ClampedArray(data);
+    const passes = cfg.depixelate > 45 ? 2 : 1;
+
+    for (let p = 0; p < passes; p++) {
+      for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          const idx = (y * w + x) * 4;
+
+          const top = (y - 1) * w + x;
+          const btm = (y + 1) * w + x;
+          const lft = y * w + (x - 1);
+          const rgt = y * w + (x + 1);
+          const tl = (y - 1) * w + (x - 1);
+          const tr = (y - 1) * w + (x + 1);
+          const bl = (y + 1) * w + (x - 1);
+          const br = (y + 1) * w + (x + 1);
+
+          for (let c = 0; c < 3; c++) {
+            const centerVal = temp[idx + c];
+
+            // Measure directional gradients to detect jagged staircasing and block boundaries
+            const d1Diff = Math.abs(temp[tl * 4 + c] - temp[br * 4 + c]);
+            const d2Diff = Math.abs(temp[tr * 4 + c] - temp[bl * 4 + c]);
+            const hDiff = Math.abs(temp[lft * 4 + c] - temp[rgt * 4 + c]);
+            const vDiff = Math.abs(temp[top * 4 + c] - temp[btm * 4 + c]);
+
+            let smoothed = centerVal;
+            // Interpolate along the edge tangent to round off square pixel steps
+            if (d1Diff < d2Diff && d1Diff < hDiff && d1Diff < vDiff) {
+              smoothed = (temp[tl * 4 + c] + temp[br * 4 + c] + centerVal * 2) * 0.25;
+            } else if (d2Diff < d1Diff && d2Diff < hDiff && d2Diff < vDiff) {
+              smoothed = (temp[tr * 4 + c] + temp[bl * 4 + c] + centerVal * 2) * 0.25;
+            } else {
+              smoothed = (
+                temp[top * 4 + c] +
+                temp[btm * 4 + c] +
+                temp[lft * 4 + c] +
+                temp[rgt * 4 + c] +
+                centerVal * 4
+              ) * 0.125;
+            }
+
+            data[idx + c] = Math.round(
+              centerVal * (1 - depixFactor * 0.85) + smoothed * (depixFactor * 0.85)
+            );
+          }
+        }
+      }
+      if (p < passes - 1) {
+        temp.set(data);
       }
     }
   }
@@ -707,7 +792,7 @@ export default function PhotoEnhancerPage() {
   };
 
   // Quick Demo Samples
-  const loadSample = (type: 'portrait' | 'doc') => {
+  const loadSample = (type: 'portrait' | 'doc' | 'pixel') => {
     const canvas = document.createElement('canvas');
     canvas.width = 400;
     canvas.height = 300;
@@ -734,7 +819,7 @@ export default function PhotoEnhancerPage() {
       ctx.font = 'bold 16px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('Sample Portrait', 200, 280);
-    } else {
+    } else if (type === 'doc') {
       ctx.fillStyle = '#f8fafc';
       ctx.fillRect(0, 0, 400, 300);
       ctx.fillStyle = '#334155';
@@ -746,6 +831,32 @@ export default function PhotoEnhancerPage() {
       ctx.fillText('Status: Approved & Verified', 40, 150);
       ctx.fillStyle = '#64748b';
       ctx.fillText('Text & edges will become razor sharp!', 40, 220);
+    } else {
+      // 8-bit Pixelated Retro Sprite Sample
+      ctx.imageSmoothingEnabled = false;
+      const offscreen = document.createElement('canvas');
+      offscreen.width = 32;
+      offscreen.height = 24;
+      const octx = offscreen.getContext('2d');
+      if (octx) {
+        octx.fillStyle = '#0f172a';
+        octx.fillRect(0, 0, 32, 24);
+
+        // draw cute 8-bit spaceship / character with blocky pixels
+        octx.fillStyle = '#38bdf8';
+        octx.fillRect(14, 4, 4, 3);
+        octx.fillStyle = '#818cf8';
+        octx.fillRect(11, 7, 10, 5);
+        octx.fillStyle = '#c084fc';
+        octx.fillRect(8, 12, 16, 4);
+        octx.fillStyle = '#f43f5e';
+        octx.fillRect(6, 16, 5, 4);
+        octx.fillRect(21, 16, 5, 4);
+        octx.fillStyle = '#fbbf24';
+        octx.fillRect(13, 16, 6, 3);
+
+        ctx.drawImage(offscreen, 0, 0, 32, 24, 0, 0, 400, 300);
+      }
     }
 
     const uri = canvas.toDataURL('image/png');
@@ -758,8 +869,10 @@ export default function PhotoEnhancerPage() {
         name: `sample-${type}`,
       });
       setOriginalImage(uri);
-      setActivePreset(type === 'portrait' ? 'portrait' : 'document');
-      setSettings(PRESET_CONFIGS[type === 'portrait' ? 'portrait' : 'document']);
+      const chosenPreset: PresetMode =
+        type === 'portrait' ? 'portrait' : type === 'doc' ? 'document' : 'depixelate';
+      setActivePreset(chosenPreset);
+      setSettings(PRESET_CONFIGS[chosenPreset]);
     };
     img.src = uri;
   };
@@ -874,18 +987,18 @@ export default function PhotoEnhancerPage() {
             <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block">
               Or Try A Quick Demo Sample:
             </span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <button
                 type="button"
                 onClick={() => loadSample('portrait')}
                 className="flex items-center gap-3 p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/70 hover:border-zinc-700 hover:bg-zinc-900 transition text-left"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400">
                   <User size={18} />
                 </div>
                 <div>
                   <h4 className="text-xs font-semibold text-zinc-200">Portrait Sample</h4>
-                  <p className="text-[11px] text-zinc-500">De-blur face, enhance eyes & skin tone</p>
+                  <p className="text-[11px] text-zinc-500">De-blur face & skin tone</p>
                 </div>
               </button>
 
@@ -894,12 +1007,26 @@ export default function PhotoEnhancerPage() {
                 onClick={() => loadSample('doc')}
                 className="flex items-center gap-3 p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/70 hover:border-zinc-700 hover:bg-zinc-900 transition text-left"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-500/10 text-purple-400">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-purple-500/10 text-purple-400">
                   <FileText size={18} />
                 </div>
                 <div>
-                  <h4 className="text-xs font-semibold text-zinc-200">Document & Text Sample</h4>
-                  <p className="text-[11px] text-zinc-500">Sharpen text, remove document blur & enhance contrast</p>
+                  <h4 className="text-xs font-semibold text-zinc-200">Document Sample</h4>
+                  <p className="text-[11px] text-zinc-500">Sharpen text & contrast</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => loadSample('pixel')}
+                className="flex items-center gap-3 p-3.5 rounded-xl border border-indigo-500/30 bg-indigo-950/20 hover:border-indigo-500/60 hover:bg-indigo-950/40 transition text-left"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-pink-500/10 text-pink-400">
+                  <Grid size={18} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-semibold text-indigo-200">Pixelated / Retro</h4>
+                  <p className="text-[11px] text-zinc-400">Anti-alias 8-bit & 4x HD</p>
                 </div>
               </button>
             </div>
@@ -910,6 +1037,33 @@ export default function PhotoEnhancerPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* Left Column: Viewport & Loupe Controls */}
           <div className="space-y-4 lg:col-span-8">
+            {/* Low-Res / Pixelation Smart Detection Banner */}
+            {imageMeta && (imageMeta.width <= 700 || imageMeta.height <= 700) && settings.depixelate < 15 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/40 via-purple-950/30 to-zinc-900/40 backdrop-blur-sm animate-fade-in">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-500/20 text-indigo-400">
+                    <Grid size={16} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-semibold text-zinc-100 flex items-center gap-1.5">
+                      Low-Res / Pixelated Image Detected ({imageMeta.width} × {imageMeta.height} px)
+                    </h4>
+                    <p className="text-[11px] text-zinc-400">
+                      Jagged square pixel edges detected. Apply directional anti-aliasing to smooth blocks into clean HD curves.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => selectPreset('depixelate')}
+                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-sm transition flex items-center gap-1.5 shrink-0"
+                >
+                  <Sparkles size={13} />
+                  <span>Apply De-Pixelate (4x HD)</span>
+                </button>
+              </div>
+            )}
+
             {/* Viewport Control Bar */}
             <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-2xl border border-zinc-800 bg-zinc-900/70">
               {/* View Modes */}
@@ -1317,6 +1471,21 @@ export default function PhotoEnhancerPage() {
                   </span>
                   <span className="text-[10px] text-zinc-500 leading-tight">Edge punch & pop</span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => selectPreset('depixelate')}
+                  className={`flex flex-col items-start gap-1 p-2.5 rounded-xl border text-left transition ${
+                    activePreset === 'depixelate'
+                      ? 'border-indigo-500 bg-indigo-600/20 text-indigo-300'
+                      : 'border-zinc-800 bg-zinc-950/70 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                  }`}
+                >
+                  <span className="text-xs font-semibold flex items-center gap-1.5">
+                    <Grid size={12} className="text-indigo-400" /> De-Pixelate (4x HD)
+                  </span>
+                  <span className="text-[10px] text-zinc-500 leading-tight">Anti-aliasing & smooth</span>
+                </button>
               </div>
 
               {/* Super-Resolution Engine Switcher */}
@@ -1639,6 +1808,35 @@ export default function PhotoEnhancerPage() {
                       }}
                       className="w-full accent-indigo-500 cursor-pointer"
                     />
+                  </div>
+
+                  {/* De-Pixelate & Anti-Aliasing */}
+                  <div>
+                    <div className="flex justify-between text-xs text-zinc-400 mb-1">
+                      <span className="flex items-center gap-1.5">
+                        <span>De-Pixelate & Anti-Aliasing:</span>
+                        {settings.depixelate > 0 && (
+                          <span className="text-[10px] text-indigo-400 font-semibold bg-indigo-500/15 px-1.5 py-0.2 rounded">
+                            Active
+                          </span>
+                        )}
+                      </span>
+                      <span className="font-mono text-zinc-200">{settings.depixelate}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={settings.depixelate}
+                      onChange={(e) => {
+                        setActivePreset('custom');
+                        setSettings((s) => ({ ...s, depixelate: Number(e.target.value) }));
+                      }}
+                      className="w-full accent-indigo-500 cursor-pointer"
+                    />
+                    <p className="text-[10px] text-zinc-500 mt-0.5">
+                      Smooths square block edges & staircased pixels into natural HD curves
+                    </p>
                   </div>
                 </div>
               )}
