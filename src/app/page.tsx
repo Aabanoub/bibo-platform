@@ -16,6 +16,7 @@ import {
   QrCode,
   Sparkles,
   Settings as SettingsIcon,
+  Wand2,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { useNavigation } from '@/context/NavigationContext';
@@ -347,6 +348,7 @@ export default function DashboardPage() {
     { navId: 'focus', label: 'Focus Mode', icon: <Flame size={18} />, href: '/focus', color: 'text-rose-400' },
     { navId: 'habits', label: 'Check Habits', icon: <Activity size={18} />, href: '/habits', color: 'text-purple-400' },
     { navId: 'qr', label: 'QR Studio', icon: <QrCode size={18} />, href: '/qr', color: 'text-cyan-400' },
+    { navId: 'enhance', label: 'Enhance Photo', icon: <Wand2 size={18} />, href: '/enhance', color: 'text-indigo-400' },
     { navId: 'review', label: 'Life Review', icon: <Award size={18} />, href: '/review', color: 'text-purple-400' },
     { navId: 'chat', label: 'AI Assistant', icon: <MessageSquare size={18} />, href: '/chat', color: 'text-indigo-400' },
     { navId: 'settings', label: 'Settings', icon: <SettingsIcon size={18} />, href: '/settings', color: 'text-slate-400' },
@@ -386,6 +388,16 @@ export default function DashboardPage() {
       border: 'border-cyan-500/20 hover:border-cyan-500/40',
       gradient: 'from-cyan-950/40 to-slate-900',
       iconBg: 'bg-cyan-500/20 text-cyan-400',
+    },
+    {
+      navId: 'enhance',
+      href: '/enhance',
+      title: 'Photo Enhancer',
+      desc: 'Restore clarity, de-blur edges, upscale 2x/4x & enhance details with AI.',
+      icon: <Wand2 size={18} />,
+      border: 'border-indigo-500/20 hover:border-indigo-500/40',
+      gradient: 'from-indigo-950/40 to-slate-900',
+      iconBg: 'bg-indigo-500/20 text-indigo-400',
     },
     {
       navId: 'review',

@@ -29,6 +29,7 @@ import {
   CheckCircle2,
   Circle,
   Square,
+  ChevronDown,
 } from 'lucide-react';
 
 type QRType = 'url' | 'text' | 'wifi' | 'vcard' | 'email' | 'phone' | 'whatsapp' | 'crypto';
@@ -171,6 +172,7 @@ export default function QrGeneratorPage() {
 
   // Center Photo / Logo states
   const [logoImage, setLogoImage] = useState<string | null>(null);
+  const [isLogoSectionExpanded, setIsLogoSectionExpanded] = useState<boolean>(false);
   const [logoSizePercent, setLogoSizePercent] = useState<number>(20);
   const [logoShape, setLogoShape] = useState<'circle' | 'square'>('circle');
   const [logoPadding, setLogoPadding] = useState<number>(4);
@@ -192,6 +194,7 @@ export default function QrGeneratorPage() {
       if (result) {
         setLogoImage(result);
         setErrorLevel('H');
+        setIsLogoSectionExpanded(true);
       }
     };
     reader.readAsDataURL(file);
@@ -207,6 +210,7 @@ export default function QrGeneratorPage() {
         if (result) {
           setLogoImage(result);
           setErrorLevel('H');
+          setIsLogoSectionExpanded(true);
         }
       };
       reader.readAsDataURL(file);
@@ -936,236 +940,274 @@ export default function QrGeneratorPage() {
               )}
             </div>
 
-            {/* Center Photo / Logo Badge Card */}
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
-                    <ImageIcon size={14} />
+            {/* Center Photo / Logo Badge Card (Collapsed by default until expanded) */}
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 transition-all">
+              <div
+                onClick={() => setIsLogoSectionExpanded((prev) => !prev)}
+                className="flex items-center justify-between cursor-pointer select-none"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
+                    <ImageIcon size={15} />
                   </div>
                   <div>
-                    <span className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
-                      Center Photo / Logo
-                    </span>
-                    <span className="ml-2 text-[10px] text-zinc-500 font-normal">Optional</span>
-                  </div>
-                </div>
-                {logoImage && (
-                  <button
-                    type="button"
-                    onClick={removeLogo}
-                    className="flex items-center gap-1 rounded-lg border border-red-900/40 bg-red-950/40 px-2 py-1 text-[11px] font-medium text-red-400 hover:bg-red-900/50 hover:text-red-300 transition"
-                  >
-                    <Trash2 size={12} />
-                    <span>Remove Photo</span>
-                  </button>
-                )}
-              </div>
-
-              <p className="text-xs text-zinc-400">
-                Add a custom photo, logo, or icon in the center of the QR code. Error correction automatically adjusts to High (30% redundancy) to guarantee camera readability.
-              </p>
-
-              {/* Upload Area / Dropzone */}
-              {!logoImage ? (
-                <div
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
-                  className="group cursor-pointer rounded-xl border border-dashed border-zinc-700 hover:border-blue-500 bg-zinc-950/60 hover:bg-zinc-950 p-4 text-center transition flex flex-col items-center justify-center gap-2"
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                    onChange={handleLogoUpload}
-                    className="hidden"
-                  />
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 group-hover:bg-blue-600/20 text-zinc-400 group-hover:text-blue-400 transition">
-                    <Upload size={18} />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-zinc-200">
-                      Click or drag & drop to upload a photo
-                    </p>
-                    <p className="text-[11px] text-zinc-500 mt-0.5">PNG, JPG, SVG, or WebP</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-4 p-3 rounded-xl border border-zinc-800 bg-zinc-950/80">
-                  <div
-                    className="relative flex items-center justify-center h-14 w-14 rounded-xl border border-zinc-700/60 overflow-hidden flex-shrink-0"
-                    style={{ backgroundColor: logoBgColor }}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={logoImage}
-                      alt="Center Logo Preview"
-                      className="h-10 w-10 object-contain rounded-md"
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
-                      <ShieldCheck size={14} />
-                      <span>Active & Scannable</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-zinc-200">
+                        Center Photo / Logo
+                      </span>
+                      {logoImage ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-medium">
+                          <CheckCircle2 size={10} /> Active
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-zinc-500">Optional</span>
+                      )}
                     </div>
                     <p className="text-[11px] text-zinc-400 mt-0.5">
-                      High error correction (30%) enforced so phone cameras scan instantly.
+                      {logoImage
+                        ? 'Photo embedded in QR center (Click to edit)'
+                        : 'Add brand logo or custom image in the middle'}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="text-xs text-blue-400 hover:text-blue-300 underline font-medium px-2 py-1"
-                  >
-                    Change
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                      onChange={handleLogoUpload}
-                      className="hidden"
-                    />
-                  </button>
                 </div>
-              )}
 
-              {/* Quick Preset Icons */}
-              <div>
-                <span className="text-[11px] font-medium text-zinc-400 block mb-2">Or pick a quick icon:</span>
-                <div className="flex flex-wrap gap-2">
-                  {PRESET_LOGOS.map((preset) => (
+                <div className="flex items-center gap-2">
+                  {logoImage && (
                     <button
-                      key={preset.name}
                       type="button"
-                      onClick={() => {
-                        setLogoImage(preset.dataUri);
-                        setErrorLevel('H');
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeLogo();
                       }}
-                      className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
-                        logoImage === preset.dataUri
-                          ? 'border-blue-500 bg-blue-600/20 text-blue-300'
-                          : 'border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-600 hover:text-white'
-                      }`}
+                      className="flex items-center gap-1 rounded-lg border border-red-900/40 bg-red-950/40 px-2 py-1 text-[11px] font-medium text-red-400 hover:bg-red-900/50 hover:text-red-300 transition"
                     >
-                      <span>{preset.icon}</span>
-                      <span>{preset.name}</span>
+                      <Trash2 size={11} />
+                      <span>Remove</span>
                     </button>
-                  ))}
+                  )}
+                  <div className="flex items-center gap-1 text-xs text-zinc-400 group-hover:text-zinc-200">
+                    <span className="text-[11px] hidden sm:inline text-zinc-400">
+                      {isLogoSectionExpanded ? 'Hide' : 'Expand'}
+                    </span>
+                    <ChevronDown
+                      size={16}
+                      className={`text-zinc-400 transition-transform duration-200 ${
+                        isLogoSectionExpanded ? 'rotate-180 text-blue-400' : ''
+                      }`}
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Fine-Tuning Controls when a photo is selected */}
-              {logoImage && (
-                <div className="space-y-3 pt-2 border-t border-zinc-800/80">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Logo Size */}
-                    <div>
-                      <div className="flex justify-between text-xs text-zinc-400 mb-1">
-                        <span>Photo Size:</span>
-                        <span className="font-mono text-zinc-200">{logoSizePercent}%</span>
-                      </div>
+              {isLogoSectionExpanded && (
+                <div className="space-y-4 pt-4 mt-3 border-t border-zinc-800/80 animate-fade-in">
+                  <p className="text-xs text-zinc-400">
+                    Add a custom photo, logo, or icon in the center of the QR code. Error correction automatically adjusts to High (30% redundancy) to guarantee camera readability.
+                  </p>
+
+                  {/* Upload Area / Dropzone */}
+                  {!logoImage ? (
+                    <div
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={handleDrop}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="group cursor-pointer rounded-xl border border-dashed border-zinc-700 hover:border-blue-500 bg-zinc-950/60 hover:bg-zinc-950 p-4 text-center transition flex flex-col items-center justify-center gap-2"
+                    >
                       <input
-                        type="range"
-                        min="15"
-                        max="26"
-                        value={logoSizePercent}
-                        onChange={(e) => setLogoSizePercent(Number(e.target.value))}
-                        className="w-full accent-blue-500 cursor-pointer"
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                        onChange={handleLogoUpload}
+                        className="hidden"
                       />
-                      <span className="text-[10px] text-zinc-500 block mt-0.5">
-                        Safe range: 15%–26% for reliable camera scan
-                      </span>
-                    </div>
-
-                    {/* Logo Shape */}
-                    <div>
-                      <span className="text-xs text-zinc-400 block mb-1">Badge Shape:</span>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setLogoShape('circle')}
-                          className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium border transition ${
-                            logoShape === 'circle'
-                              ? 'border-blue-500 bg-blue-600/20 text-blue-300'
-                              : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-zinc-200'
-                          }`}
-                        >
-                          <Circle size={13} />
-                          <span>Circle</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setLogoShape('square')}
-                          className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium border transition ${
-                            logoShape === 'square'
-                              ? 'border-blue-500 bg-blue-600/20 text-blue-300'
-                              : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-zinc-200'
-                          }`}
-                        >
-                          <Square size={13} />
-                          <span>Rounded</span>
-                        </button>
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 group-hover:bg-blue-600/20 text-zinc-400 group-hover:text-blue-400 transition">
+                        <Upload size={18} />
                       </div>
+                      <div>
+                        <p className="text-xs font-medium text-zinc-200">
+                          Click or drag & drop to upload a photo
+                        </p>
+                        <p className="text-[11px] text-zinc-500 mt-0.5">PNG, JPG, SVG, or WebP</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-4 p-3 rounded-xl border border-zinc-800 bg-zinc-950/80">
+                      <div
+                        className="relative flex items-center justify-center h-14 w-14 rounded-xl border border-zinc-700/60 overflow-hidden flex-shrink-0"
+                        style={{ backgroundColor: logoBgColor }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={logoImage}
+                          alt="Center Logo Preview"
+                          className="h-10 w-10 object-contain rounded-md"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
+                          <ShieldCheck size={14} />
+                          <span>Active & Scannable</span>
+                        </div>
+                        <p className="text-[11px] text-zinc-400 mt-0.5">
+                          High error correction (30%) enforced so phone cameras scan instantly.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="text-xs text-blue-400 hover:text-blue-300 underline font-medium px-2 py-1"
+                      >
+                        Change
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                          onChange={handleLogoUpload}
+                          className="hidden"
+                        />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Quick Preset Icons */}
+                  <div>
+                    <span className="text-[11px] font-medium text-zinc-400 block mb-2">Or pick a quick icon:</span>
+                    <div className="flex flex-wrap gap-2">
+                      {PRESET_LOGOS.map((preset) => (
+                        <button
+                          key={preset.name}
+                          type="button"
+                          onClick={() => {
+                            setLogoImage(preset.dataUri);
+                            setErrorLevel('H');
+                            setIsLogoSectionExpanded(true);
+                          }}
+                          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
+                            logoImage === preset.dataUri
+                              ? 'border-blue-500 bg-blue-600/20 text-blue-300'
+                              : 'border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-600 hover:text-white'
+                          }`}
+                        >
+                          <span>{preset.icon}</span>
+                          <span>{preset.name}</span>
+                        </button>
+                      ))}
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                    {/* Badge Background Color */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs text-zinc-400">Badge Background:</label>
-                        <button
-                          type="button"
-                          onClick={() => setLogoBgColor(bgColor)}
-                          className="text-[10px] text-blue-400 hover:text-blue-300 underline"
-                        >
-                          Match QR bg
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="color"
-                          value={logoBgColor}
-                          onChange={(e) => setLogoBgColor(e.target.value)}
-                          className="h-8 w-10 cursor-pointer rounded border border-zinc-700 bg-transparent"
-                        />
-                        <input
-                          type="text"
-                          value={logoBgColor}
-                          onChange={(e) => setLogoBgColor(e.target.value)}
-                          className="w-24 rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs font-mono text-zinc-100"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Border Ring */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs text-zinc-400">Border Ring Width:</label>
-                        <span className="text-xs font-mono text-zinc-300">{logoBorderWidth}px</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="range"
-                          min="0"
-                          max="6"
-                          value={logoBorderWidth}
-                          onChange={(e) => setLogoBorderWidth(Number(e.target.value))}
-                          className="w-full accent-blue-500 cursor-pointer"
-                        />
-                        {logoBorderWidth > 0 && (
+                  {/* Fine-Tuning Controls when a photo is selected */}
+                  {logoImage && (
+                    <div className="space-y-3 pt-2 border-t border-zinc-800/80">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Logo Size */}
+                        <div>
+                          <div className="flex justify-between text-xs text-zinc-400 mb-1">
+                            <span>Photo Size:</span>
+                            <span className="font-mono text-zinc-200">{logoSizePercent}%</span>
+                          </div>
                           <input
-                            type="color"
-                            value={logoBorderColor}
-                            onChange={(e) => setLogoBorderColor(e.target.value)}
-                            className="h-8 w-8 cursor-pointer rounded border border-zinc-700 bg-transparent flex-shrink-0"
-                            title="Ring color"
+                            type="range"
+                            min="15"
+                            max="26"
+                            value={logoSizePercent}
+                            onChange={(e) => setLogoSizePercent(Number(e.target.value))}
+                            className="w-full accent-blue-500 cursor-pointer"
                           />
-                        )}
+                          <span className="text-[10px] text-zinc-500 block mt-0.5">
+                            Safe range: 15%–26% for reliable camera scan
+                          </span>
+                        </div>
+
+                        {/* Logo Shape */}
+                        <div>
+                          <span className="text-xs text-zinc-400 block mb-1">Badge Shape:</span>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setLogoShape('circle')}
+                              className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium border transition ${
+                                logoShape === 'circle'
+                                  ? 'border-blue-500 bg-blue-600/20 text-blue-300'
+                                  : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-zinc-200'
+                              }`}
+                            >
+                              <Circle size={13} />
+                              <span>Circle</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setLogoShape('square')}
+                              className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium border transition ${
+                                logoShape === 'square'
+                                  ? 'border-blue-500 bg-blue-600/20 text-blue-300'
+                                  : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-zinc-200'
+                              }`}
+                            >
+                              <Square size={13} />
+                              <span>Rounded</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                        {/* Badge Background Color */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-xs text-zinc-400">Badge Background:</label>
+                            <button
+                              type="button"
+                              onClick={() => setLogoBgColor(bgColor)}
+                              className="text-[10px] text-blue-400 hover:text-blue-300 underline"
+                            >
+                              Match QR bg
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={logoBgColor}
+                              onChange={(e) => setLogoBgColor(e.target.value)}
+                              className="h-8 w-10 cursor-pointer rounded border border-zinc-700 bg-transparent"
+                            />
+                            <input
+                              type="text"
+                              value={logoBgColor}
+                              onChange={(e) => setLogoBgColor(e.target.value)}
+                              className="w-24 rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs font-mono text-zinc-100"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Border Ring */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-xs text-zinc-400">Border Ring Width:</label>
+                            <span className="text-xs font-mono text-zinc-300">{logoBorderWidth}px</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="range"
+                              min="0"
+                              max="6"
+                              value={logoBorderWidth}
+                              onChange={(e) => setLogoBorderWidth(Number(e.target.value))}
+                              className="w-full accent-blue-500 cursor-pointer"
+                            />
+                            {logoBorderWidth > 0 && (
+                              <input
+                                type="color"
+                                value={logoBorderColor}
+                                onChange={(e) => setLogoBorderColor(e.target.value)}
+                                className="h-8 w-8 cursor-pointer rounded border border-zinc-700 bg-transparent flex-shrink-0"
+                                title="Ring color"
+                              />
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
             </div>

@@ -12,6 +12,7 @@ import {
   Award,
   MessageSquare,
   Settings as SettingsIcon,
+  Wand2,
   LucideIcon,
 } from 'lucide-react';
 
@@ -31,6 +32,7 @@ export const AVAILABLE_NAV_OPTIONS: NavOption[] = [
   { id: 'habits', label: 'Habits', href: '/habits', icon: Activity, description: 'Daily streaks' },
   { id: 'chat', label: 'AI Chat', href: '/chat', icon: MessageSquare, description: 'AI assistant' },
   { id: 'qr', label: 'QR Studio', href: '/qr', icon: QrCode, description: 'QR generator' },
+  { id: 'enhance', label: 'Photo Enhancer', href: '/enhance', icon: Wand2, description: 'AI photo quality enhancer' },
   { id: 'review', label: 'Life Review', href: '/review', icon: Award, description: 'Weekly AI review' },
   { id: 'settings', label: 'Settings', href: '/settings', icon: SettingsIcon, description: 'Platform settings' },
 ];

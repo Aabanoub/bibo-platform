@@ -19,6 +19,7 @@ import {
   Award,
   QrCode,
   Settings,
+  Wand2,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import NotificationBell from '@/components/NotificationBell';
@@ -38,6 +39,7 @@ const navItems: NavItem[] = [
   { label: 'Finance', href: '/finance', icon: <Wallet size={20} /> },
   { label: 'Habits', href: '/habits', icon: <Activity size={20} /> },
   { label: 'QR Studio', href: '/qr', icon: <QrCode size={20} /> },
+  { label: 'Photo Enhancer', href: '/enhance', icon: <Wand2 size={20} /> },
   { label: 'Weekly Review', href: '/review', icon: <Award size={20} /> },
   { label: 'AI Chat', href: '/chat', icon: <MessageSquare size={20} /> },
   { label: 'Settings', href: '/settings', icon: <Settings size={20} /> },
