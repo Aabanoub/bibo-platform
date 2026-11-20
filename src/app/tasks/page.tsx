@@ -393,6 +393,178 @@ export default function TasksPage() {
     fetchScheduleAndProfile(plannerDate);
   }, [fetchScheduleAndProfile, plannerDate]);
 
+  // ---------------------------------------------------------------------------
+  // Supabase Realtime Subscriptions (100% Live Updates for Tasks & Schedules)
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    let tasksChannel: ReturnType<typeof supabase.channel> | null = null;
+    let scheduleChannel: ReturnType<typeof supabase.channel> | null = null;
+    let foldersChannel: ReturnType<typeof supabase.channel> | null = null;
+
+    async function setupRealtime() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // 1. Live Tasks Channel
+      tasksChannel = supabase
+        .channel(`tasks-live-${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'tasks',
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload: any) => {
+            if (payload.eventType === 'INSERT') {
+              const newTask = payload.new as Task;
+              setTasks((prev) => (prev.some((t) => t.id === newTask.id) ? prev : [newTask, ...prev]));
+            } else if (payload.eventType === 'UPDATE') {
+              const updated = payload.new as Task;
+              setTasks((prev) => prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)));
+              const isCompleted = updated.status === 'done';
+              setScheduleItems((prev) =>
+                prev.map((s) => (s.task_id === updated.id ? { ...s, is_completed: isCompleted } : s))
+              );
+              setAllScheduleItems((prev) =>
+                prev.map((s) => (s.task_id === updated.id ? { ...s, is_completed: isCompleted } : s))
+              );
+            } else if (payload.eventType === 'DELETE') {
+              const deletedId = payload.old.id;
+              setTasks((prev) => prev.filter((t) => t.id !== deletedId));
+              setScheduleItems((prev) => prev.filter((s) => s.task_id !== deletedId));
+              setAllScheduleItems((prev) => prev.filter((s) => s.task_id !== deletedId));
+            }
+          }
+        )
+        .subscribe();
+
+      // 2. Live Daily Schedule Items Channel
+      scheduleChannel = supabase
+        .channel(`schedule-live-${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'daily_schedule_items',
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload: any) => {
+            if (payload.eventType === 'INSERT') {
+              const newItem = payload.new as DailyScheduleItem;
+              setAllScheduleItems((prev) =>
+                prev.some((s) => s.id === newItem.id) ? prev : [...prev, newItem]
+              );
+              setScheduleItems((prev) => {
+                if (newItem.date === plannerDate && !prev.some((s) => s.id === newItem.id)) {
+                  return [...prev, newItem];
+                }
+                return prev;
+              });
+            } else if (payload.eventType === 'UPDATE') {
+              const updated = payload.new as DailyScheduleItem;
+              setAllScheduleItems((prev) =>
+                prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s))
+              );
+              setScheduleItems((prev) =>
+                prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s))
+              );
+              if (updated.task_id) {
+                setTasks((prev) =>
+                  prev.map((t) =>
+                    t.id === updated.task_id
+                      ? { ...t, status: updated.is_completed ? 'done' : 'todo' }
+                      : t
+                  )
+                );
+              }
+            } else if (payload.eventType === 'DELETE') {
+              const deletedId = payload.old.id;
+              setAllScheduleItems((prev) => prev.filter((s) => s.id !== deletedId));
+              setScheduleItems((prev) => prev.filter((s) => s.id !== deletedId));
+            }
+          }
+        )
+        .subscribe();
+
+      // 3. Live Task Folders Channel
+      foldersChannel = supabase
+        .channel(`folders-live-${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'task_folders',
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload: any) => {
+            if (payload.eventType === 'INSERT') {
+              const newFolder = payload.new as TaskFolder;
+              setFolders((prev) => (prev.some((f) => f.id === newFolder.id) ? prev : [newFolder, ...prev]));
+            } else if (payload.eventType === 'UPDATE') {
+              const updated = payload.new as TaskFolder;
+              setFolders((prev) => prev.map((f) => (f.id === updated.id ? { ...f, ...updated } : f)));
+            } else if (payload.eventType === 'DELETE') {
+              const deletedId = payload.old.id;
+              setFolders((prev) => prev.filter((f) => f.id !== deletedId));
+            }
+          }
+        )
+        .subscribe();
+    }
+
+    setupRealtime();
+
+    return () => {
+      if (tasksChannel) supabase.removeChannel(tasksChannel);
+      if (scheduleChannel) supabase.removeChannel(scheduleChannel);
+      if (foldersChannel) supabase.removeChannel(foldersChannel);
+    };
+  }, [supabase, plannerDate]);
+
+  // ---------------------------------------------------------------------------
+  // Live Daily Date Rollover & Visibility Sync
+  // Automatically updates planner date and recalculates tasks when a new day arrives
+  // ---------------------------------------------------------------------------
+  const todayRef = useRef<string>(toLocalDateStr(new Date()));
+
+  useEffect(() => {
+    function checkDateRollover() {
+      const todayNow = toLocalDateStr(new Date());
+      if (todayNow !== todayRef.current) {
+        todayRef.current = todayNow;
+        setPlannerDate(todayNow);
+        fetchTasks();
+        fetchScheduleAndProfile(todayNow);
+      }
+    }
+
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        checkDateRollover();
+        fetchTasks();
+        fetchScheduleAndProfile(plannerDate);
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility);
+    }
+    const interval = setInterval(checkDateRollover, 60000);
+
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibility);
+      }
+      clearInterval(interval);
+    };
+  }, [fetchTasks, fetchScheduleAndProfile, plannerDate]);
+
   const handleSaveSchedule = async (newItems: DailyScheduleItem[]) => {
     try {
       const {
@@ -498,6 +670,102 @@ export default function TasksPage() {
       );
     } catch (e) {
       console.error('handleCompleteTaskFromPlanner error:', e);
+    }
+  };
+
+  /**
+   * Fast, targeted single-row completion toggle for AI Daily Planner sessions.
+   * Avoids destructive delete/reinsert and guarantees 100% database & state sync.
+   */
+  const handleToggleSessionComplete = async (session: DailyScheduleItem, completed: boolean) => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const actualDuration =
+        completed && (!session.actual_duration_minutes || session.actual_duration_minutes === 0)
+          ? session.duration_minutes
+          : session.actual_duration_minutes || 0;
+
+      // 1. Optimistic updates in schedule items state
+      setScheduleItems((prev) =>
+        prev.map((s) =>
+          s.id === session.id || (session.task_id && s.task_id === session.task_id && s.date === session.date)
+            ? { ...s, is_completed: completed, actual_duration_minutes: actualDuration }
+            : s
+        )
+      );
+
+      setAllScheduleItems((prev) =>
+        prev.map((s) =>
+          s.id === session.id || (session.task_id && s.task_id === session.task_id && s.date === session.date)
+            ? { ...s, is_completed: completed, actual_duration_minutes: actualDuration }
+            : s
+        )
+      );
+
+      // 2. Optimistic update in tasks list
+      if (session.task_id) {
+        setTasks((prev) =>
+          prev.map((t) =>
+            t.id === session.task_id
+              ? {
+                  ...t,
+                  status: completed ? 'done' : 'todo',
+                  completed_at: completed ? new Date().toISOString() : null,
+                  updated_at: new Date().toISOString(),
+                }
+              : t
+          )
+        );
+      }
+
+      // 3. Direct DB update on daily_schedule_items
+      const isDbUuid = session.id && !session.id.startsWith('sched-');
+      let scheduleUpdatePromise;
+      if (isDbUuid) {
+        scheduleUpdatePromise = supabase
+          .from('daily_schedule_items')
+          .update({
+            is_completed: completed,
+            actual_duration_minutes: actualDuration,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', session.id)
+          .eq('user_id', user.id);
+      } else if (session.task_id) {
+        scheduleUpdatePromise = supabase
+          .from('daily_schedule_items')
+          .update({
+            is_completed: completed,
+            actual_duration_minutes: actualDuration,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('task_id', session.task_id)
+          .eq('date', session.date)
+          .eq('user_id', user.id);
+      }
+
+      // 4. Direct DB update on tasks
+      let taskUpdatePromise;
+      if (session.task_id) {
+        taskUpdatePromise = supabase
+          .from('tasks')
+          .update({
+            status: completed ? 'done' : 'todo',
+            completed_at: completed ? new Date().toISOString() : null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', session.task_id)
+          .eq('user_id', user.id);
+      }
+
+      await Promise.all([scheduleUpdatePromise, taskUpdatePromise].filter(Boolean));
+    } catch (e) {
+      console.error('handleToggleSessionComplete error:', e);
+      await fetchScheduleAndProfile(plannerDate);
     }
   };
 
@@ -616,25 +884,61 @@ export default function TasksPage() {
 
   /**
    * 1-Tap Complete Checkbox toggle:
-   * Instant toggle between 'done' and 'todo'
+   * Instant toggle between 'done' and 'todo', synchronized with daily schedule
    */
   const toggleTaskDone = async (task: Task) => {
     const nextStatus: TaskStatus = task.status === 'done' ? 'todo' : 'done';
+    const isCompleted = nextStatus === 'done';
 
-    // Optimistic update
+    // Optimistic update for tasks
     setTasks((prev) =>
       prev.map((t) =>
-        t.id === task.id ? { ...t, status: nextStatus, updated_at: new Date().toISOString() } : t
+        t.id === task.id
+          ? {
+              ...t,
+              status: nextStatus,
+              completed_at: isCompleted ? new Date().toISOString() : null,
+              updated_at: new Date().toISOString(),
+            }
+          : t
       )
     );
 
+    // Optimistic update for daily planner sessions
+    setScheduleItems((prev) =>
+      prev.map((s) => (s.task_id === task.id ? { ...s, is_completed: isCompleted } : s))
+    );
+    setAllScheduleItems((prev) =>
+      prev.map((s) => (s.task_id === task.id ? { ...s, is_completed: isCompleted } : s))
+    );
+
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       const { error: err } = await supabase
         .from('tasks')
-        .update({ status: nextStatus, updated_at: new Date().toISOString() })
+        .update({
+          status: nextStatus,
+          completed_at: isCompleted ? new Date().toISOString() : null,
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', task.id);
 
       if (err) throw err;
+
+      // Sync daily_schedule_items in database
+      if (user) {
+        await supabase
+          .from('daily_schedule_items')
+          .update({
+            is_completed: isCompleted,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('task_id', task.id)
+          .eq('user_id', user.id);
+      }
 
       if (nextStatus === 'done') {
         try {
@@ -650,6 +954,12 @@ export default function TasksPage() {
       // Rollback on error
       setTasks((prev) =>
         prev.map((t) => (t.id === task.id ? { ...t, status: task.status } : t))
+      );
+      setScheduleItems((prev) =>
+        prev.map((s) => (s.task_id === task.id ? { ...s, is_completed: task.status === 'done' } : s))
+      );
+      setAllScheduleItems((prev) =>
+        prev.map((s) => (s.task_id === task.id ? { ...s, is_completed: task.status === 'done' } : s))
       );
       setError(e instanceof Error ? e.message : 'Failed to update task');
     }
@@ -1367,6 +1677,7 @@ export default function TasksPage() {
           onDateChange={(d) => setPlannerDate(d)}
           onSaveSchedule={handleSaveSchedule}
           onCompleteTask={handleCompleteTaskFromPlanner}
+          onToggleSessionComplete={handleToggleSessionComplete}
           userPreferences={{
             startTime: userProfile?.daily_start_time || '08:00',
             endTime: userProfile?.daily_end_time || '21:00',

@@ -57,6 +57,7 @@ interface DailyPlannerViewProps {
   onDateChange: (date: string) => void;
   onSaveSchedule: (items: DailyScheduleItem[]) => Promise<void>;
   onCompleteTask: (taskId: string, completed: boolean) => Promise<void>;
+  onToggleSessionComplete?: (session: DailyScheduleItem, completed: boolean) => Promise<void>;
   userPreferences?: Partial<SchedulingPreferences>;
   onSavePreferences?: (prefs: SchedulingPreferences) => Promise<void>;
 }
@@ -69,6 +70,7 @@ export default function DailyPlannerView({
   onDateChange,
   onSaveSchedule,
   onCompleteTask,
+  onToggleSessionComplete,
   userPreferences,
   onSavePreferences,
 }: DailyPlannerViewProps) {
@@ -78,6 +80,7 @@ export default function DailyPlannerView({
   });
 
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
+  const [optimisticOverrides, setOptimisticOverrides] = useState<Record<string, boolean>>({});
   const [activeTimerSessionId, setActiveTimerSessionId] = useState<string | null>(null);
   const [timerSecondsLeft, setTimerSecondsLeft] = useState<number>(0);
   const [timerRunning, setTimerRunning] = useState(false);
@@ -136,8 +139,24 @@ export default function DailyPlannerView({
   // Folders lookup map
   const foldersMap = new Map(folders.map((f) => [f.id, f]));
 
-  // Calculate Overview Stats for currentDate
-  const currentDaySessions = scheduleItems.filter((s) => s.date === currentDate);
+  // Calculate Overview Stats for currentDate with instant optimistic feedback
+  const currentDaySessions = React.useMemo(() => {
+    return scheduleItems
+      .filter((s) => s.date === currentDate)
+      .map((s) => {
+        let isDone = s.is_completed;
+        if (optimisticOverrides[s.id] !== undefined) {
+          isDone = optimisticOverrides[s.id];
+        } else if (s.task_id && optimisticOverrides[s.task_id] !== undefined) {
+          isDone = optimisticOverrides[s.task_id];
+        }
+        return {
+          ...s,
+          is_completed: isDone,
+        };
+      });
+  }, [scheduleItems, currentDate, optimisticOverrides]);
+
   const taskSessions = currentDaySessions.filter((s) => s.session_type === 'task');
   const totalTasks = taskSessions.length;
   const completedTasks = taskSessions.filter((s) => s.is_completed).length;
@@ -195,24 +214,52 @@ export default function DailyPlannerView({
 
   // Toggle complete session & linked task
   const handleToggleComplete = async (session: DailyScheduleItem) => {
-    const nextCompleted = !session.is_completed;
-    const updated = currentDaySessions.map((s) =>
-      s.id === session.id
-        ? {
-            ...s,
-            is_completed: nextCompleted,
-            actual_duration_minutes:
-              session.actual_duration_minutes > 0
-                ? session.actual_duration_minutes
-                : session.duration_minutes,
-          }
-        : s
-    );
+    const currentCompleted =
+      optimisticOverrides[session.id] !== undefined
+        ? optimisticOverrides[session.id]
+        : (session.task_id && optimisticOverrides[session.task_id] !== undefined)
+        ? optimisticOverrides[session.task_id]
+        : session.is_completed;
+    const nextCompleted = !currentCompleted;
 
-    await onSaveSchedule(updated);
+    // Instant local optimistic UI (0ms visual toggle feedback)
+    setOptimisticOverrides((prev) => {
+      const next = { ...prev, [session.id]: nextCompleted };
+      if (session.task_id) next[session.task_id] = nextCompleted;
+      return next;
+    });
 
-    if (session.task_id) {
-      await onCompleteTask(session.task_id, nextCompleted);
+    try {
+      if (onToggleSessionComplete) {
+        await onToggleSessionComplete(session, nextCompleted);
+      } else {
+        const updated = currentDaySessions.map((s) =>
+          s.id === session.id
+            ? {
+                ...s,
+                is_completed: nextCompleted,
+                actual_duration_minutes:
+                  s.actual_duration_minutes > 0
+                    ? s.actual_duration_minutes
+                    : s.duration_minutes,
+              }
+            : s
+        );
+
+        await onSaveSchedule(updated);
+
+        if (session.task_id) {
+          await onCompleteTask(session.task_id, nextCompleted);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to toggle session complete:', err);
+      // Rollback optimistic override on failure
+      setOptimisticOverrides((prev) => {
+        const next = { ...prev, [session.id]: currentCompleted };
+        if (session.task_id) next[session.task_id] = currentCompleted;
+        return next;
+      });
     }
   };
 
