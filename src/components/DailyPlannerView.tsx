@@ -36,6 +36,10 @@ import {
   Sliders,
   ChevronRight,
   ChevronLeft,
+  ChevronUp,
+  ChevronDown,
+  GripVertical,
+  Edit2,
   X,
   Check,
   Zap,
@@ -80,6 +84,15 @@ export default function DailyPlannerView({
   const [isSaving, setIsSaving] = useState(false);
   const [overloadNotice, setOverloadNotice] = useState<string | null>(null);
   const [deferredList, setDeferredList] = useState<{ task: Task; reason: string }[]>([]);
+
+  // Rearranging & Drag-Drop State
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  // Time Adjustment Modal State
+  const [timeEditingSession, setTimeEditingSession] = useState<DailyScheduleItem | null>(null);
+  const [customStartTime, setCustomStartTime] = useState<string>('');
+  const [customDuration, setCustomDuration] = useState<number>(30);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -275,6 +288,93 @@ export default function DailyPlannerView({
     };
 
     await onSaveSchedule([...remainingToday, movedSession]);
+  };
+
+  // ---------------------------------------------------------------------------
+  // Rearrange Tasks Along the Day (Reordering & Drag-Drop)
+  // ---------------------------------------------------------------------------
+
+  const handleMoveSession = async (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= currentDaySessions.length || fromIndex === toIndex) return;
+
+    const list = [...currentDaySessions];
+    const [moved] = list.splice(fromIndex, 1);
+    list.splice(toIndex, 0, moved);
+
+    // Recalculate start and end times sequentially
+    let cursor = timeToMinutes(preferences.startTime);
+    const updated: DailyScheduleItem[] = list.map((item, idx) => {
+      let startMin = cursor;
+      if (item.is_locked) {
+        startMin = Math.max(cursor, timeToMinutes(item.start_time));
+      }
+      const endMin = startMin + item.duration_minutes;
+      cursor = endMin;
+      return {
+        ...item,
+        start_time: minutesToTime(startMin),
+        end_time: minutesToTime(endMin),
+        sort_order: idx,
+      };
+    });
+
+    await onSaveSchedule(updated);
+  };
+
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDrop = async (dropIndex: number) => {
+    if (draggedIndex === null || draggedIndex === dropIndex) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+    const fromIndex = draggedIndex;
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+    await handleMoveSession(fromIndex, dropIndex);
+  };
+
+  const handleOpenTimeEdit = (session: DailyScheduleItem) => {
+    setTimeEditingSession(session);
+    setCustomStartTime(session.start_time);
+    setCustomDuration(session.duration_minutes);
+  };
+
+  const handleSaveCustomTime = async () => {
+    if (!timeEditingSession || !customStartTime) return;
+
+    const newStartMin = timeToMinutes(customStartTime);
+    const newEndMin = newStartMin + customDuration;
+
+    const updated = currentDaySessions.map((s) => {
+      if (s.id === timeEditingSession.id) {
+        return {
+          ...s,
+          start_time: minutesToTime(newStartMin),
+          end_time: minutesToTime(newEndMin),
+          duration_minutes: customDuration,
+          is_locked: true,
+        };
+      }
+      return s;
+    });
+
+    // Re-sort by start time
+    updated.sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time));
+    const finalSessions = updated.map((s, idx) => ({ ...s, sort_order: idx }));
+
+    await onSaveSchedule(finalSessions);
+    setTimeEditingSession(null);
   };
 
   const sessionIdSafe = (id: string) => id;
@@ -553,7 +653,21 @@ export default function DailyPlannerView({
               return (
                 <div
                   key={session.id || index}
+                  draggable={!session.is_locked}
+                  onDragStart={() => handleDragStart(index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDrop={() => handleDrop(index)}
+                  onDragEnd={() => {
+                    setDraggedIndex(null);
+                    setDragOverIndex(null);
+                  }}
                   className={`group relative p-3.5 sm:p-4 rounded-2xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                    draggedIndex === index
+                      ? 'opacity-40 scale-[0.99] border-dashed border-blue-500'
+                      : dragOverIndex === index
+                      ? 'border-t-2 border-t-blue-400 bg-blue-950/20'
+                      : ''
+                  } ${
                     session.is_completed
                       ? 'bg-slate-950/40 border-slate-800/60 opacity-75'
                       : isBreak
@@ -563,7 +677,35 @@ export default function DailyPlannerView({
                       : 'bg-slate-900/85 border-slate-800 hover:border-slate-700 hover:bg-slate-900 shadow-sm'
                   }`}
                 >
-                  {/* Left: Time & Content */}
+                  {/* Left: Reorder Stepper & Drag Handle */}
+                  <div className="flex sm:flex-col items-center justify-center gap-0.5 text-slate-500 shrink-0 self-start sm:self-center mr-0.5">
+                    <button
+                      type="button"
+                      disabled={index === 0}
+                      onClick={() => handleMoveSession(index, index - 1)}
+                      className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-slate-200 disabled:opacity-20 disabled:hover:bg-transparent transition"
+                      title="Move task earlier in the day"
+                    >
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    </button>
+                    <div
+                      className="cursor-grab active:cursor-grabbing p-1 text-slate-500 hover:text-slate-300 transition"
+                      title="Drag to rearrange along the day"
+                    >
+                      <GripVertical className="w-3.5 h-3.5" />
+                    </div>
+                    <button
+                      type="button"
+                      disabled={index === currentDaySessions.length - 1}
+                      onClick={() => handleMoveSession(index, index + 1)}
+                      className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-slate-200 disabled:opacity-20 disabled:hover:bg-transparent transition"
+                      title="Move task later in the day"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Content & Checkbox */}
                   <div className="flex items-start gap-3 min-w-0 flex-1">
                     {/* Checkbox / Break Icon */}
                     {isBreak ? (
@@ -588,9 +730,15 @@ export default function DailyPlannerView({
                     {/* Time Slot Badge & Title */}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="font-mono text-xs font-bold text-blue-300 bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-500/20">
-                          {session.start_time} – {session.end_time}
-                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenTimeEdit(session)}
+                          className="group/time flex items-center gap-1 font-mono text-xs font-bold text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 px-2 py-0.5 rounded-md border border-blue-500/20 transition cursor-pointer"
+                          title="Click to adjust time slot or start time"
+                        >
+                          <Clock className="w-3 h-3 text-blue-400 group-hover/time:rotate-45 transition-transform" />
+                          <span>{session.start_time} – {session.end_time}</span>
+                        </button>
 
                         <span className="text-[10px] text-slate-400 font-medium">
                           {session.duration_minutes}m
@@ -817,6 +965,78 @@ export default function DailyPlannerView({
                 className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white"
               >
                 Save & Re-Plan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── TIME ADJUSTMENT MODAL ── */}
+      {timeEditingSession && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                <Clock className="w-4 h-4 text-blue-400" />
+                Adjust Session Time
+              </h3>
+              <button
+                onClick={() => setTimeEditingSession(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <p className="text-slate-300 font-semibold mb-1 truncate">
+                  {timeEditingSession.title}
+                </p>
+                <p className="text-slate-500 text-[11px]">
+                  Setting a custom time will lock this session to that exact slot.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Start Time</label>
+                <input
+                  type="time"
+                  value={customStartTime}
+                  onChange={(e) => setCustomStartTime(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  Duration (Minutes)
+                </label>
+                <input
+                  type="number"
+                  min="5"
+                  max="240"
+                  step="5"
+                  value={customDuration}
+                  onChange={(e) => setCustomDuration(Math.max(5, Number(e.target.value)))}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setTimeEditingSession(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveCustomTime}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white"
+              >
+                Save Time Slot
               </button>
             </div>
           </div>
