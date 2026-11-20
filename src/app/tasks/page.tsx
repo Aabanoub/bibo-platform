@@ -6,7 +6,6 @@ import type { Task, TaskPriority, TaskStatus, TaskFolder, TaskDifficulty, DailyS
 import TaskFolderModal, { FOLDER_COLORS, FOLDER_ICONS } from '@/components/TaskFolderModal';
 import DeleteFolderDialog from '@/components/DeleteFolderDialog';
 import TaskFolderCard, { getFolderCountdown } from '@/components/TaskFolderCard';
-import SmartDistributeModal from '@/components/SmartDistributeModal';
 import DailyPlannerView from '@/components/DailyPlannerView';
 import WeeklyForecastView from '@/components/WeeklyForecastView';
 import { toLocalDateStr } from '@/lib/weekly-forecast';
@@ -220,8 +219,6 @@ export default function TasksPage() {
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [editingFolder, setEditingFolder] = useState<TaskFolder | null>(null);
   const [deletingFolder, setDeletingFolder] = useState<TaskFolder | null>(null);
-  const [isSmartDistributeModalOpen, setIsSmartDistributeModalOpen] = useState(false);
-  const [smartDistributeFolderId, setSmartDistributeFolderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -795,123 +792,6 @@ export default function TasksPage() {
       console.error('Delete folder error:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete folder');
     }
-  };
-
-  /**
-   * Smart Workload Distribution Handlers
-   */
-  const handleOpenSmartDistribute = (folderId?: string) => {
-    setSmartDistributeFolderId(
-      folderId || (selectedFolderId && selectedFolderId !== 'unfiled' ? selectedFolderId : null)
-    );
-    setIsSmartDistributeModalOpen(true);
-  };
-
-  const handleApplySmartDistribution = async (updates: { taskId: string; dueDate: string }[]) => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) throw new Error('You must be logged in to update tasks.');
-
-    // Update each task in Supabase
-    const promises = updates.map((u) =>
-      supabase
-        .from('tasks')
-        .update({
-          due_date: new Date(u.dueDate).toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', u.taskId)
-        .eq('user_id', user.id)
-    );
-
-    await Promise.all(promises);
-
-    // Update local state
-    const updateMap = new Map(updates.map((u) => [u.taskId, u.dueDate]));
-    setTasks((prev) =>
-      prev.map((t) => {
-        const newDate = updateMap.get(t.id);
-        if (newDate) {
-          return {
-            ...t,
-            due_date: new Date(newDate).toISOString(),
-            updated_at: new Date().toISOString(),
-          };
-        }
-        return t;
-      })
-    );
-
-    // In-app celebration notification
-    await supabase.from('notifications').insert({
-      user_id: user.id,
-      title: '✨ Smart Distribution Applied',
-      message: `Evenly balanced ${updates.length} tasks across your preparation timeline.`,
-      type: 'ai',
-      action_url: '/tasks',
-    });
-  };
-
-  const handleCreateBatchDistributed = async (
-    folderId: string | null,
-    folderName: string,
-    deadline: string,
-    newTasks: { title: string; priority: TaskPriority; dueDate: string }[]
-  ) => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) throw new Error('You must be logged in to create tasks.');
-
-    let targetFolderId = folderId;
-
-    if (!targetFolderId && folderName) {
-      const { data: newFolder } = await supabase
-        .from('task_folders')
-        .insert({
-          user_id: user.id,
-          name: folderName,
-          due_date: new Date(deadline).toISOString(),
-          color: 'blue',
-          icon: 'book',
-        })
-        .select()
-        .single();
-
-      if (newFolder) {
-        targetFolderId = newFolder.id;
-        setFolders((prev) => [newFolder as TaskFolder, ...prev]);
-        setSelectedFolderId(newFolder.id);
-      }
-    }
-
-    const tasksToInsert = newTasks.map((t) => ({
-      user_id: user.id,
-      folder_id: targetFolderId,
-      title: t.title,
-      priority: t.priority,
-      status: 'todo' as const,
-      due_date: new Date(t.dueDate).toISOString(),
-    }));
-
-    const { data: inserted, error: err } = await supabase
-      .from('tasks')
-      .insert(tasksToInsert)
-      .select();
-
-    if (err) throw err;
-    if (inserted) {
-      setTasks((prev) => [...(inserted as Task[]), ...prev]);
-    }
-
-    await supabase.from('notifications').insert({
-      user_id: user.id,
-      title: `✨ Created & Distributed ${newTasks.length} Lessons`,
-      message: `Evenly scheduled in "${folderName}" leading to ${new Date(deadline).toLocaleDateString([], { month: 'short', day: 'numeric' })}.`,
-      type: 'ai',
-      action_url: '/tasks',
-    });
   };
 
   /**
@@ -1593,10 +1473,6 @@ export default function TasksPage() {
                       onEdit={handleOpenEditFolder}
                       onDelete={handleOpenDeleteFolder}
                       onAddLesson={handleAddLessonToFolder}
-                      onSmartDistribute={(f, e) => {
-                        e.stopPropagation();
-                        handleOpenSmartDistribute(f.id);
-                      }}
                     />
                   );
                 })}
@@ -1643,16 +1519,6 @@ export default function TasksPage() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0 flex-wrap">
-            <button
-              type="button"
-              onClick={() => handleOpenSmartDistribute(activeFolder.id)}
-              className="px-3 py-1.5 rounded-xl bg-purple-600/25 hover:bg-purple-600/40 text-purple-200 border border-purple-500/40 text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
-              title="Smart distribute lessons across days before the exam"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-purple-300" />
-              <span>Smart Distribute</span>
-            </button>
-
             <button
               type="button"
               onClick={() => setSelectedFolderId(null)}
@@ -1937,17 +1803,6 @@ export default function TasksPage() {
             </select>
             <ChevronDown className="w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500" />
           </div>
-
-          {/* Smart Distribute Trigger */}
-          <button
-            type="button"
-            onClick={() => handleOpenSmartDistribute()}
-            className="px-2.5 py-1.5 rounded-xl bg-purple-950/40 border border-purple-800/60 hover:bg-purple-900/60 text-purple-300 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm hover:scale-[1.02] active:scale-95 shrink-0"
-            title="Smart distribute workload across days before deadline"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            <span className="hidden sm:inline">Smart Distribute</span>
-          </button>
 
           {/* Clear Completed button */}
           {taskStats.done > 0 && activeTab === 'done' && (
@@ -2322,17 +2177,6 @@ export default function TasksPage() {
         }
         onClose={() => setDeletingFolder(null)}
         onConfirm={handleDeleteFolder}
-      />
-
-      {/* ── SMART WORKLOAD DISTRIBUTION MODAL ── */}
-      <SmartDistributeModal
-        isOpen={isSmartDistributeModalOpen}
-        onClose={() => setIsSmartDistributeModalOpen(false)}
-        folders={folders}
-        tasks={tasks}
-        initialFolderId={smartDistributeFolderId}
-        onApplyDistribution={handleApplySmartDistribution}
-        onCreateBatchDistributed={handleCreateBatchDistributed}
       />
     </div>
   );

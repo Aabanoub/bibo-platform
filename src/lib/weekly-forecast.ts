@@ -164,11 +164,11 @@ export function calculateWeeklyForecast(
 
   let recommendation: string | undefined;
   if (overloadedDays.length > 0) {
-    recommendation = `Workload spike detected on ${overloadedDays.join(', ')}. Use Smart Distribution to balance sessions across lighter weekdays.`;
+    recommendation = `Workload spike detected on ${overloadedDays.join(', ')}. Use the AI Daily Planner to reschedule or balance sessions across lighter weekdays.`;
   } else if (totalWeeklyTasks > 0) {
     recommendation = `Your weekly study load is well-balanced across all 7 days with consistent daily study blocks.`;
   } else {
-    recommendation = `No tasks scheduled for this week. Use "Generate Daily Plan" or Smart Distribution to plan your study week.`;
+    recommendation = `No tasks scheduled for this week. Use "Generate Daily Plan" in the AI Planner to schedule your study sessions.`;
   }
 
   return {
