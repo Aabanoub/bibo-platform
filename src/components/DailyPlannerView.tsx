@@ -383,25 +383,39 @@ export default function DailyPlannerView({
 
   // Calculate Overview Stats for currentDate with instant optimistic feedback
   const currentDaySessions = React.useMemo(() => {
-    return scheduleItems
-      .filter((s) => s.date === currentDate)
-      .map((s) => {
-        let isDone = s.is_completed;
-        if (optimisticOverrides[s.id] !== undefined) {
-          isDone = optimisticOverrides[s.id];
-        } else if (s.task_id && optimisticOverrides[s.task_id] !== undefined) {
-          isDone = optimisticOverrides[s.task_id];
-        }
-        return {
-          ...s,
-          is_completed: isDone,
-        };
-      })
-      .sort((a, b) => {
-        const timeDiff = timeToMinutes(a.start_time) - timeToMinutes(b.start_time);
-        if (timeDiff !== 0) return timeDiff;
-        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+    const rawSessions = scheduleItems.filter((s) => s.date === currentDate);
+    const seenTasks = new Set<string>();
+    const seenBreaks = new Set<string>();
+    const deduped: DailyScheduleItem[] = [];
+
+    for (const s of rawSessions) {
+      if (s.task_id) {
+        if (seenTasks.has(s.task_id)) continue;
+        seenTasks.add(s.task_id);
+      } else if (s.session_type === 'break') {
+        const breakKey = `${s.start_time}-${s.end_time}`;
+        if (seenBreaks.has(breakKey)) continue;
+        seenBreaks.add(breakKey);
+      }
+
+      let isDone = s.is_completed;
+      if (optimisticOverrides[s.id] !== undefined) {
+        isDone = optimisticOverrides[s.id];
+      } else if (s.task_id && optimisticOverrides[s.task_id] !== undefined) {
+        isDone = optimisticOverrides[s.task_id];
+      }
+
+      deduped.push({
+        ...s,
+        is_completed: isDone,
       });
+    }
+
+    return deduped.sort((a, b) => {
+      const timeDiff = timeToMinutes(a.start_time) - timeToMinutes(b.start_time);
+      if (timeDiff !== 0) return timeDiff;
+      return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+    });
   }, [scheduleItems, currentDate, optimisticOverrides]);
 
   const taskSessions = currentDaySessions.filter((s) => s.session_type === 'task');

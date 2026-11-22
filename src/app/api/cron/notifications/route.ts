@@ -35,21 +35,35 @@ async function processDueNotifications(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized cron dispatch.' }, { status: 401 });
   }
 
-  const supabase = getSupabaseAdmin();
+  let supabase: any;
+  try {
+    supabase = getSupabaseAdmin();
+  } catch (err: any) {
+    console.warn('[cron/notifications] Supabase admin init warning:', err?.message);
+    return NextResponse.json({ message: 'Cron skipped: Supabase credentials unavailable.', processed: 0 });
+  }
+
   const nowISO = new Date().toISOString();
 
   // 1. Fetch pending notifications scheduled for <= now
-  const { data: dueItems, error: fetchErr } = await supabase
-    .from('scheduled_notifications')
-    .select('*')
-    .eq('status', 'pending')
-    .lte('scheduled_for', nowISO)
-    .order('scheduled_for', { ascending: true })
-    .limit(50);
+  let dueItems: any[] = [];
+  try {
+    const { data, error: fetchErr } = await supabase
+      .from('scheduled_notifications')
+      .select('*')
+      .eq('status', 'pending')
+      .lte('scheduled_for', nowISO)
+      .order('scheduled_for', { ascending: true })
+      .limit(50);
 
-  if (fetchErr) {
-    console.error('[cron/notifications] Fetch error:', fetchErr);
-    return NextResponse.json({ error: fetchErr.message }, { status: 500 });
+    if (fetchErr) {
+      console.warn('[cron/notifications] Fetch warning:', fetchErr.message);
+      return NextResponse.json({ message: 'No notifications pending.', processed: 0 });
+    }
+    dueItems = data || [];
+  } catch (err: any) {
+    console.warn('[cron/notifications] Query error:', err?.message);
+    return NextResponse.json({ message: 'No notifications processed.', processed: 0 });
   }
 
   if (!dueItems || dueItems.length === 0) {

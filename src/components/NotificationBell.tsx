@@ -78,9 +78,9 @@ export default function NotificationBell({
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Filter Realtime strictly to the authenticated user's ID
+      // Filter Realtime strictly to the authenticated user's ID with unique channel per instance
       channel = supabase
-        .channel(`notifications-user-${user.id}`)
+        .channel(`notifications-user-${user.id}-${placement}-${Math.random().toString(36).slice(2, 7)}`)
         .on(
           'postgres_changes',
           {

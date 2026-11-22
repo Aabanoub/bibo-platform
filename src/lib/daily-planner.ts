@@ -134,7 +134,24 @@ export function generateDeterministicDailyPlan(input: DailyPlannerInput): Genera
   };
 
   const foldersMap = new Map(input.folders.map((f) => [f.id, f]));
-  const existingSessions = input.existingSessions || [];
+  const rawExisting = input.existingSessions || [];
+
+  // Deduplicate existing sessions to ensure no duplicate tasks or breaks
+  const seenTaskMap = new Set<string>();
+  const seenBreakMap = new Set<string>();
+  const existingSessions: DailyScheduleItem[] = [];
+
+  for (const s of rawExisting) {
+    if (s.task_id) {
+      if (seenTaskMap.has(s.task_id)) continue;
+      seenTaskMap.add(s.task_id);
+    } else if (s.session_type === 'break') {
+      const slotKey = `${s.start_time}-${s.end_time}`;
+      if (seenBreakMap.has(slotKey)) continue;
+      seenBreakMap.add(slotKey);
+    }
+    existingSessions.push(s);
+  }
 
   // Locked or already completed sessions for this day must NEVER be moved
   const lockedOrDoneSessions = existingSessions.filter(
@@ -374,9 +391,34 @@ export function generateDeterministicDailyPlan(input: DailyPlannerInput): Genera
     }
   }
 
-  // Combine locked/done sessions with newly scheduled sessions and sort by start_time
-  const allSessions = [...lockedOrDoneSessions, ...newScheduledSessions];
-  allSessions.sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time));
+  // Combine locked/done sessions with newly scheduled sessions with strict deduplication
+  const combinedSessions: DailyScheduleItem[] = [...lockedOrDoneSessions];
+  const combinedTaskIds = new Set(
+    lockedOrDoneSessions.map((s) => s.task_id).filter(Boolean)
+  );
+  const combinedBreakSlots = new Set(
+    lockedOrDoneSessions
+      .filter((s) => s.session_type === 'break')
+      .map((s) => `${s.start_time}-${s.end_time}`)
+  );
+
+  for (const s of newScheduledSessions) {
+    if (s.task_id) {
+      if (combinedTaskIds.has(s.task_id)) continue;
+      combinedTaskIds.add(s.task_id);
+      combinedSessions.push(s);
+    } else if (s.session_type === 'break') {
+      const slotKey = `${s.start_time}-${s.end_time}`;
+      if (combinedBreakSlots.has(slotKey)) continue;
+      combinedBreakSlots.add(slotKey);
+      combinedSessions.push(s);
+    } else {
+      combinedSessions.push(s);
+    }
+  }
+
+  combinedSessions.sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time));
+  const allSessions = combinedSessions;
 
   // Compute workload overview
   const totalTasks = allSessions.filter((s) => s.session_type === 'task').length;

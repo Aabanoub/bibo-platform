@@ -569,14 +569,42 @@ export default function TasksPage() {
           (payload: any) => {
             if (payload.eventType === 'INSERT') {
               const newItem = payload.new as DailyScheduleItem;
-              setAllScheduleItems((prev) =>
-                prev.some((s) => s.id === newItem.id) ? prev : [...prev, newItem]
-              );
-              setScheduleItems((prev) => {
-                if (newItem.date === plannerDate && !prev.some((s) => s.id === newItem.id)) {
-                  return [...prev, newItem];
+              setAllScheduleItems((prev) => {
+                const idx = prev.findIndex(
+                  (s) =>
+                    s.id === newItem.id ||
+                    (newItem.task_id && s.task_id === newItem.task_id && s.date === newItem.date) ||
+                    (!newItem.task_id &&
+                      s.session_type === 'break' &&
+                      s.date === newItem.date &&
+                      s.start_time === newItem.start_time &&
+                      s.end_time === newItem.end_time)
+                );
+                if (idx >= 0) {
+                  const copy = [...prev];
+                  copy[idx] = newItem;
+                  return copy;
                 }
-                return prev;
+                return [...prev, newItem];
+              });
+              setScheduleItems((prev) => {
+                if (newItem.date !== plannerDate) return prev;
+                const idx = prev.findIndex(
+                  (s) =>
+                    s.id === newItem.id ||
+                    (newItem.task_id && s.task_id === newItem.task_id && s.date === newItem.date) ||
+                    (!newItem.task_id &&
+                      s.session_type === 'break' &&
+                      s.date === newItem.date &&
+                      s.start_time === newItem.start_time &&
+                      s.end_time === newItem.end_time)
+                );
+                if (idx >= 0) {
+                  const copy = [...prev];
+                  copy[idx] = newItem;
+                  return copy;
+                }
+                return [...prev, newItem];
               });
             } else if (payload.eventType === 'UPDATE') {
               const updated = payload.new as DailyScheduleItem;
@@ -688,6 +716,23 @@ export default function TasksPage() {
       const itemsForToday = newItems.filter((i) => !i.date || i.date === plannerDate);
       const itemsForOtherDates = newItems.filter((i) => i.date && i.date !== plannerDate);
 
+      // Strictly deduplicate itemsForToday before database insertion
+      const seenTaskIds = new Set<string>();
+      const seenBreakSlots = new Set<string>();
+      const cleanItemsForToday: DailyScheduleItem[] = [];
+
+      for (const item of itemsForToday) {
+        if (item.task_id) {
+          if (seenTaskIds.has(item.task_id)) continue;
+          seenTaskIds.add(item.task_id);
+        } else if (item.session_type === 'break') {
+          const slot = `${item.start_time}-${item.end_time}`;
+          if (seenBreakSlots.has(slot)) continue;
+          seenBreakSlots.add(slot);
+        }
+        cleanItemsForToday.push(item);
+      }
+
       // 1. Wipe and re-save items for today's selected date
       await supabase
         .from('daily_schedule_items')
@@ -695,8 +740,8 @@ export default function TasksPage() {
         .eq('user_id', user.id)
         .eq('date', plannerDate);
 
-      if (itemsForToday.length > 0) {
-        const payload = itemsForToday.map((item, idx) => ({
+      if (cleanItemsForToday.length > 0) {
+        const payload = cleanItemsForToday.map((item, idx) => ({
           user_id: user.id,
           date: plannerDate,
           task_id: item.task_id || null,
@@ -729,7 +774,18 @@ export default function TasksPage() {
 
       // 2. Persist items moved to other dates (e.g. moved to tomorrow)
       if (itemsForOtherDates.length > 0) {
-        const payloadOther = itemsForOtherDates.map((item, idx) => ({
+        const seenOther = new Set<string>();
+        const cleanOther: DailyScheduleItem[] = [];
+        for (const item of itemsForOtherDates) {
+          const key = item.task_id
+            ? `${item.date}-${item.task_id}`
+            : `${item.date}-${item.start_time}-${item.end_time}`;
+          if (seenOther.has(key)) continue;
+          seenOther.add(key);
+          cleanOther.push(item);
+        }
+
+        const payloadOther = cleanOther.map((item, idx) => ({
           user_id: user.id,
           date: item.date,
           task_id: item.task_id || null,
