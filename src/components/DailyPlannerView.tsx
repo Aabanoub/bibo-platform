@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import type {
   Task,
   TaskFolder,
@@ -36,6 +37,7 @@ import {
   computeAdjustedTimerState,
 } from '@/lib/active-timer-sync';
 import { generateDailySchedulePdf } from '@/lib/daily-schedule-pdf';
+import { lockScreenTimerWidget } from '@/lib/lockscreen-timer-widget';
 import {
   Sparkles,
   Calendar,
@@ -117,6 +119,7 @@ export default function DailyPlannerView({
   const [deferredList, setDeferredList] = useState<{ task: Task; reason: string }[]>([]);
   const [isNoScheduleAlertOpen, setIsNoScheduleAlertOpen] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
   // Rearranging & Drag-Drop State
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -158,8 +161,9 @@ export default function DailyPlannerView({
     }
   }, [userPreferences]);
 
-  // Clean timer on unmount
+  // Mount flag & clean timer on unmount
   useEffect(() => {
+    setIsMounted(true);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
@@ -549,6 +553,25 @@ export default function DailyPlannerView({
         isRunning: true,
       });
     }
+
+    // Launch Live Lock Screen & Notification Center Widget on Phone
+    lockScreenTimerWidget.start({
+      title: session.title,
+      sessionType: session.session_type,
+      secondsLeft: initialSeconds,
+      totalSeconds: initialSeconds,
+      isRunning: true,
+      onPause: () => {
+        setTimerRunning(false);
+      },
+      onResume: () => {
+        setTimerRunning(true);
+        setIsFreezeMinimized(false);
+      },
+      onComplete: () => {
+        handleFinishTimer(session);
+      },
+    });
   };
 
   // Finish study timer early or on time and log actual duration
@@ -559,6 +582,7 @@ export default function DailyPlannerView({
 
       setTimerRunning(false);
       setActiveTimerSessionId(null);
+      lockScreenTimerWidget.stop();
 
       // Clear from database across all devices
       if (userId) {
@@ -666,13 +690,16 @@ export default function DailyPlannerView({
           if (prev <= 1) {
             clearInterval(timerRef.current!);
             setTimerRunning(false);
+            lockScreenTimerWidget.stop();
 
             if (activeSession) {
               handleTimerCompleted(activeSession);
             }
             return 0;
           }
-          return prev - 1;
+          const nextLeft = prev - 1;
+          lockScreenTimerWidget.update(nextLeft, true);
+          return nextLeft;
         });
       }, 1000);
     } else if (timerRef.current) {
@@ -1019,9 +1046,11 @@ export default function DailyPlannerView({
         const secondsLeft = timerSecondsLeft % 60;
         const formattedTime = `${String(minutesLeft).padStart(2, '0')}:${String(secondsLeft).padStart(2, '0')}`;
 
-        return (
+        if (!isMounted) return null;
+
+        return createPortal(
           <div
-            className="fixed inset-0 z-[99999] overflow-y-auto bg-[#070b14]/95 backdrop-blur-3xl flex flex-col items-center justify-center p-4 sm:p-8 select-none animate-in fade-in duration-300"
+            className="fixed inset-0 top-0 left-0 w-screen h-screen z-[99999] overflow-y-auto bg-[#070b14] flex flex-col items-center justify-center p-4 sm:p-8 select-none animate-in fade-in duration-200"
             style={{ touchAction: 'manipulation' }}
           >
             {/* Ambient background glow */}
@@ -1140,6 +1169,7 @@ export default function DailyPlannerView({
                   onClick={() => {
                     const nextRunning = !timerRunning;
                     setTimerRunning(nextRunning);
+                    lockScreenTimerWidget.update(timerSecondsLeft, nextRunning);
                     if (nextRunning) {
                       setIsFreezeMinimized(false);
                     }
@@ -1206,7 +1236,8 @@ export default function DailyPlannerView({
                 </div>
               )}
             </div>
-          </div>
+          </div>,
+          document.body
         );
       })()}
 
@@ -1267,6 +1298,7 @@ export default function DailyPlannerView({
                 onClick={() => {
                   setTimerRunning(true);
                   setIsFreezeMinimized(false);
+                  lockScreenTimerWidget.update(timerSecondsLeft, true);
                   if (userId && activeSession) {
                     saveActiveTimerToDb(supabase, userId, {
                       sessionId: activeSession.id,
@@ -1928,6 +1960,7 @@ export default function DailyPlannerView({
                   lastNoiseCheckedSecondRef.current = activeTimerElapsedSecondsRef.current;
                   setTimerRunning(true);
                   setIsFreezeMinimized(false);
+                  lockScreenTimerWidget.update(timerSecondsLeft, true);
                   if (userId && activeTimerSessionId) {
                     const s = currentDaySessions.find((item) => item.id === activeTimerSessionId);
                     if (s) {

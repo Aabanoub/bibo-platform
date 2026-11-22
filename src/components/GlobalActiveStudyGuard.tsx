@@ -104,7 +104,7 @@ export default function GlobalActiveStudyGuard() {
   }
 
   return (
-    <div className="fixed inset-0 z-[99999] bg-[#070b14]/95 backdrop-blur-3xl flex flex-col items-center justify-center p-6 text-center select-none animate-in fade-in">
+    <div className="fixed inset-0 top-0 left-0 w-screen h-screen z-[99999] bg-[#070b14] flex flex-col items-center justify-center p-6 text-center select-none animate-in fade-in">
       <div className="relative mb-6">
         <div className="w-20 h-20 rounded-3xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400 shadow-2xl shadow-blue-500/20 animate-pulse">
           <Lock className="w-10 h-10" />

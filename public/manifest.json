@@ -35,5 +35,35 @@
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "AI Daily Schedule",
+      "short_name": "Schedule",
+      "description": "View today's AI planned timeline",
+      "url": "/tasks?tab=planner",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Active Study Timer",
+      "short_name": "Timer",
+      "description": "Jump to your active deep focus session",
+      "url": "/tasks?action=timer",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Tasks & Folders",
+      "short_name": "Tasks",
+      "description": "Manage subjects, lessons and tasks",
+      "url": "/tasks",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Quick Notes",
+      "short_name": "Notes",
+      "description": "Open scratchpad and notes",
+      "url": "/notes",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
   ]
 }
