@@ -42,7 +42,9 @@ import {
   GraduationCap,
   Layers,
   BarChart2,
+  FileDown,
 } from 'lucide-react';
+import { generateDailySchedulePdf } from '@/lib/daily-schedule-pdf';
 import {
   requestNotificationPermission,
   sendLocalNotification,
@@ -234,6 +236,47 @@ export default function TasksPage() {
   const [scheduleItems, setScheduleItems] = useState<DailyScheduleItem[]>([]);
   const [allScheduleItems, setAllScheduleItems] = useState<DailyScheduleItem[]>([]);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [isNoScheduleAlertOpen, setIsNoScheduleAlertOpen] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+  const handleExportSchedulePdf = async () => {
+    const todayStr = toLocalDateStr(new Date());
+    // Find today's schedule items
+    const todayItems = allScheduleItems.filter((s) => s.date === todayStr);
+    const resolvedItems =
+      todayItems.length > 0
+        ? todayItems
+        : plannerDate === todayStr
+        ? scheduleItems
+        : [];
+
+    if (resolvedItems.length === 0) {
+      setIsNoScheduleAlertOpen(true);
+      return;
+    }
+
+    try {
+      setIsExportingPdf(true);
+      await generateDailySchedulePdf({
+        userName: userProfile?.full_name || 'Evolve User',
+        date: todayStr,
+        sessions: resolvedItems,
+        tasks,
+        folders,
+        preferences: {
+          startTime: userProfile?.daily_start_time || '08:00',
+          endTime: userProfile?.daily_end_time || '21:00',
+          highFocusStart: userProfile?.high_focus_start || '09:00',
+          highFocusEnd: userProfile?.high_focus_end || '12:00',
+          preferredBreakDuration: userProfile?.preferred_break_duration || 15,
+        },
+      });
+    } catch (err) {
+      console.error('Failed to export daily schedule PDF:', err);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
 
   // User's choice between AI Folders and Classic Task list (stored in localStorage & settings)
   const [tasksViewMode, setTasksViewMode] = useState<'ai_folders' | 'classic'>(() => {
@@ -1917,6 +1960,21 @@ export default function TasksPage() {
               )}
               <button
                 type="button"
+                onClick={handleExportSchedulePdf}
+                disabled={isExportingPdf}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all border border-slate-700 shadow-sm active:scale-95"
+                title="Export today's AI planned schedule as a luxury PDF"
+              >
+                {isExportingPdf ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+                ) : (
+                  <FileDown className="w-4 h-4 text-purple-400" />
+                )}
+                <span className="hidden sm:inline">Export Schedule PDF</span>
+                <span className="sm:hidden">Schedule PDF</span>
+              </button>
+              <button
+                type="button"
                 onClick={handleOpenCreateFolder}
                 className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all border border-slate-700 shadow-sm active:scale-95"
               >
@@ -1947,6 +2005,21 @@ export default function TasksPage() {
                   Then add lessons and study tasks to stay on track!
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={handleExportSchedulePdf}
+                disabled={isExportingPdf}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all border border-slate-700 shadow-sm active:scale-95"
+                title="Export today's AI planned schedule as a luxury PDF"
+              >
+                {isExportingPdf ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+                ) : (
+                  <FileDown className="w-4 h-4 text-purple-400" />
+                )}
+                <span className="hidden sm:inline">Export Schedule PDF</span>
+                <span className="sm:hidden">Schedule PDF</span>
+              </button>
               <button
                 type="button"
                 onClick={handleOpenCreateFolder}
@@ -3038,6 +3111,61 @@ export default function TasksPage() {
         onClose={() => setDeletingFolder(null)}
         onConfirm={handleDeleteFolder}
       />
+
+      {/* ── NO SCHEDULE ALERT POPUP MODAL ── */}
+      {isNoScheduleAlertOpen && (
+        <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-md p-6 shadow-2xl shadow-amber-500/10 space-y-5 animate-in zoom-in-95 text-center">
+            {/* Warning Icon Badge */}
+            <div className="relative mx-auto w-16 h-16 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-2xl bg-amber-500/20 animate-ping opacity-40" />
+              <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500/30 to-yellow-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 shadow-lg">
+                <Calendar className="w-8 h-8" />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-bold uppercase tracking-wider">
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span>AI Daily Planner</span>
+              </div>
+
+              {/* Exact user-requested message */}
+              <div className="p-4 rounded-2xl bg-gradient-to-b from-amber-500/15 to-amber-500/5 border border-amber-500/30 shadow-inner">
+                <p className="text-base sm:text-lg font-black text-amber-200 tracking-tight leading-snug">
+                  &ldquo;there is no schadual for today go to the (ai daily planner) first.&rdquo;
+                </p>
+              </div>
+
+              <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+                The AI needs to build your optimized day plan with smart study blocks and break intervals before generating your luxury schedule PDF.
+              </p>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsNoScheduleAlertOpen(false);
+                  setActiveMainTab('planner');
+                }}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:brightness-110 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-purple-500/25 active:scale-[0.98] transition-all"
+              >
+                <Sparkles className="w-4 h-4 text-purple-200" />
+                <span>Go to (AI Daily Planner)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsNoScheduleAlertOpen(false)}
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-xs font-semibold transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

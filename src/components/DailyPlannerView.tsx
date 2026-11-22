@@ -35,6 +35,7 @@ import {
   loadActiveTimerFromDb,
   computeAdjustedTimerState,
 } from '@/lib/active-timer-sync';
+import { generateDailySchedulePdf } from '@/lib/daily-schedule-pdf';
 import {
   Sparkles,
   Calendar,
@@ -43,10 +44,12 @@ import {
   Pause,
   CheckCircle2,
   Circle,
+  FileDown,
   Lock,
   Unlock,
   Coffee,
   AlertTriangle,
+  AlertCircle,
   ArrowRight,
   RotateCcw,
   Sliders,
@@ -112,6 +115,8 @@ export default function DailyPlannerView({
   const [isSaving, setIsSaving] = useState(false);
   const [overloadNotice, setOverloadNotice] = useState<string | null>(null);
   const [deferredList, setDeferredList] = useState<{ task: Task; reason: string }[]>([]);
+  const [isNoScheduleAlertOpen, setIsNoScheduleAlertOpen] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   // Rearranging & Drag-Drop State
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -410,6 +415,40 @@ export default function DailyPlannerView({
       await onSaveSchedule(plan.sessions);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Export AI planned schedule as premium luxury PDF
+  const handleExportPdf = async () => {
+    if (currentDaySessions.length === 0) {
+      setIsNoScheduleAlertOpen(true);
+      return;
+    }
+
+    try {
+      setIsExportingPdf(true);
+      let userName = 'Evolve User';
+      if (userId) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', userId)
+          .maybeSingle();
+        if (profile?.full_name) userName = profile.full_name;
+      }
+
+      await generateDailySchedulePdf({
+        userName,
+        date: currentDate,
+        sessions: currentDaySessions,
+        tasks,
+        folders,
+        preferences,
+      });
+    } catch (err) {
+      console.error('Failed to export daily schedule PDF:', err);
+    } finally {
+      setIsExportingPdf(false);
     }
   };
 
@@ -830,6 +869,22 @@ export default function DailyPlannerView({
           >
             <Sliders className="w-3.5 h-3.5 text-slate-400" />
             <span className="hidden sm:inline">Preferences</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            disabled={isExportingPdf}
+            className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+            title="Export this day's planned schedule as a luxury PDF"
+          >
+            {isExportingPdf ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" />
+            ) : (
+              <FileDown className="w-3.5 h-3.5 text-purple-400" />
+            )}
+            <span className="hidden sm:inline">Export PDF</span>
+            <span className="sm:hidden">PDF</span>
           </button>
 
           <button
@@ -1747,6 +1802,61 @@ export default function DailyPlannerView({
                 className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white"
               >
                 Save Time Slot
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── NO SCHEDULE ALERT POPUP MODAL ── */}
+      {isNoScheduleAlertOpen && (
+        <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-md p-6 shadow-2xl shadow-amber-500/10 space-y-5 animate-in zoom-in-95 text-center">
+            {/* Warning Icon Badge */}
+            <div className="relative mx-auto w-16 h-16 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-2xl bg-amber-500/20 animate-ping opacity-40" />
+              <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500/30 to-yellow-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 shadow-lg">
+                <Calendar className="w-8 h-8" />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-bold uppercase tracking-wider">
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span>AI Daily Planner</span>
+              </div>
+
+              {/* Exact user-requested message */}
+              <div className="p-4 rounded-2xl bg-gradient-to-b from-amber-500/15 to-amber-500/5 border border-amber-500/30 shadow-inner">
+                <p className="text-base sm:text-lg font-black text-amber-200 tracking-tight leading-snug">
+                  &ldquo;there is no schadual for today go to the (ai daily planner) first.&rdquo;
+                </p>
+              </div>
+
+              <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+                The AI needs to build your optimized day plan with smart study blocks and break intervals before generating your luxury schedule PDF.
+              </p>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsNoScheduleAlertOpen(false);
+                  handleGeneratePlan();
+                }}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:brightness-110 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-purple-500/25 active:scale-[0.98] transition-all"
+              >
+                <Sparkles className="w-4 h-4 text-purple-200" />
+                <span>Generate Plan for This Day Now</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsNoScheduleAlertOpen(false)}
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-xs font-semibold transition-colors"
+              >
+                Close
               </button>
             </div>
           </div>
