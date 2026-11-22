@@ -1,0 +1,129 @@
+'use client';
+
+import { useEffect, useState, useRef } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase';
+import { loadActiveTimerFromDb } from '@/lib/active-timer-sync';
+import { Lock, Loader2 } from 'lucide-react';
+
+/**
+ * GlobalActiveStudyGuard
+ * Enforces website freeze lockdown across all pages:
+ * If an active study timer is running in Supabase and the user opens or visits
+ * any other route (e.g. /notes, /finance, /habits, /), this guard immediately
+ * freezes the screen and redirects them straight to /tasks where the live interactive
+ * study focus freeze overlay is running.
+ */
+export default function GlobalActiveStudyGuard() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const supabase = useRef(createClient()).current;
+  const [isLockedOnOtherRoute, setIsLockedOnOtherRoute] = useState(false);
+  const [sessionTitle, setSessionTitle] = useState<string>('');
+
+  useEffect(() => {
+    let isMounted = true;
+    let realtimeChannel: any = null;
+
+    const checkActiveTimer = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session?.user?.id) {
+          if (isMounted) setIsLockedOnOtherRoute(false);
+          return;
+        }
+
+        const adjusted = await loadActiveTimerFromDb(supabase, session.user.id);
+        if (adjusted && adjusted.isRunning && !adjusted.isFinished) {
+          if (pathname !== '/tasks') {
+            if (isMounted) {
+              setSessionTitle(adjusted.title || 'Study Session');
+              setIsLockedOnOtherRoute(true);
+            }
+            router.replace('/tasks');
+          } else {
+            if (isMounted) setIsLockedOnOtherRoute(false);
+          }
+          return;
+        }
+        if (isMounted) setIsLockedOnOtherRoute(false);
+      } catch (err) {
+        console.warn('GlobalActiveStudyGuard check error:', err);
+      }
+    };
+
+    checkActiveTimer();
+
+    // Listen for realtime timer changes across devices
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.user?.id || !isMounted) return;
+      const userId = session.user.id;
+
+      realtimeChannel = supabase
+        .channel(`global-study-guard-${userId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'active_study_timers',
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            if (payload.eventType === 'DELETE') {
+              if (isMounted) setIsLockedOnOtherRoute(false);
+            } else if (payload.new && (payload.new as any).is_running) {
+              const row = payload.new as any;
+              if (pathname !== '/tasks') {
+                if (isMounted) {
+                  setSessionTitle(row.title || 'Study Session');
+                  setIsLockedOnOtherRoute(true);
+                }
+                router.replace('/tasks');
+              }
+            } else {
+              if (isMounted) setIsLockedOnOtherRoute(false);
+            }
+          }
+        )
+        .subscribe();
+    });
+
+    return () => {
+      isMounted = false;
+      if (realtimeChannel) {
+        supabase.removeChannel(realtimeChannel);
+      }
+    };
+  }, [pathname, router, supabase]);
+
+  if (!isLockedOnOtherRoute || pathname === '/tasks') {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-[99999] bg-[#070b14]/95 backdrop-blur-3xl flex flex-col items-center justify-center p-6 text-center select-none animate-in fade-in">
+      <div className="relative mb-6">
+        <div className="w-20 h-20 rounded-3xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400 shadow-2xl shadow-blue-500/20 animate-pulse">
+          <Lock className="w-10 h-10" />
+        </div>
+      </div>
+      <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-bold uppercase tracking-wider mb-4">
+        <span>Deep Study Lockdown Active</span>
+      </div>
+      <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight mb-2">
+        {sessionTitle || 'Active Study Session'}
+      </h2>
+      <p className="text-sm text-slate-400 max-w-md mb-6 leading-relaxed">
+        The entire website is frozen so you can concentrate 100% on studying without distractions.
+        Taking you to your study session now...
+      </p>
+      <div className="flex items-center gap-2 text-xs font-semibold text-blue-400 bg-slate-900/80 border border-slate-800 px-4 py-2 rounded-xl">
+        <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+        <span>Loading Focus Mode...</span>
+      </div>
+    </div>
+  );
+}

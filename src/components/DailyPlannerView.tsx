@@ -108,6 +108,7 @@ export default function DailyPlannerView({
   const [timerSecondsLeft, setTimerSecondsLeft] = useState<number>(0);
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerTotalDuration, setTimerTotalDuration] = useState<number>(0);
+  const [isFreezeMinimized, setIsFreezeMinimized] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [overloadNotice, setOverloadNotice] = useState<string | null>(null);
   const [deferredList, setDeferredList] = useState<{ task: Task; reason: string }[]>([]);
@@ -159,6 +160,17 @@ export default function DailyPlannerView({
     };
   }, []);
 
+  // ── STUDY LOCKDOWN: FREEZE ENTIRE WEBSITE SCROLLING WHILE TIMER IS WORKING ──
+  useEffect(() => {
+    if (activeTimerSessionId && timerRunning && !isFreezeMinimized) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [activeTimerSessionId, timerRunning, isFreezeMinimized]);
+
   // ── CROSS-DEVICE ACTIVE TIMER SYNCHRONIZATION ──
   useEffect(() => {
     async function initAuthAndTimer() {
@@ -194,6 +206,9 @@ export default function DailyPlannerView({
             setTimerTotalDuration(remoteTimer.totalSeconds);
             setTimerSecondsLeft(remoteTimer.secondsLeft);
             setTimerRunning(remoteTimer.isRunning);
+            if (remoteTimer.isRunning) {
+              setIsFreezeMinimized(false);
+            }
           }
         }
       } catch (e) {
@@ -245,6 +260,9 @@ export default function DailyPlannerView({
               setTimerTotalDuration(adjusted.totalSeconds);
               setTimerSecondsLeft(adjusted.secondsLeft);
               setTimerRunning(adjusted.isRunning);
+              if (adjusted.isRunning) {
+                setIsFreezeMinimized(false);
+              }
             }
           }
         }
@@ -472,6 +490,7 @@ export default function DailyPlannerView({
       return;
     }
 
+    setIsFreezeMinimized(false);
     setActiveTimerSessionId(session.id);
     const initialSeconds = session.duration_minutes * 60;
     setTimerTotalDuration(initialSeconds);
@@ -933,8 +952,211 @@ export default function DailyPlannerView({
         </div>
       )}
 
-      {/* ── ACTIVE LIVE TIMER PANEL (When session active) ── */}
-      {activeTimerSessionId && (() => {
+      {/* ── FULLSCREEN WEBSITE FREEZE LOCKDOWN (When Active Study/Break Timer is Working or Active) ── */}
+      {activeTimerSessionId && (!isFreezeMinimized || timerRunning) && (() => {
+        const activeSession = currentDaySessions.find((s) => s.id === activeTimerSessionId);
+        const isBreakSession = activeSession?.session_type === 'break';
+        const progressPercent = timerTotalDuration > 0
+          ? Math.min(100, Math.max(0, ((timerTotalDuration - timerSecondsLeft) / timerTotalDuration) * 100))
+          : 0;
+
+        const minutesLeft = Math.floor(timerSecondsLeft / 60);
+        const secondsLeft = timerSecondsLeft % 60;
+        const formattedTime = `${String(minutesLeft).padStart(2, '0')}:${String(secondsLeft).padStart(2, '0')}`;
+
+        return (
+          <div
+            className="fixed inset-0 z-[99999] overflow-y-auto bg-[#070b14]/95 backdrop-blur-3xl flex flex-col items-center justify-center p-4 sm:p-8 select-none animate-in fade-in duration-300"
+            style={{ touchAction: 'manipulation' }}
+          >
+            {/* Ambient background glow */}
+            <div
+              className={`absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-[700px] rounded-full blur-[140px] pointer-events-none opacity-40 ${
+                isBreakSession
+                  ? 'bg-gradient-to-br from-amber-600/30 via-yellow-600/20 to-transparent'
+                  : 'bg-gradient-to-br from-blue-600/30 via-indigo-600/20 to-transparent'
+              }`}
+            />
+
+            {/* Main Focus Card Container */}
+            <div className="relative z-10 w-full max-w-2xl flex flex-col items-center text-center space-y-6">
+              {/* Top Focus Badge */}
+              <div className="flex flex-col items-center gap-2">
+                <div
+                  className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-black tracking-widest uppercase shadow-xl transition-all ${
+                    isBreakSession
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-amber-500/10'
+                      : 'bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-blue-500/10'
+                  }`}
+                >
+                  <Lock className="w-3.5 h-3.5 animate-pulse text-current" />
+                  <span>{isBreakSession ? 'Break Lockdown Active' : 'Deep Study Lockdown Active'}</span>
+                </div>
+
+                <p className="text-xs sm:text-sm text-slate-400 max-w-md font-medium">
+                  {timerRunning
+                    ? 'All website pages, buttons, and navigation are frozen so you can concentrate 100% on studying.'
+                    : 'Study session is paused. Click Resume to continue and lock the website again.'}
+                </p>
+              </div>
+
+              {/* Session Title & Metadata */}
+              <div className="space-y-2">
+                <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-white tracking-tight drop-shadow-md">
+                  {activeSession?.title || 'Active Session'}
+                </h1>
+                <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-slate-400">
+                  <span className="px-2.5 py-1 rounded-lg bg-slate-900/80 border border-slate-800">
+                    Planned Duration: {activeSession?.duration_minutes || Math.round(timerTotalDuration / 60)}m
+                  </span>
+                  {activeSession?.start_time && (
+                    <span className="px-2.5 py-1 rounded-lg bg-slate-900/80 border border-slate-800">
+                      Scheduled: {activeSession.start_time} - {activeSession.end_time}
+                    </span>
+                  )}
+                  <span className="px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 flex items-center gap-1.5">
+                    <Globe className="w-3 h-3 text-blue-400" />
+                    <span>Cloud Synced</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Digital Countdown Timer Display */}
+              <div
+                className={`w-full max-w-lg p-6 sm:p-8 rounded-3xl border shadow-2xl backdrop-blur-xl transition-all ${
+                  isBreakSession
+                    ? 'bg-gradient-to-b from-amber-950/40 to-slate-900/90 border-amber-500/30 shadow-amber-950/40'
+                    : 'bg-gradient-to-b from-blue-950/40 to-slate-900/90 border-blue-500/30 shadow-blue-950/40'
+                }`}
+              >
+                {/* Big Monospace Digits */}
+                <div className="text-7xl sm:text-8xl md:text-9xl font-black font-mono tracking-tight text-white drop-shadow-[0_0_40px_rgba(59,130,246,0.35)] select-none">
+                  {formattedTime}
+                </div>
+
+                {/* Progress Bar */}
+                <div className="w-full bg-slate-800/80 rounded-full h-3 mt-6 overflow-hidden border border-slate-700/60 p-0.5">
+                  <div
+                    className={`h-full rounded-full transition-all duration-1000 ease-linear ${
+                      isBreakSession
+                        ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                        : 'bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-400'
+                    }`}
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+
+                <div className="flex justify-between items-center text-xs text-slate-400 font-mono mt-2.5">
+                  <span>{Math.round(progressPercent)}% elapsed</span>
+                  <span>{Math.ceil(timerSecondsLeft / 60)} min remaining</span>
+                </div>
+
+                {/* Ambient Noise Guard Status (During Study Sessions) */}
+                {!isBreakSession && preferences.noiseGuardEnabled !== false && (
+                  <div className="mt-5 pt-4 border-t border-slate-800/80 flex flex-wrap items-center justify-center gap-2">
+                    {isCheckingNoise ? (
+                      <span className="text-xs font-semibold px-3 py-1 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1.5 animate-pulse">
+                        <Radio className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+                        <span>Checking room noise level...</span>
+                      </span>
+                    ) : micPermissionState === 'denied' ? (
+                      <span className="text-xs font-medium px-3 py-1 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1.5">
+                        <MicOff className="w-3.5 h-3.5 text-rose-400" />
+                        <span>Mic Blocked • Noise check unavailable</span>
+                      </span>
+                    ) : (
+                      <span className="text-xs font-medium px-3 py-1 rounded-xl bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
+                        <Mic className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Noise Guard Active (checks room silence every 10 min)</span>
+                        {lastNoiseCheckStatus && (
+                          <span className="text-slate-400 text-[11px]">• {lastNoiseCheckStatus}</span>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* ── THE ONLY WORKING BUTTONS: (PAUSE , COMPLETE SESSION) ── */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full max-w-md pt-2">
+                {/* Button 1: Pause / Resume Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextRunning = !timerRunning;
+                    setTimerRunning(nextRunning);
+                    if (nextRunning) {
+                      setIsFreezeMinimized(false);
+                    }
+                    if (userId && activeSession) {
+                      saveActiveTimerToDb(supabase, userId, {
+                        sessionId: activeSession.id,
+                        sessionType: activeSession.session_type,
+                        title: activeSession.title,
+                        durationMinutes: activeSession.duration_minutes,
+                        totalSeconds: timerTotalDuration,
+                        secondsLeft: timerSecondsLeft,
+                        isRunning: nextRunning,
+                      });
+                    }
+                  }}
+                  className={`w-full sm:w-1/2 py-4 px-6 rounded-2xl font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all shadow-xl active:scale-95 ${
+                    timerRunning
+                      ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700'
+                      : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/30 ring-2 ring-blue-400 animate-pulse'
+                  }`}
+                  title={timerRunning ? 'Pause Session' : 'Resume Session'}
+                >
+                  {timerRunning ? (
+                    <>
+                      <Pause className="w-5 h-5 fill-current" />
+                      <span>Pause</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-5 h-5 fill-current" />
+                      <span>Resume</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Button 2: Complete Session Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (activeSession) handleFinishTimer(activeSession);
+                  }}
+                  className={`w-full sm:w-1/2 py-4 px-6 rounded-2xl font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 text-white transition-all shadow-xl active:scale-95 ${
+                    isBreakSession
+                      ? 'bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 shadow-amber-500/25 border border-amber-400/30'
+                      : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-500/25 border border-emerald-400/30'
+                  }`}
+                  title="Complete Session"
+                >
+                  <CheckCircle2 className="w-5 h-5 stroke-[2.5]" />
+                  <span>{isBreakSession ? 'End Break' : 'Complete Session'}</span>
+                </button>
+              </div>
+
+              {/* When Paused: Subtle option to view schedule while paused */}
+              {!timerRunning && (
+                <div className="pt-2 animate-in fade-in">
+                  <button
+                    type="button"
+                    onClick={() => setIsFreezeMinimized(true)}
+                    className="text-xs text-slate-400 hover:text-slate-200 underline decoration-slate-600 underline-offset-4 hover:decoration-slate-400 transition-colors"
+                  >
+                    View schedule while paused
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── INLINE ACTIVE TIMER BANNER (Shown ONLY when user minimized while paused) ── */}
+      {activeTimerSessionId && isFreezeMinimized && !timerRunning && (() => {
         const activeSession = currentDaySessions.find((s) => s.id === activeTimerSessionId);
         const isBreakSession = activeSession?.session_type === 'break';
 
@@ -948,7 +1170,7 @@ export default function DailyPlannerView({
           >
             <div className="flex items-center gap-3">
               <div
-                className={`p-2.5 rounded-xl border animate-pulse ${
+                className={`p-2.5 rounded-xl border ${
                   isBreakSession
                     ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
                     : 'bg-blue-500/20 border-blue-500/40 text-blue-300'
@@ -965,65 +1187,13 @@ export default function DailyPlannerView({
                         : 'bg-blue-500/20 text-blue-300'
                     }`}
                   >
-                    {isBreakSession ? 'Active Break Timer' : 'Active Study Timer'}
+                    {isBreakSession ? 'Active Break Timer (Paused)' : 'Active Study Timer (Paused)'}
                   </span>
                   <span className="text-xs text-slate-400">
                     {activeSession?.title}
                   </span>
-
-                  {isBreakSession ? (
-                    <span className="text-[10px] text-amber-300/90 font-medium px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 flex items-center gap-1">
-                      <Bell className="w-3 h-3 text-amber-400" />
-                      <span>Break Alarm on Finish</span>
-                    </span>
-                  ) : (
-                    preferences.noiseGuardEnabled !== false && (
-                      <div className="flex items-center gap-1.5">
-                        {isCheckingNoise ? (
-                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1 animate-pulse">
-                            <Radio className="w-3 h-3 text-amber-400 animate-spin" />
-                            <span>Checking Room Noise...</span>
-                          </span>
-                        ) : micPermissionState === 'denied' ? (
-                          <span
-                            className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1"
-                            title="Microphone permission was blocked"
-                          >
-                            <MicOff className="w-3 h-3 text-rose-400" />
-                            <span>Mic Blocked</span>
-                          </span>
-                        ) : (
-                          <span
-                            className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1"
-                            title="Automatically checks ambient noise every 10 minutes"
-                          >
-                            <Mic className="w-3 h-3 text-emerald-400" />
-                            <span>Noise Guard (10m)</span>
-                            {lastNoiseCheckStatus && (
-                              <span className="text-[9px] text-slate-400 font-normal">
-                                • {lastNoiseCheckStatus}
-                              </span>
-                            )}
-                          </span>
-                        )}
-
-                        {/* Quick Test Noise Button */}
-                        <button
-                          type="button"
-                          disabled={isCheckingNoise}
-                          onClick={() => performNoiseCheck()}
-                          className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 hover:text-white transition flex items-center gap-1"
-                          title="Test ambient noise check now"
-                        >
-                          <span>Test Mic</span>
-                        </button>
-                      </div>
-                    )
-                  )}
-
                   <span
                     className="text-[10px] text-blue-300/90 font-medium px-2 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/20 flex items-center gap-1"
-                    title="Live synchronized with database across all your devices"
                   >
                     <Globe className="w-3 h-3 text-blue-400" />
                     <span>Cloud Synced</span>
@@ -1040,8 +1210,8 @@ export default function DailyPlannerView({
               <button
                 type="button"
                 onClick={() => {
-                  const nextRunning = !timerRunning;
-                  setTimerRunning(nextRunning);
+                  setTimerRunning(true);
+                  setIsFreezeMinimized(false);
                   if (userId && activeSession) {
                     saveActiveTimerToDb(supabase, userId, {
                       sessionId: activeSession.id,
@@ -1050,14 +1220,15 @@ export default function DailyPlannerView({
                       durationMinutes: activeSession.duration_minutes,
                       totalSeconds: timerTotalDuration,
                       secondsLeft: timerSecondsLeft,
-                      isRunning: nextRunning,
+                      isRunning: true,
                     });
                   }
                 }}
-                className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white transition-colors"
-                title={timerRunning ? 'Pause Session' : 'Resume Session'}
+                className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-blue-500/20 transition-all ring-2 ring-blue-400/50 animate-pulse"
+                title="Resume Study Focus Lockdown"
               >
-                {timerRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                <Play className="w-4 h-4 fill-white" />
+                <span>Resume (Lockdown Focus)</span>
               </button>
 
               <button
@@ -1065,14 +1236,14 @@ export default function DailyPlannerView({
                 onClick={() => {
                   if (activeSession) handleFinishTimer(activeSession);
                 }}
-                className={`px-3.5 py-2 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-all ${
+                className={`px-3.5 py-2.5 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-all ${
                   isBreakSession
                     ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-500/20'
                     : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20'
                 }`}
               >
                 <Check className="w-4 h-4 stroke-[2.5]" />
-                <span>{isBreakSession ? 'End Break Early' : 'Complete Session'}</span>
+                <span>{isBreakSession ? 'End Break' : 'Complete Session'}</span>
               </button>
             </div>
           </div>
@@ -1584,7 +1755,7 @@ export default function DailyPlannerView({
 
       {/* ── NOISY STUDY AREA ALERT POPUP MODAL ── */}
       {isNoisyAlertOpen && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
+        <div className="fixed inset-0 z-[100000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-md p-6 shadow-2xl shadow-amber-500/10 space-y-5 animate-in zoom-in-95 text-center">
             {/* Warning Icon Badge */}
             <div className="relative mx-auto w-16 h-16 flex items-center justify-center">
@@ -1646,6 +1817,7 @@ export default function DailyPlannerView({
                   // Reset countdown so user gets a fresh 10-minute quiet study window
                   lastNoiseCheckedSecondRef.current = activeTimerElapsedSecondsRef.current;
                   setTimerRunning(true);
+                  setIsFreezeMinimized(false);
                   if (userId && activeTimerSessionId) {
                     const s = currentDaySessions.find((item) => item.id === activeTimerSessionId);
                     if (s) {
@@ -1684,7 +1856,7 @@ export default function DailyPlannerView({
 
       {/* ── TIMER FINISHED ALARM & TRANSITION MODAL ── */}
       {completedTimerModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
+        <div className="fixed inset-0 z-[100000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
           <div
             className={`bg-slate-900 border rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in zoom-in-95 text-center ${
               completedTimerModal.type === 'study'

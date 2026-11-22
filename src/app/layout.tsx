@@ -5,6 +5,7 @@ import Sidebar from '@/components/Sidebar';
 import MobileBottomNav from '@/components/MobileBottomNav';
 import PwaRegister from '@/components/PwaRegister';
 import AppSplashLoader from '@/components/AppSplashLoader';
+import GlobalActiveStudyGuard from '@/components/GlobalActiveStudyGuard';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { NavigationProvider } from '@/context/NavigationContext';
 
@@ -69,6 +70,7 @@ export default function RootLayout({
         <PwaRegister />
         <ThemeProvider>
           <AppSplashLoader />
+          <GlobalActiveStudyGuard />
           <NavigationProvider>
             <div className="flex h-screen overflow-hidden flex-col lg:flex-row">
               <Sidebar />
