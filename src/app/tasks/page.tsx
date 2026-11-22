@@ -258,12 +258,21 @@ export default function TasksPage() {
       return;
     }
 
+    const sortedItems = [...resolvedItems].sort((a, b) => {
+      const partsA = (a.start_time || '00:00').split(':').map(Number);
+      const partsB = (b.start_time || '00:00').split(':').map(Number);
+      const minA = (partsA[0] || 0) * 60 + (partsA[1] || 0);
+      const minB = (partsB[0] || 0) * 60 + (partsB[1] || 0);
+      if (minA !== minB) return minA - minB;
+      return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+    });
+
     try {
       setIsExportingPdf(true);
       await generateDailySchedulePdf({
         userName: userProfile?.full_name || 'Evolve User',
         date: todayStr,
-        sessions: resolvedItems,
+        sessions: sortedItems,
         tasks,
         folders,
         preferences: {
@@ -468,12 +477,15 @@ export default function TasksPage() {
           .select('*')
           .eq('user_id', user.id)
           .eq('date', date)
-          .order('sort_order', { ascending: true }),
+          .order('sort_order', { ascending: true })
+          .order('start_time', { ascending: true }),
         supabase
           .from('daily_schedule_items')
           .select('*')
           .eq('user_id', user.id)
-          .order('date', { ascending: true }),
+          .order('date', { ascending: true })
+          .order('sort_order', { ascending: true })
+          .order('start_time', { ascending: true }),
       ]);
 
       if (profRes.data) {

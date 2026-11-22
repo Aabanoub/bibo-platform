@@ -396,6 +396,11 @@ export default function DailyPlannerView({
           ...s,
           is_completed: isDone,
         };
+      })
+      .sort((a, b) => {
+        const timeDiff = timeToMinutes(a.start_time) - timeToMinutes(b.start_time);
+        if (timeDiff !== 0) return timeDiff;
+        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
       });
   }, [scheduleItems, currentDate, optimisticOverrides]);
 

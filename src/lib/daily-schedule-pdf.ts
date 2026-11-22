@@ -159,14 +159,32 @@ export async function generateDailySchedulePdf(data: DailySchedulePdfData): Prom
   doc.setFillColor(59, 130, 246); // Blue-500
   doc.rect(0, 40, pageWidth, 1.5, 'F');
 
+  // Helper to convert "HH:MM" to minutes for robust chronological sorting
+  const timeToMinutes = (t?: string): number => {
+    if (!t) return 0;
+    const parts = t.split(':').map((p) => parseInt(p, 10));
+    if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return 0;
+    return parts[0] * 60 + parts[1];
+  };
+
+  // Sort sessions strictly chronologically by start_time, then sort_order
+  const sortedSessions = [...data.sessions].sort((a, b) => {
+    const minA = timeToMinutes(a.start_time);
+    const minB = timeToMinutes(b.start_time);
+    if (minA !== minB) {
+      return minA - minB;
+    }
+    return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+  });
+
   // ── 2. Calculate Summary Metrics ───────────────────────────────────────────
-  const taskSessions = data.sessions.filter((s) => s.session_type === 'task');
-  const breakSessions = data.sessions.filter((s) => s.session_type === 'break');
-  const totalPlannedMin = data.sessions.reduce((acc, s) => acc + (s.duration_minutes || 0), 0);
+  const taskSessions = sortedSessions.filter((s) => s.session_type === 'task');
+  const breakSessions = sortedSessions.filter((s) => s.session_type === 'break');
+  const totalPlannedMin = sortedSessions.reduce((acc, s) => acc + (s.duration_minutes || 0), 0);
   const totalBreakMin = breakSessions.reduce((acc, s) => acc + (s.duration_minutes || 0), 0);
-  const completedSessions = data.sessions.filter((s) => s.is_completed);
-  const completionRate = data.sessions.length > 0
-    ? Math.round((completedSessions.length / data.sessions.length) * 100)
+  const completedSessions = sortedSessions.filter((s) => s.is_completed);
+  const completionRate = sortedSessions.length > 0
+    ? Math.round((completedSessions.length / sortedSessions.length) * 100)
     : 0;
 
   // ── 3. Section: Daily KPI Overview Cards ───────────────────────────────────
@@ -197,7 +215,7 @@ export async function generateDailySchedulePdf(data: DailySchedulePdfData): Prom
     {
       label: 'Execution Status',
       value: `${completionRate}%`,
-      sub: `${completedSessions.length} of ${data.sessions.length} Completed`,
+      sub: `${completedSessions.length} of ${sortedSessions.length} Completed`,
       color: [16, 185, 129], // Emerald
     },
     {
@@ -255,7 +273,7 @@ export async function generateDailySchedulePdf(data: DailySchedulePdfData): Prom
   const tasksMap = new Map<string, Task>();
   data.tasks.forEach((t) => tasksMap.set(t.id, t));
 
-  const tableRows = data.sessions.map((s) => {
+  const tableRows = sortedSessions.map((s) => {
     const isBreak = s.session_type === 'break';
     const timeCol = `${s.start_time} - ${s.end_time}`;
     const cleanTitle = stripEmojis(s.title) || (isBreak ? 'Short Break' : 'Scheduled Task');
