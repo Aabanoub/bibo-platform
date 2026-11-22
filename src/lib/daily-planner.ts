@@ -20,6 +20,8 @@ export interface SchedulingPreferences {
   highFocusEnd: string; // "12:00"
   preferredBreakDuration: number; // in minutes (default 15)
   maxDailyStudyMinutes: number; // in minutes (default 360 = 6h)
+  noiseGuardEnabled?: boolean; // Check ambient noise every 10 mins (default true)
+  noiseSensitivity?: 'relaxed' | 'normal' | 'strict'; // Noise detection sensitivity
 }
 
 export const DEFAULT_PREFERENCES: SchedulingPreferences = {
@@ -29,6 +31,8 @@ export const DEFAULT_PREFERENCES: SchedulingPreferences = {
   highFocusEnd: '12:00',
   preferredBreakDuration: 15,
   maxDailyStudyMinutes: 360,
+  noiseGuardEnabled: true,
+  noiseSensitivity: 'normal',
 };
 
 export interface DailyPlannerInput {

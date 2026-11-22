@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type {
   Task,
   TaskFolder,
@@ -20,6 +20,10 @@ import { toLocalDateStr } from '@/lib/weekly-forecast';
 import {
   adaptWhenSessionOverruns,
 } from '@/lib/adaptive-scheduler';
+import {
+  sampleAmbientNoise,
+  playNoiseAlertSound,
+} from '@/lib/noise-detector';
 import {
   Sparkles,
   Calendar,
@@ -46,6 +50,12 @@ import {
   Zap,
   Info,
   Loader2,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
+  AlertOctagon,
+  Radio,
 } from 'lucide-react';
 import { FOLDER_COLORS } from './TaskFolderModal';
 
@@ -98,6 +108,17 @@ export default function DailyPlannerView({
   const [customStartTime, setCustomStartTime] = useState<string>('');
   const [customDuration, setCustomDuration] = useState<number>(30);
 
+  // Ambient Noise Detection State (10-minute check during active study timer)
+  const [isCheckingNoise, setIsCheckingNoise] = useState(false);
+  const [isNoisyAlertOpen, setIsNoisyAlertOpen] = useState(false);
+  const [detectedNoiseScore, setDetectedNoiseScore] = useState<number>(0);
+  const [lastNoiseCheckStatus, setLastNoiseCheckStatus] = useState<string | null>(null);
+  const [micPermissionState, setMicPermissionState] = useState<'prompt' | 'granted' | 'denied'>('prompt');
+
+  const activeTimerElapsedSecondsRef = useRef<number>(0);
+  const lastNoiseCheckedSecondRef = useRef<number>(0);
+  const isCheckingNoiseRef = useRef<boolean>(false);
+
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Sync preferences if userPreferences prop changes
@@ -114,10 +135,81 @@ export default function DailyPlannerView({
     };
   }, []);
 
-  // Timer Tick handler
+  const getThresholdForSensitivity = useCallback(
+    (sensitivity?: 'relaxed' | 'normal' | 'strict') => {
+      switch (sensitivity) {
+        case 'relaxed':
+          return 46;
+        case 'strict':
+          return 22;
+        case 'normal':
+        default:
+          return 32;
+      }
+    },
+    []
+  );
+
+  const performNoiseCheck = useCallback(async () => {
+    if (isCheckingNoiseRef.current) return;
+    isCheckingNoiseRef.current = true;
+    setIsCheckingNoise(true);
+
+    const threshold = getThresholdForSensitivity(preferences.noiseSensitivity);
+
+    try {
+      const result = await sampleAmbientNoise({
+        sampleDurationMs: 3500,
+        thresholdScore: threshold,
+        noisySamplesRatio: 0.25,
+      });
+
+      if (result.error === 'permission_denied') {
+        setMicPermissionState('denied');
+        setLastNoiseCheckStatus('Mic blocked');
+        return;
+      }
+
+      setMicPermissionState('granted');
+      setDetectedNoiseScore(result.score);
+
+      if (result.isNoisy) {
+        // Automatically pause the study timer!
+        setTimerRunning(false);
+        setIsNoisyAlertOpen(true);
+        setLastNoiseCheckStatus(`Noisy (${result.score}%)`);
+        playNoiseAlertSound();
+      } else {
+        setLastNoiseCheckStatus(`Quiet (${result.score}%)`);
+      }
+    } catch (err) {
+      console.error('Ambient noise check error:', err);
+    } finally {
+      isCheckingNoiseRef.current = false;
+      setIsCheckingNoise(false);
+    }
+  }, [preferences.noiseSensitivity, getThresholdForSensitivity]);
+
+  // Timer Tick handler + 10-Minute Noise Check
   useEffect(() => {
     if (timerRunning) {
       timerRef.current = setInterval(() => {
+        activeTimerElapsedSecondsRef.current += 1;
+
+        // Check if 10 minutes (600 seconds) have elapsed since last noise check
+        const elapsedSinceLastCheck =
+          activeTimerElapsedSecondsRef.current - lastNoiseCheckedSecondRef.current;
+        const NOISE_CHECK_INTERVAL_SECONDS = 600; // 10 minutes
+
+        if (
+          preferences.noiseGuardEnabled !== false &&
+          elapsedSinceLastCheck >= NOISE_CHECK_INTERVAL_SECONDS &&
+          !isCheckingNoiseRef.current
+        ) {
+          lastNoiseCheckedSecondRef.current = activeTimerElapsedSecondsRef.current;
+          performNoiseCheck();
+        }
+
         setTimerSecondsLeft((prev) => {
           if (prev <= 1) {
             clearInterval(timerRef.current!);
@@ -134,7 +226,7 @@ export default function DailyPlannerView({
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [timerRunning]);
+  }, [timerRunning, preferences.noiseGuardEnabled, performNoiseCheck]);
 
   // Folders lookup map
   const foldersMap = new Map(folders.map((f) => [f.id, f]));
@@ -275,6 +367,8 @@ export default function DailyPlannerView({
     setTimerTotalDuration(initialSeconds);
     setTimerSecondsLeft(initialSeconds);
     setTimerRunning(true);
+    activeTimerElapsedSecondsRef.current = 0;
+    lastNoiseCheckedSecondRef.current = 0;
   };
 
   // Finish study timer early or on time and log actual duration
@@ -614,19 +708,63 @@ export default function DailyPlannerView({
 
       {/* ── ACTIVE LIVE TIMER PANEL (When session active) ── */}
       {activeTimerSessionId && (
-        <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-950/60 via-slate-900 to-indigo-950/60 border border-blue-500/40 shadow-xl flex items-center justify-between gap-3 animate-in fade-in">
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-950/60 via-slate-900 to-indigo-950/60 border border-blue-500/40 shadow-xl flex flex-wrap items-center justify-between gap-3 animate-in fade-in">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-blue-500/20 border border-blue-500/40 text-blue-300 animate-pulse">
               <Clock className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-300">
                   Active Study Timer
                 </span>
                 <span className="text-xs text-slate-400">
                   {currentDaySessions.find((s) => s.id === activeTimerSessionId)?.title}
                 </span>
+
+                {/* Noise Guard Indicator & Quick Test */}
+                {preferences.noiseGuardEnabled !== false && (
+                  <div className="flex items-center gap-1.5">
+                    {isCheckingNoise ? (
+                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1 animate-pulse">
+                        <Radio className="w-3 h-3 text-amber-400 animate-spin" />
+                        <span>Checking Room Noise...</span>
+                      </span>
+                    ) : micPermissionState === 'denied' ? (
+                      <span
+                        className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1"
+                        title="Microphone permission was blocked"
+                      >
+                        <MicOff className="w-3 h-3 text-rose-400" />
+                        <span>Mic Blocked</span>
+                      </span>
+                    ) : (
+                      <span
+                        className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1"
+                        title="Automatically checks ambient noise every 10 minutes"
+                      >
+                        <Mic className="w-3 h-3 text-emerald-400" />
+                        <span>Noise Guard (10m)</span>
+                        {lastNoiseCheckStatus && (
+                          <span className="text-[9px] text-slate-400 font-normal">
+                            • {lastNoiseCheckStatus}
+                          </span>
+                        )}
+                      </span>
+                    )}
+
+                    {/* Quick Test Noise Button */}
+                    <button
+                      type="button"
+                      disabled={isCheckingNoise}
+                      onClick={() => performNoiseCheck()}
+                      className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 hover:text-white transition flex items-center gap-1"
+                      title="Test ambient noise check now"
+                    >
+                      <span>Test Mic</span>
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="text-2xl font-black text-white font-mono tracking-tight mt-0.5">
                 {String(Math.floor(timerSecondsLeft / 60)).padStart(2, '0')}:
@@ -995,6 +1133,47 @@ export default function DailyPlannerView({
                   className="w-full accent-blue-500"
                 />
               </div>
+
+              {/* 10-Minute Study Noise Guard Setting */}
+              <div className="pt-2 border-t border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-200 font-semibold text-xs flex items-center gap-1.5">
+                    <Mic className="w-3.5 h-3.5 text-blue-400" />
+                    <span>10-Minute Study Noise Guard</span>
+                  </label>
+                  <input
+                    type="checkbox"
+                    checked={preferences.noiseGuardEnabled !== false}
+                    onChange={(e) =>
+                      setPreferences({ ...preferences, noiseGuardEnabled: e.target.checked })
+                    }
+                    className="accent-blue-600 rounded cursor-pointer w-4 h-4"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Checks your microphone every 10 minutes. If in a noisy area, it pauses the study timer until you move to a quiet spot.
+                </p>
+
+                {preferences.noiseGuardEnabled !== false && (
+                  <div className="pt-1 flex items-center gap-2">
+                    <span className="text-[11px] text-slate-400">Sensitivity:</span>
+                    {(['relaxed', 'normal', 'strict'] as const).map((lvl) => (
+                      <button
+                        key={lvl}
+                        type="button"
+                        onClick={() => setPreferences({ ...preferences, noiseSensitivity: lvl })}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all ${
+                          (preferences.noiseSensitivity || 'normal') === lvl
+                            ? 'bg-blue-600 text-white border-blue-500 shadow-sm'
+                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+                        }`}
+                      >
+                        {lvl}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
@@ -1087,6 +1266,92 @@ export default function DailyPlannerView({
                 className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white"
               >
                 Save Time Slot
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── NOISY STUDY AREA ALERT POPUP MODAL ── */}
+      {isNoisyAlertOpen && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-md p-6 shadow-2xl shadow-amber-500/10 space-y-5 animate-in zoom-in-95 text-center">
+            {/* Warning Icon Badge */}
+            <div className="relative mx-auto w-16 h-16 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-2xl bg-amber-500/20 animate-ping opacity-50" />
+              <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500/30 via-red-500/20 to-amber-600/30 border border-amber-500/40 flex items-center justify-center text-amber-400 shadow-lg">
+                <VolumeX className="w-8 h-8" />
+              </div>
+            </div>
+
+            {/* Header & Exact User Quote */}
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-bold uppercase tracking-wider">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>Noisy Area Detected</span>
+              </div>
+
+              {/* Exact user-requested message */}
+              <div className="p-4 rounded-2xl bg-gradient-to-b from-amber-500/15 to-amber-500/5 border border-amber-500/30 shadow-inner">
+                <p className="text-base sm:text-lg font-black text-amber-200 tracking-tight leading-snug">
+                  “this is not a study mood don&apos;t trick your self go to better place”
+                </p>
+              </div>
+
+              <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+                The 10-minute noise check detected high ambient sound via your microphone.
+                Your study timer has been automatically <span className="text-white font-semibold">paused</span> so your focus stats and study streak stay honest.
+              </p>
+            </div>
+
+            {/* Noise Level Gauge */}
+            <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 text-xs space-y-2 text-left">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-400 flex items-center gap-1.5 font-medium">
+                  <Mic className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Detected Ambient Volume</span>
+                </span>
+                <span className="font-mono font-bold text-amber-400">
+                  {detectedNoiseScore}% (Limit: {getThresholdForSensitivity(preferences.noiseSensitivity)}%)
+                </span>
+              </div>
+              <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden p-0.5">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-amber-500 to-rose-500 transition-all duration-300"
+                  style={{ width: `${Math.min(100, Math.max(12, detectedNoiseScore))}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[10px] text-slate-500">
+                <span>Quiet Study Zone</span>
+                <span className="text-amber-400 font-semibold">Noisy Environment</span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsNoisyAlertOpen(false);
+                  // Reset countdown so user gets a fresh 10-minute quiet study window
+                  lastNoiseCheckedSecondRef.current = activeTimerElapsedSecondsRef.current;
+                  setTimerRunning(true);
+                }}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 active:scale-[0.98] transition-all"
+              >
+                <Play className="w-4 h-4 fill-white" />
+                <span>I&apos;m in a Quiet Place (Resume Timer)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsNoisyAlertOpen(false);
+                  // Remains paused!
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-xs font-semibold transition-colors"
+              >
+                Keep Timer Paused
               </button>
             </div>
           </div>
