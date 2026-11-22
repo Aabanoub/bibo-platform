@@ -28,6 +28,13 @@ import {
   playStudyFinishedAlarm,
   playBreakFinishedAlarm,
 } from '@/lib/study-sound';
+import { createClient } from '@/lib/supabase';
+import {
+  saveActiveTimerToDb,
+  clearActiveTimerFromDb,
+  loadActiveTimerFromDb,
+  computeAdjustedTimerState,
+} from '@/lib/active-timer-sync';
 import {
   Sparkles,
   Calendar,
@@ -61,6 +68,7 @@ import {
   AlertOctagon,
   Radio,
   Bell,
+  Globe,
 } from 'lucide-react';
 import { FOLDER_COLORS } from './TaskFolderModal';
 
@@ -127,6 +135,10 @@ export default function DailyPlannerView({
     nextSession?: DailyScheduleItem;
   } | null>(null);
 
+  // Supabase Client & User Authentication for Cross-Device Sync
+  const supabase = useRef(createClient()).current;
+  const [userId, setUserId] = useState<string | null>(null);
+
   const activeTimerElapsedSecondsRef = useRef<number>(0);
   const lastNoiseCheckedSecondRef = useRef<number>(0);
   const isCheckingNoiseRef = useRef<boolean>(false);
@@ -146,6 +158,103 @@ export default function DailyPlannerView({
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
+
+  // ── CROSS-DEVICE ACTIVE TIMER SYNCHRONIZATION ──
+  useEffect(() => {
+    async function initAuthAndTimer() {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
+        setUserId(user.id);
+
+        // Load active timer state from Supabase (e.g. started on phone or another tab)
+        const remoteTimer = await loadActiveTimerFromDb(supabase, user.id);
+        if (remoteTimer && remoteTimer.sessionId) {
+          if (remoteTimer.isFinished) {
+            // Finished while device was away: play alarm and show completion modal
+            if (remoteTimer.sessionType === 'break') {
+              playBreakFinishedAlarm();
+              setCompletedTimerModal({
+                type: 'break',
+                sessionTitle: remoteTimer.title,
+              });
+            } else {
+              playStudyFinishedAlarm();
+              setCompletedTimerModal({
+                type: 'study',
+                sessionTitle: remoteTimer.title,
+              });
+            }
+            await clearActiveTimerFromDb(supabase, user.id);
+          } else {
+            // Restore active timer from synchronized wall-clock state
+            setActiveTimerSessionId(remoteTimer.sessionId);
+            setTimerTotalDuration(remoteTimer.totalSeconds);
+            setTimerSecondsLeft(remoteTimer.secondsLeft);
+            setTimerRunning(remoteTimer.isRunning);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to init cross-device timer:', e);
+      }
+    }
+
+    initAuthAndTimer();
+  }, [supabase]);
+
+  // Realtime Broadcast across other open devices
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel(`active-timer-realtime-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'active_study_timers',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload: any) => {
+          if (payload.eventType === 'DELETE') {
+            setActiveTimerSessionId(null);
+            setTimerRunning(false);
+          } else if (payload.new) {
+            const adjusted = computeAdjustedTimerState(payload.new as any);
+            if (adjusted.isFinished) {
+              if (adjusted.sessionType === 'break') {
+                playBreakFinishedAlarm();
+                setCompletedTimerModal({
+                  type: 'break',
+                  sessionTitle: adjusted.title,
+                });
+              } else {
+                playStudyFinishedAlarm();
+                setCompletedTimerModal({
+                  type: 'study',
+                  sessionTitle: adjusted.title,
+                });
+              }
+              setActiveTimerSessionId(null);
+              setTimerRunning(false);
+            } else {
+              setActiveTimerSessionId(adjusted.sessionId);
+              setTimerTotalDuration(adjusted.totalSeconds);
+              setTimerSecondsLeft(adjusted.secondsLeft);
+              setTimerRunning(adjusted.isRunning);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, supabase]);
 
   const getThresholdForSensitivity = useCallback(
     (sensitivity?: 'relaxed' | 'normal' | 'strict') => {
@@ -191,6 +300,22 @@ export default function DailyPlannerView({
         setIsNoisyAlertOpen(true);
         setLastNoiseCheckStatus(`Noisy (${result.score}%)`);
         playNoiseAlertSound();
+
+        // Sync pause state across devices
+        if (userId && activeTimerSessionId) {
+          const s = currentDaySessions.find((item) => item.id === activeTimerSessionId);
+          if (s) {
+            saveActiveTimerToDb(supabase, userId, {
+              sessionId: s.id,
+              sessionType: s.session_type,
+              title: s.title,
+              durationMinutes: s.duration_minutes,
+              totalSeconds: timerTotalDuration,
+              secondsLeft: timerSecondsLeft,
+              isRunning: false,
+            });
+          }
+        }
       } else {
         setLastNoiseCheckStatus(`Quiet (${result.score}%)`);
       }
@@ -329,10 +454,21 @@ export default function DailyPlannerView({
     }
   };
 
-  // Start live study session timer
+  // Start live study session timer (with cross-device database synchronization)
   const handleStartTimer = (session: DailyScheduleItem) => {
     if (activeTimerSessionId === session.id && timerRunning) {
       setTimerRunning(false);
+      if (userId) {
+        saveActiveTimerToDb(supabase, userId, {
+          sessionId: session.id,
+          sessionType: session.session_type,
+          title: session.title,
+          durationMinutes: session.duration_minutes,
+          totalSeconds: timerTotalDuration,
+          secondsLeft: timerSecondsLeft,
+          isRunning: false,
+        });
+      }
       return;
     }
 
@@ -343,6 +479,18 @@ export default function DailyPlannerView({
     setTimerRunning(true);
     activeTimerElapsedSecondsRef.current = 0;
     lastNoiseCheckedSecondRef.current = 0;
+
+    if (userId) {
+      saveActiveTimerToDb(supabase, userId, {
+        sessionId: session.id,
+        sessionType: session.session_type,
+        title: session.title,
+        durationMinutes: session.duration_minutes,
+        totalSeconds: initialSeconds,
+        secondsLeft: initialSeconds,
+        isRunning: true,
+      });
+    }
   };
 
   // Finish study timer early or on time and log actual duration
@@ -353,6 +501,11 @@ export default function DailyPlannerView({
 
       setTimerRunning(false);
       setActiveTimerSessionId(null);
+
+      // Clear from database across all devices
+      if (userId) {
+        await clearActiveTimerFromDb(supabase, userId);
+      }
 
       // If session overran, adapt subsequent unlocked sessions
       if (actualMinutes > session.duration_minutes) {
@@ -867,6 +1020,14 @@ export default function DailyPlannerView({
                       </div>
                     )
                   )}
+
+                  <span
+                    className="text-[10px] text-blue-300/90 font-medium px-2 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/20 flex items-center gap-1"
+                    title="Live synchronized with database across all your devices"
+                  >
+                    <Globe className="w-3 h-3 text-blue-400" />
+                    <span>Cloud Synced</span>
+                  </span>
                 </div>
                 <div className="text-2xl font-black text-white font-mono tracking-tight mt-0.5">
                   {String(Math.floor(timerSecondsLeft / 60)).padStart(2, '0')}:
@@ -878,7 +1039,21 @@ export default function DailyPlannerView({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setTimerRunning(!timerRunning)}
+                onClick={() => {
+                  const nextRunning = !timerRunning;
+                  setTimerRunning(nextRunning);
+                  if (userId && activeSession) {
+                    saveActiveTimerToDb(supabase, userId, {
+                      sessionId: activeSession.id,
+                      sessionType: activeSession.session_type,
+                      title: activeSession.title,
+                      durationMinutes: activeSession.duration_minutes,
+                      totalSeconds: timerTotalDuration,
+                      secondsLeft: timerSecondsLeft,
+                      isRunning: nextRunning,
+                    });
+                  }
+                }}
                 className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white transition-colors"
                 title={timerRunning ? 'Pause Session' : 'Resume Session'}
               >
@@ -1471,6 +1646,20 @@ export default function DailyPlannerView({
                   // Reset countdown so user gets a fresh 10-minute quiet study window
                   lastNoiseCheckedSecondRef.current = activeTimerElapsedSecondsRef.current;
                   setTimerRunning(true);
+                  if (userId && activeTimerSessionId) {
+                    const s = currentDaySessions.find((item) => item.id === activeTimerSessionId);
+                    if (s) {
+                      saveActiveTimerToDb(supabase, userId, {
+                        sessionId: s.id,
+                        sessionType: s.session_type,
+                        title: s.title,
+                        durationMinutes: s.duration_minutes,
+                        totalSeconds: timerTotalDuration,
+                        secondsLeft: timerSecondsLeft,
+                        isRunning: true,
+                      });
+                    }
+                  }
                 }}
                 className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 active:scale-[0.98] transition-all"
               >

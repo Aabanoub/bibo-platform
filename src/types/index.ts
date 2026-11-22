@@ -34,8 +34,21 @@ export interface Profile {
   high_focus_end?: string;
   preferred_break_duration?: number;
   max_daily_study_minutes?: number;
+  active_study_timer?: ActiveStudyTimerState | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ActiveStudyTimerState {
+  session_id: string;
+  session_type: ScheduleSessionType;
+  title: string;
+  duration_minutes: number;
+  total_seconds: number;
+  seconds_left: number;
+  is_running: boolean;
+  started_at: string; // ISO timestamp
+  updated_at: string; // ISO timestamp
 }
 
 export interface Note {
