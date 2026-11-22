@@ -4,6 +4,10 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Task } from '@/types';
 import {
+  playStudyFinishedAlarm,
+  playBreakFinishedAlarm,
+} from '@/lib/study-sound';
+import {
   Timer,
   Play,
   Pause,
@@ -307,14 +311,15 @@ export default function FocusPage() {
 
   const handleSessionComplete = () => {
     setIsRunning(false);
-    soundEngineRef.current?.playChime();
 
     if (mode === 'focus') {
+      playStudyFinishedAlarm();
       setCompletedSessions((c) => c + 1);
       const nextMode = (completedSessions + 1) % 4 === 0 ? 'longBreak' : 'shortBreak';
       setMode(nextMode);
       setTimeLeft(durations[nextMode]);
     } else {
+      playBreakFinishedAlarm();
       setMode('focus');
       setTimeLeft(durations.focus);
     }

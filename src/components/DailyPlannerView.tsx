@@ -25,6 +25,10 @@ import {
   playNoiseAlertSound,
 } from '@/lib/noise-detector';
 import {
+  playStudyFinishedAlarm,
+  playBreakFinishedAlarm,
+} from '@/lib/study-sound';
+import {
   Sparkles,
   Calendar,
   Clock,
@@ -56,6 +60,7 @@ import {
   VolumeX,
   AlertOctagon,
   Radio,
+  Bell,
 } from 'lucide-react';
 import { FOLDER_COLORS } from './TaskFolderModal';
 
@@ -114,6 +119,13 @@ export default function DailyPlannerView({
   const [detectedNoiseScore, setDetectedNoiseScore] = useState<number>(0);
   const [lastNoiseCheckStatus, setLastNoiseCheckStatus] = useState<string | null>(null);
   const [micPermissionState, setMicPermissionState] = useState<'prompt' | 'granted' | 'denied'>('prompt');
+
+  // Completed Session Alarm & Next Step Modal State
+  const [completedTimerModal, setCompletedTimerModal] = useState<{
+    type: 'study' | 'break';
+    sessionTitle: string;
+    nextSession?: DailyScheduleItem;
+  } | null>(null);
 
   const activeTimerElapsedSecondsRef = useRef<number>(0);
   const lastNoiseCheckedSecondRef = useRef<number>(0);
@@ -189,44 +201,6 @@ export default function DailyPlannerView({
       setIsCheckingNoise(false);
     }
   }, [preferences.noiseSensitivity, getThresholdForSensitivity]);
-
-  // Timer Tick handler + 10-Minute Noise Check
-  useEffect(() => {
-    if (timerRunning) {
-      timerRef.current = setInterval(() => {
-        activeTimerElapsedSecondsRef.current += 1;
-
-        // Check if 10 minutes (600 seconds) have elapsed since last noise check
-        const elapsedSinceLastCheck =
-          activeTimerElapsedSecondsRef.current - lastNoiseCheckedSecondRef.current;
-        const NOISE_CHECK_INTERVAL_SECONDS = 600; // 10 minutes
-
-        if (
-          preferences.noiseGuardEnabled !== false &&
-          elapsedSinceLastCheck >= NOISE_CHECK_INTERVAL_SECONDS &&
-          !isCheckingNoiseRef.current
-        ) {
-          lastNoiseCheckedSecondRef.current = activeTimerElapsedSecondsRef.current;
-          performNoiseCheck();
-        }
-
-        setTimerSecondsLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(timerRef.current!);
-            setTimerRunning(false);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [timerRunning, preferences.noiseGuardEnabled, performNoiseCheck]);
 
   // Folders lookup map
   const foldersMap = new Map(folders.map((f) => [f.id, f]));
@@ -372,39 +346,139 @@ export default function DailyPlannerView({
   };
 
   // Finish study timer early or on time and log actual duration
-  const handleFinishTimer = async (session: DailyScheduleItem) => {
-    const secondsSpent = timerTotalDuration - timerSecondsLeft;
-    const actualMinutes = Math.max(1, Math.round(secondsSpent / 60));
+  const handleFinishTimer = useCallback(
+    async (session: DailyScheduleItem) => {
+      const secondsSpent = timerTotalDuration - timerSecondsLeft;
+      const actualMinutes = Math.max(1, Math.round(secondsSpent / 60));
 
-    setTimerRunning(false);
-    setActiveTimerSessionId(null);
+      setTimerRunning(false);
+      setActiveTimerSessionId(null);
 
-    // If session overran, adapt subsequent unlocked sessions
-    if (actualMinutes > session.duration_minutes) {
-      const adapted = adaptWhenSessionOverruns(
-        currentDaySessions,
-        session.id,
-        actualMinutes,
-        preferences.endTime
-      );
-      await onSaveSchedule(adapted.updatedSessions);
-    } else {
-      const updated = currentDaySessions.map((s) =>
-        s.id === session.id
-          ? {
-              ...s,
-              is_completed: true,
-              actual_duration_minutes: actualMinutes,
+      // If session overran, adapt subsequent unlocked sessions
+      if (actualMinutes > session.duration_minutes) {
+        const adapted = adaptWhenSessionOverruns(
+          currentDaySessions,
+          session.id,
+          actualMinutes,
+          preferences.endTime
+        );
+        await onSaveSchedule(adapted.updatedSessions);
+      } else {
+        const updated = currentDaySessions.map((s) =>
+          s.id === session.id
+            ? {
+                ...s,
+                is_completed: true,
+                actual_duration_minutes: actualMinutes,
+              }
+            : s
+        );
+        await onSaveSchedule(updated);
+      }
+
+      if (session.task_id) {
+        await onCompleteTask(session.task_id, true);
+      }
+    },
+    [
+      timerTotalDuration,
+      timerSecondsLeft,
+      currentDaySessions,
+      preferences.endTime,
+      onSaveSchedule,
+      onCompleteTask,
+    ]
+  );
+
+  // When active timer countdown finishes naturally
+  const handleTimerCompleted = useCallback(
+    async (session: DailyScheduleItem) => {
+      const isBreak = session.session_type === 'break';
+
+      if (isBreak) {
+        // Break finished alarm sound
+        playBreakFinishedAlarm();
+        const nextTask = currentDaySessions.find(
+          (s) => !s.is_completed && s.session_type === 'task'
+        );
+        setCompletedTimerModal({
+          type: 'break',
+          sessionTitle: session.title,
+          nextSession: nextTask,
+        });
+      } else {
+        // Study finished alarm sound
+        playStudyFinishedAlarm();
+        const nextSession = currentDaySessions.find(
+          (s) => !s.is_completed && s.id !== session.id
+        );
+        setCompletedTimerModal({
+          type: 'study',
+          sessionTitle: session.title,
+          nextSession,
+        });
+      }
+
+      await handleFinishTimer(session);
+    },
+    [currentDaySessions, handleFinishTimer]
+  );
+
+  // Timer Tick handler + 10-Minute Noise Check
+  useEffect(() => {
+    if (timerRunning) {
+      timerRef.current = setInterval(() => {
+        activeTimerElapsedSecondsRef.current += 1;
+
+        // Check if 10 minutes (600 seconds) have elapsed since last noise check
+        // Only run noise check during study sessions, not break sessions
+        const activeSession = currentDaySessions.find(
+          (s) => s.id === activeTimerSessionId
+        );
+        const isStudySession = activeSession?.session_type === 'task';
+
+        const elapsedSinceLastCheck =
+          activeTimerElapsedSecondsRef.current - lastNoiseCheckedSecondRef.current;
+        const NOISE_CHECK_INTERVAL_SECONDS = 600; // 10 minutes
+
+        if (
+          isStudySession &&
+          preferences.noiseGuardEnabled !== false &&
+          elapsedSinceLastCheck >= NOISE_CHECK_INTERVAL_SECONDS &&
+          !isCheckingNoiseRef.current
+        ) {
+          lastNoiseCheckedSecondRef.current = activeTimerElapsedSecondsRef.current;
+          performNoiseCheck();
+        }
+
+        setTimerSecondsLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(timerRef.current!);
+            setTimerRunning(false);
+
+            if (activeSession) {
+              handleTimerCompleted(activeSession);
             }
-          : s
-      );
-      await onSaveSchedule(updated);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else if (timerRef.current) {
+      clearInterval(timerRef.current);
     }
 
-    if (session.task_id) {
-      await onCompleteTask(session.task_id, true);
-    }
-  };
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [
+    timerRunning,
+    preferences.noiseGuardEnabled,
+    performNoiseCheck,
+    currentDaySessions,
+    activeTimerSessionId,
+    handleTimerCompleted,
+  ]);
 
   // Remove a session from the daily schedule (NEVER deletes the underlying task!)
   const handleRemoveSession = async (sessionId: string) => {
@@ -707,96 +781,128 @@ export default function DailyPlannerView({
       )}
 
       {/* ── ACTIVE LIVE TIMER PANEL (When session active) ── */}
-      {activeTimerSessionId && (
-        <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-950/60 via-slate-900 to-indigo-950/60 border border-blue-500/40 shadow-xl flex flex-wrap items-center justify-between gap-3 animate-in fade-in">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-blue-500/20 border border-blue-500/40 text-blue-300 animate-pulse">
-              <Clock className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-300">
-                  Active Study Timer
-                </span>
-                <span className="text-xs text-slate-400">
-                  {currentDaySessions.find((s) => s.id === activeTimerSessionId)?.title}
-                </span>
+      {activeTimerSessionId && (() => {
+        const activeSession = currentDaySessions.find((s) => s.id === activeTimerSessionId);
+        const isBreakSession = activeSession?.session_type === 'break';
 
-                {/* Noise Guard Indicator & Quick Test */}
-                {preferences.noiseGuardEnabled !== false && (
-                  <div className="flex items-center gap-1.5">
-                    {isCheckingNoise ? (
-                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1 animate-pulse">
-                        <Radio className="w-3 h-3 text-amber-400 animate-spin" />
-                        <span>Checking Room Noise...</span>
-                      </span>
-                    ) : micPermissionState === 'denied' ? (
-                      <span
-                        className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1"
-                        title="Microphone permission was blocked"
-                      >
-                        <MicOff className="w-3 h-3 text-rose-400" />
-                        <span>Mic Blocked</span>
-                      </span>
-                    ) : (
-                      <span
-                        className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1"
-                        title="Automatically checks ambient noise every 10 minutes"
-                      >
-                        <Mic className="w-3 h-3 text-emerald-400" />
-                        <span>Noise Guard (10m)</span>
-                        {lastNoiseCheckStatus && (
-                          <span className="text-[9px] text-slate-400 font-normal">
-                            • {lastNoiseCheckStatus}
+        return (
+          <div
+            className={`p-4 rounded-2xl border shadow-xl flex flex-wrap items-center justify-between gap-3 animate-in fade-in ${
+              isBreakSession
+                ? 'bg-gradient-to-r from-amber-950/70 via-slate-900 to-yellow-950/70 border-amber-500/40'
+                : 'bg-gradient-to-r from-blue-950/60 via-slate-900 to-indigo-950/60 border-blue-500/40'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className={`p-2.5 rounded-xl border animate-pulse ${
+                  isBreakSession
+                    ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                    : 'bg-blue-500/20 border-blue-500/40 text-blue-300'
+                }`}
+              >
+                {isBreakSession ? <Coffee className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                      isBreakSession
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        : 'bg-blue-500/20 text-blue-300'
+                    }`}
+                  >
+                    {isBreakSession ? 'Active Break Timer' : 'Active Study Timer'}
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    {activeSession?.title}
+                  </span>
+
+                  {isBreakSession ? (
+                    <span className="text-[10px] text-amber-300/90 font-medium px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 flex items-center gap-1">
+                      <Bell className="w-3 h-3 text-amber-400" />
+                      <span>Break Alarm on Finish</span>
+                    </span>
+                  ) : (
+                    preferences.noiseGuardEnabled !== false && (
+                      <div className="flex items-center gap-1.5">
+                        {isCheckingNoise ? (
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1 animate-pulse">
+                            <Radio className="w-3 h-3 text-amber-400 animate-spin" />
+                            <span>Checking Room Noise...</span>
+                          </span>
+                        ) : micPermissionState === 'denied' ? (
+                          <span
+                            className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1"
+                            title="Microphone permission was blocked"
+                          >
+                            <MicOff className="w-3 h-3 text-rose-400" />
+                            <span>Mic Blocked</span>
+                          </span>
+                        ) : (
+                          <span
+                            className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1"
+                            title="Automatically checks ambient noise every 10 minutes"
+                          >
+                            <Mic className="w-3 h-3 text-emerald-400" />
+                            <span>Noise Guard (10m)</span>
+                            {lastNoiseCheckStatus && (
+                              <span className="text-[9px] text-slate-400 font-normal">
+                                • {lastNoiseCheckStatus}
+                              </span>
+                            )}
                           </span>
                         )}
-                      </span>
-                    )}
 
-                    {/* Quick Test Noise Button */}
-                    <button
-                      type="button"
-                      disabled={isCheckingNoise}
-                      onClick={() => performNoiseCheck()}
-                      className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 hover:text-white transition flex items-center gap-1"
-                      title="Test ambient noise check now"
-                    >
-                      <span>Test Mic</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="text-2xl font-black text-white font-mono tracking-tight mt-0.5">
-                {String(Math.floor(timerSecondsLeft / 60)).padStart(2, '0')}:
-                {String(timerSecondsLeft % 60).padStart(2, '0')}
+                        {/* Quick Test Noise Button */}
+                        <button
+                          type="button"
+                          disabled={isCheckingNoise}
+                          onClick={() => performNoiseCheck()}
+                          className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 hover:text-white transition flex items-center gap-1"
+                          title="Test ambient noise check now"
+                        >
+                          <span>Test Mic</span>
+                        </button>
+                      </div>
+                    )
+                  )}
+                </div>
+                <div className="text-2xl font-black text-white font-mono tracking-tight mt-0.5">
+                  {String(Math.floor(timerSecondsLeft / 60)).padStart(2, '0')}:
+                  {String(timerSecondsLeft % 60).padStart(2, '0')}
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setTimerRunning(!timerRunning)}
-              className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white transition-colors"
-              title={timerRunning ? 'Pause Session' : 'Resume Session'}
-            >
-              {timerRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setTimerRunning(!timerRunning)}
+                className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white transition-colors"
+                title={timerRunning ? 'Pause Session' : 'Resume Session'}
+              >
+                {timerRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+              </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                const s = currentDaySessions.find((item) => item.id === activeTimerSessionId);
-                if (s) handleFinishTimer(s);
-              }}
-              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-500/20 transition-all"
-            >
-              <Check className="w-4 h-4 stroke-[2.5]" />
-              <span>Complete Session</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeSession) handleFinishTimer(activeSession);
+                }}
+                className={`px-3.5 py-2 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-all ${
+                  isBreakSession
+                    ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-500/20'
+                    : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20'
+                }`}
+              >
+                <Check className="w-4 h-4 stroke-[2.5]" />
+                <span>{isBreakSession ? 'End Break Early' : 'Complete Session'}</span>
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── DAILY TIMELINE LIST ── */}
       <div className="space-y-3">
@@ -989,10 +1095,12 @@ export default function DailyPlannerView({
                         onClick={() => handleStartTimer(session)}
                         className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all ${
                           isSessionActive && timerRunning
-                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                            ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                            : isSessionActive
+                            ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
                             : 'bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30'
                         }`}
-                        title="Start Pomodoro/Study Session Timer"
+                        title="Start Study Timer"
                       >
                         {isSessionActive && timerRunning ? (
                           <>
@@ -1003,6 +1111,33 @@ export default function DailyPlannerView({
                           <>
                             <Play className="w-3 h-3" />
                             <span>Start</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    {isBreak && !session.is_completed && (
+                      <button
+                        type="button"
+                        onClick={() => handleStartTimer(session)}
+                        className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all ${
+                          isSessionActive && timerRunning
+                            ? 'bg-amber-600 text-white shadow-md shadow-amber-500/20'
+                            : isSessionActive
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                            : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30'
+                        }`}
+                        title="Start Break Timer"
+                      >
+                        {isSessionActive && timerRunning ? (
+                          <>
+                            <Pause className="w-3 h-3" />
+                            <span>Pause Break</span>
+                          </>
+                        ) : (
+                          <>
+                            <Coffee className="w-3 h-3" />
+                            <span>Start Break</span>
                           </>
                         )}
                       </button>
@@ -1352,6 +1487,133 @@ export default function DailyPlannerView({
                 className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-xs font-semibold transition-colors"
               >
                 Keep Timer Paused
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TIMER FINISHED ALARM & TRANSITION MODAL ── */}
+      {completedTimerModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
+          <div
+            className={`bg-slate-900 border rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in zoom-in-95 text-center ${
+              completedTimerModal.type === 'study'
+                ? 'border-blue-500/50 shadow-blue-500/10'
+                : 'border-amber-500/50 shadow-amber-500/10'
+            }`}
+          >
+            {/* Animated Alarm Icon */}
+            <div className="relative mx-auto w-16 h-16 flex items-center justify-center">
+              <div
+                className={`absolute inset-0 rounded-2xl animate-ping opacity-40 ${
+                  completedTimerModal.type === 'study' ? 'bg-blue-500' : 'bg-amber-500'
+                }`}
+              />
+              <div
+                className={`relative w-16 h-16 rounded-2xl border flex items-center justify-center shadow-lg ${
+                  completedTimerModal.type === 'study'
+                    ? 'bg-gradient-to-br from-blue-600/30 to-indigo-600/30 border-blue-500/50 text-blue-300'
+                    : 'bg-gradient-to-br from-amber-600/30 to-yellow-600/30 border-amber-500/50 text-amber-300'
+                }`}
+              >
+                {completedTimerModal.type === 'study' ? (
+                  <Bell className="w-8 h-8 animate-bounce" />
+                ) : (
+                  <Coffee className="w-8 h-8 animate-bounce" />
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border ${
+                  completedTimerModal.type === 'study'
+                    ? 'bg-blue-500/15 border-blue-500/30 text-blue-300'
+                    : 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>
+                  {completedTimerModal.type === 'study'
+                    ? 'Study Timer Finished!'
+                    : 'Break Time Finished!'}
+                </span>
+              </div>
+
+              <h3 className="text-lg font-black text-white">
+                {completedTimerModal.type === 'study'
+                  ? 'Session Complete! Great Job 🎉'
+                  : 'Time to Refocus! ⏰'}
+              </h3>
+
+              <p className="text-xs text-slate-300 max-w-sm mx-auto leading-relaxed">
+                {completedTimerModal.type === 'study'
+                  ? `You successfully finished "${completedTimerModal.sessionTitle}". Take a well-deserved break to rest your mind.`
+                  : 'Your break has finished. Jump back into your next scheduled study session!'}
+              </p>
+            </div>
+
+            {/* Sound replay button */}
+            <div className="flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  completedTimerModal.type === 'study'
+                    ? playStudyFinishedAlarm()
+                    : playBreakFinishedAlarm()
+                }
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition"
+                title="Play alarm sound again"
+              >
+                <Volume2 className="w-3.5 h-3.5 text-blue-400" />
+                <span>Replay Alarm Sound</span>
+              </button>
+            </div>
+
+            {/* Action buttons */}
+            <div className="space-y-2 pt-2 border-t border-slate-800">
+              {completedTimerModal.type === 'study' &&
+                completedTimerModal.nextSession?.session_type === 'break' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = completedTimerModal.nextSession!;
+                      setCompletedTimerModal(null);
+                      handleStartTimer(next);
+                    }}
+                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-600 hover:brightness-110 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 active:scale-[0.98] transition-all"
+                  >
+                    <Coffee className="w-4 h-4" />
+                    <span>
+                      Start Planned Break ({completedTimerModal.nextSession.duration_minutes}m)
+                    </span>
+                  </button>
+                )}
+
+              {completedTimerModal.type === 'break' && completedTimerModal.nextSession && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = completedTimerModal.nextSession!;
+                    setCompletedTimerModal(null);
+                    handleStartTimer(next);
+                  }}
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:brightness-110 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 active:scale-[0.98] transition-all"
+                >
+                  <Play className="w-4 h-4 fill-white" />
+                  <span>
+                    Start Next Study Session: &quot;{completedTimerModal.nextSession.title}&quot;
+                  </span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setCompletedTimerModal(null)}
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
+              >
+                Dismiss
               </button>
             </div>
           </div>
