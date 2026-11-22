@@ -52,17 +52,37 @@ interface NavigationContextType {
   slots: [string, string, string, string];
   updateSlot: (slotIndex: 0 | 1 | 2 | 3, itemId: string) => void;
   resetSlots: () => void;
+  isStudyLockdownActive: boolean;
+  setStudyLockdownActive: (active: boolean) => void;
 }
 
 const NavigationContext = createContext<NavigationContextType>({
   slots: DEFAULT_NAV_SLOTS,
   updateSlot: () => {},
   resetSlots: () => {},
+  isStudyLockdownActive: false,
+  setStudyLockdownActive: () => {},
 });
 
 export function NavigationProvider({ children }: { children: React.ReactNode }) {
   const [slots, setSlots] = useState<[string, string, string, string]>(DEFAULT_NAV_SLOTS);
+  const [isStudyLockdownActive, setStudyLockdownActive] = useState<boolean>(false);
   const supabase = createClient();
+
+  // Listen for study lockdown changes dispatched globally
+  useEffect(() => {
+    const handleLockdownEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ active: boolean }>;
+      if (typeof customEvent.detail?.active === 'boolean') {
+        setStudyLockdownActive(customEvent.detail.active);
+      }
+    };
+
+    window.addEventListener('study_lockdown_change', handleLockdownEvent);
+    return () => {
+      window.removeEventListener('study_lockdown_change', handleLockdownEvent);
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -169,7 +189,15 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   };
 
   return (
-    <NavigationContext.Provider value={{ slots, updateSlot, resetSlots }}>
+    <NavigationContext.Provider
+      value={{
+        slots,
+        updateSlot,
+        resetSlots,
+        isStudyLockdownActive,
+        setStudyLockdownActive,
+      }}
+    >
       {children}
     </NavigationContext.Provider>
   );

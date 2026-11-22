@@ -173,12 +173,36 @@ export default function DailyPlannerView({
   useEffect(() => {
     if (activeTimerSessionId && timerRunning && !isFreezeMinimized) {
       const originalOverflow = document.body.style.overflow;
+      const originalHtmlOverflow = document.documentElement.style.overflow;
       document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
       return () => {
         document.body.style.overflow = originalOverflow;
+        document.documentElement.style.overflow = originalHtmlOverflow;
       };
     }
   }, [activeTimerSessionId, timerRunning, isFreezeMinimized]);
+
+  // ── STUDY LOCKDOWN: BROADCAST FREEZE TO SIDEBAR & MOBILE BOTTOM NAV ──
+  useEffect(() => {
+    const isLockdown = Boolean(activeTimerSessionId && timerRunning);
+    window.dispatchEvent(
+      new CustomEvent('study_lockdown_change', {
+        detail: { active: isLockdown },
+      })
+    );
+  }, [activeTimerSessionId, timerRunning]);
+
+  // Clean lockdown broadcast on unmount
+  useEffect(() => {
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent('study_lockdown_change', {
+          detail: { active: false },
+        })
+      );
+    };
+  }, []);
 
   // ── CROSS-DEVICE ACTIVE TIMER SYNCHRONIZATION ──
   useEffect(() => {
@@ -1050,7 +1074,8 @@ export default function DailyPlannerView({
 
         return createPortal(
           <div
-            className="fixed inset-0 top-0 left-0 w-screen h-screen z-[99999] overflow-y-auto bg-[#070b14] flex flex-col items-center justify-center p-4 sm:p-8 select-none animate-in fade-in duration-200"
+            data-timer-control="true"
+            className="fixed inset-0 top-0 left-0 w-screen h-screen z-[999999] overflow-y-auto bg-[#070b14] flex flex-col items-center justify-center p-4 sm:p-8 select-none animate-in fade-in duration-200"
             style={{ touchAction: 'manipulation' }}
           >
             {/* Ambient background glow */}
@@ -1248,6 +1273,7 @@ export default function DailyPlannerView({
 
         return (
           <div
+            data-timer-control="true"
             className={`p-4 rounded-2xl border shadow-xl flex flex-wrap items-center justify-between gap-3 animate-in fade-in ${
               isBreakSession
                 ? 'bg-gradient-to-r from-amber-950/70 via-slate-900 to-yellow-950/70 border-amber-500/40'
@@ -1841,8 +1867,11 @@ export default function DailyPlannerView({
       )}
 
       {/* ── NO SCHEDULE ALERT POPUP MODAL ── */}
-      {isNoScheduleAlertOpen && (
-        <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
+      {isNoScheduleAlertOpen && isMounted && createPortal(
+        <div
+          data-timer-control="true"
+          className="fixed inset-0 z-[1000000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
+        >
           <div className="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-md p-6 shadow-2xl shadow-amber-500/10 space-y-5 animate-in zoom-in-95 text-center">
             {/* Warning Icon Badge */}
             <div className="relative mx-auto w-16 h-16 flex items-center justify-center">
@@ -1892,12 +1921,16 @@ export default function DailyPlannerView({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── NOISY STUDY AREA ALERT POPUP MODAL ── */}
-      {isNoisyAlertOpen && (
-        <div className="fixed inset-0 z-[100000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
+      {isNoisyAlertOpen && isMounted && createPortal(
+        <div
+          data-timer-control="true"
+          className="fixed inset-0 z-[1000000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
+        >
           <div className="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-md p-6 shadow-2xl shadow-amber-500/10 space-y-5 animate-in zoom-in-95 text-center">
             {/* Warning Icon Badge */}
             <div className="relative mx-auto w-16 h-16 flex items-center justify-center">
@@ -1994,12 +2027,16 @@ export default function DailyPlannerView({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── TIMER FINISHED ALARM & TRANSITION MODAL ── */}
-      {completedTimerModal && (
-        <div className="fixed inset-0 z-[100000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
+      {completedTimerModal && isMounted && createPortal(
+        <div
+          data-timer-control="true"
+          className="fixed inset-0 z-[1000000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
+        >
           <div
             className={`bg-slate-900 border rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in zoom-in-95 text-center ${
               completedTimerModal.type === 'study'
@@ -2121,7 +2158,8 @@ export default function DailyPlannerView({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

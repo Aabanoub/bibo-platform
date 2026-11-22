@@ -20,10 +20,12 @@ import {
   QrCode,
   Settings,
   Wand2,
+  Lock,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import NotificationBell from '@/components/NotificationBell';
 import { useTheme } from '@/context/ThemeContext';
+import { useNavigation } from '@/context/NavigationContext';
 
 interface NavItem {
   label: string;
@@ -50,10 +52,18 @@ export default function Sidebar() {
   const router = useRouter();
   const supabase = createClient();
   const { isGirly, theme } = useTheme();
+  const { isStudyLockdownActive } = useNavigation();
 
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState<{ email?: string; name?: string; avatar?: string } | null>(null);
+
+  // Close mobile drawer when study lockdown becomes active
+  useEffect(() => {
+    if (isStudyLockdownActive) {
+      setMobileOpen(false);
+    }
+  }, [isStudyLockdownActive]);
 
   useEffect(() => {
     async function getUser() {
@@ -115,7 +125,12 @@ export default function Sidebar() {
       {/* Header */}
       <div className="flex h-16 items-center justify-between px-4 border-b border-slate-800">
         {!collapsed && (
-          <Link href="/" className="flex items-center gap-2.5">
+          <Link
+            href="/"
+            className={`flex items-center gap-2.5 ${
+              isStudyLockdownActive ? 'pointer-events-none opacity-40 cursor-not-allowed' : ''
+            }`}
+          >
             <div className="relative flex h-8 w-8 items-center justify-center rounded-xl overflow-hidden shadow-md shadow-purple-500/20 border border-purple-500/30 bg-[#0f172a]">
               <img src="/logo.png" alt="Evolve" className="w-full h-full object-cover" />
             </div>
@@ -153,8 +168,31 @@ export default function Sidebar() {
         </button>
       </div>
 
+      {/* Lockdown Status Indicator */}
+      {isStudyLockdownActive && !collapsed && (
+        <div className="mx-3 mt-3 mb-1 p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs flex items-center gap-2 shadow-lg">
+          <Lock className="w-4 h-4 shrink-0 text-blue-400 animate-pulse" />
+          <div className="flex flex-col">
+            <span className="font-bold text-[11px] uppercase tracking-wider text-blue-200">Study Lockdown</span>
+            <span className="text-[10px] text-slate-400 leading-tight">Pause timer to unlock navigation</span>
+          </div>
+        </div>
+      )}
+      {isStudyLockdownActive && collapsed && (
+        <div
+          className="mx-auto my-2 flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-400"
+          title="Study Lockdown: Pause timer to unlock navigation"
+        >
+          <Lock size={15} className="animate-pulse" />
+        </div>
+      )}
+
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-3 py-4">
+      <nav
+        className={`flex-1 space-y-1 px-3 py-4 transition-all duration-200 ${
+          isStudyLockdownActive ? 'pointer-events-none opacity-25 select-none grayscale cursor-not-allowed' : ''
+        }`}
+      >
         {navItems.map((item) => {
           const isActive = pathname === item.href;
           return (
@@ -188,12 +226,20 @@ export default function Sidebar() {
       </nav>
 
       {/* Notification bell (above user section) */}
-      <div className={`px-3 pb-2 ${collapsed ? 'flex justify-center' : ''}`}>
+      <div
+        className={`px-3 pb-2 ${collapsed ? 'flex justify-center' : ''} ${
+          isStudyLockdownActive ? 'pointer-events-none opacity-30 cursor-not-allowed select-none' : ''
+        }`}
+      >
         <NotificationBell collapsed={collapsed} placement="sidebar" />
       </div>
 
       {/* User Section */}
-      <div className="border-t border-slate-800 p-3">
+      <div
+        className={`border-t border-slate-800 p-3 transition-all duration-200 ${
+          isStudyLockdownActive ? 'pointer-events-none opacity-30 cursor-not-allowed select-none' : ''
+        }`}
+      >
         {user ? (
           <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
             <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-sm font-semibold text-white uppercase">
@@ -247,7 +293,11 @@ export default function Sidebar() {
   return (
     <>
       {/* Mobile top header bar */}
-      <header className="lg:hidden h-14 bg-slate-900/95 border-b border-slate-800 backdrop-blur-md px-3 sm:px-4 flex items-center justify-between shrink-0 z-40 sticky top-0 w-full">
+      <header
+        className={`lg:hidden h-14 bg-slate-900/95 border-b border-slate-800 backdrop-blur-md px-3 sm:px-4 flex items-center justify-between shrink-0 z-40 sticky top-0 w-full transition-all duration-200 ${
+          isStudyLockdownActive ? 'pointer-events-none opacity-30 select-none grayscale cursor-not-allowed' : ''
+        }`}
+      >
         <div className="flex items-center gap-2.5">
           <button
             onClick={() => setMobileOpen(true)}

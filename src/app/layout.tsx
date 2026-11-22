@@ -70,8 +70,8 @@ export default function RootLayout({
         <PwaRegister />
         <ThemeProvider>
           <AppSplashLoader />
-          <GlobalActiveStudyGuard />
           <NavigationProvider>
+            <GlobalActiveStudyGuard />
             <div className="flex h-screen overflow-hidden flex-col lg:flex-row">
               <Sidebar />
               <main className="flex-1 overflow-y-auto pb-20 lg:pb-0 relative z-0">

@@ -2,14 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home } from 'lucide-react';
+import { Home, Lock } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 import { useNavigation, NAV_OPTIONS_MAP } from '@/context/NavigationContext';
 
 export default function MobileBottomNav() {
   const pathname = usePathname();
   const { isGirly, theme } = useTheme();
-  const { slots } = useNavigation();
+  const { slots, isStudyLockdownActive } = useNavigation();
 
   if (pathname === '/login' || pathname === '/maintenance') return null;
 
@@ -27,7 +27,20 @@ export default function MobileBottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-40 flex h-16 items-center justify-around border-t border-slate-800 bg-slate-900/95 px-2 backdrop-blur-lg lg:hidden">
+    <nav
+      className={`fixed bottom-0 inset-x-0 z-40 flex h-16 items-center justify-around border-t border-slate-800 bg-slate-900/95 px-2 backdrop-blur-lg lg:hidden transition-all duration-200 ${
+        isStudyLockdownActive ? 'pointer-events-none opacity-25 select-none grayscale cursor-not-allowed' : ''
+      }`}
+    >
+      {/* Locked Pill Badge */}
+      {isStudyLockdownActive && (
+        <div className="absolute inset-x-0 -top-7 flex justify-center pointer-events-none">
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/95 border border-blue-500/40 text-blue-300 text-[10px] font-bold shadow-xl backdrop-blur-md">
+            <Lock className="w-3 h-3 text-blue-400 animate-pulse" />
+            <span>Navigation Locked (Pause timer to unlock)</span>
+          </div>
+        </div>
+      )}
       {items.map((item) => {
         const Icon = item.icon;
         const isActive = pathname === item.href;

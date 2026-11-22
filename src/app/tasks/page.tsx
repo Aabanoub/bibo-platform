@@ -43,7 +43,9 @@ import {
   Layers,
   BarChart2,
   FileDown,
+  Lock,
 } from 'lucide-react';
+import { useNavigation } from '@/context/NavigationContext';
 import { generateDailySchedulePdf } from '@/lib/daily-schedule-pdf';
 import {
   requestNotificationPermission,
@@ -212,6 +214,7 @@ function getDaysOverdue(task: Task, folder?: TaskFolder): number {
 
 export default function TasksPage() {
   const supabase = createClient();
+  const { isStudyLockdownActive } = useNavigation();
 
   // Tasks state
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -1837,7 +1840,11 @@ export default function TasksPage() {
 
       {/* ── TOP-LEVEL VIEW SWITCHER (ONLY IN AI FOLDERS MODE - COMPLETELY REMOVED IN CLASSIC MODE) ── */}
       {tasksViewMode === 'ai_folders' && (
-        <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-900/90 border border-slate-800 mb-5 overflow-x-auto shadow-sm">
+        <div
+          className={`flex items-center gap-1.5 p-1 rounded-2xl bg-slate-900/90 border border-slate-800 mb-5 overflow-x-auto shadow-sm transition-all duration-200 ${
+            isStudyLockdownActive ? 'pointer-events-none opacity-25 select-none grayscale cursor-not-allowed' : ''
+          }`}
+        >
           <button
             type="button"
             onClick={() => setActiveMainTab('tasks')}

@@ -4,22 +4,55 @@ import { useEffect, useState, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import { loadActiveTimerFromDb } from '@/lib/active-timer-sync';
+import { useNavigation } from '@/context/NavigationContext';
 import { Lock, Loader2 } from 'lucide-react';
 
 /**
  * GlobalActiveStudyGuard
  * Enforces website freeze lockdown across all pages:
- * If an active study timer is running in Supabase and the user opens or visits
- * any other route (e.g. /notes, /finance, /habits, /), this guard immediately
- * freezes the screen and redirects them straight to /tasks where the live interactive
- * study focus freeze overlay is running.
+ * 1. If an active study timer is running in Supabase and the user opens or visits
+ *    any other route (e.g. /notes, /finance, /habits, /), this guard immediately
+ *    freezes the screen and redirects them straight to /tasks.
+ * 2. Intercepts all clicks on navigation links, sidebar, and bottom bar while
+ *    lockdown is active, permitting only timer controls (pause, complete).
  */
 export default function GlobalActiveStudyGuard() {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = useRef(createClient()).current;
+  const { isStudyLockdownActive } = useNavigation();
   const [isLockedOnOtherRoute, setIsLockedOnOtherRoute] = useState(false);
   const [sessionTitle, setSessionTitle] = useState<string>('');
+
+  // Intercept any click across the website during active lockdown
+  useEffect(() => {
+    if (!isStudyLockdownActive) return;
+
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+
+      // Allow clicks on study timer controls (pause, complete, resume, dialogs)
+      if (target.closest('[data-timer-control="true"]')) {
+        return;
+      }
+
+      // Block all links, navigation items, and external buttons
+      const link = target.closest('a');
+      const nav = target.closest('nav, aside, header');
+      const button = target.closest('button');
+
+      if (link || nav || button) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    window.addEventListener('click', handleGlobalClick, true);
+    return () => {
+      window.removeEventListener('click', handleGlobalClick, true);
+    };
+  }, [isStudyLockdownActive]);
 
   useEffect(() => {
     let isMounted = true;
@@ -104,7 +137,10 @@ export default function GlobalActiveStudyGuard() {
   }
 
   return (
-    <div className="fixed inset-0 top-0 left-0 w-screen h-screen z-[99999] bg-[#070b14] flex flex-col items-center justify-center p-6 text-center select-none animate-in fade-in">
+    <div
+      data-timer-control="true"
+      className="fixed inset-0 top-0 left-0 w-screen h-screen z-[999999] bg-[#070b14] flex flex-col items-center justify-center p-6 text-center select-none animate-in fade-in"
+    >
       <div className="relative mb-6">
         <div className="w-20 h-20 rounded-3xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400 shadow-2xl shadow-blue-500/20 animate-pulse">
           <Lock className="w-10 h-10" />
