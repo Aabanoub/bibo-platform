@@ -4,8 +4,7 @@
 // with official branding, logo, KPI cards, timeline schedule, and AI directives.
 // ============================================================================
 
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import type jsPDF from 'jspdf';
 import type { DailyScheduleItem, Task, TaskFolder } from '@/types';
 
 export interface DailySchedulePdfData {
@@ -73,7 +72,12 @@ async function getLogoDataUrl(): Promise<string | null> {
  * Generates and downloads a premium, executive designed Day Schedule PDF
  */
 export async function generateDailySchedulePdf(data: DailySchedulePdfData): Promise<void> {
-  const doc = new jsPDF({
+  const [{ default: jsPDFClass }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+  ]);
+
+  const doc = new jsPDFClass({
     orientation: 'portrait',
     unit: 'mm',
     format: 'a4',

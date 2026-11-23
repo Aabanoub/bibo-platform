@@ -1,5 +1,4 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import type jsPDF from 'jspdf';
 
 export interface WeeklyPdfData {
   userName: string;
@@ -44,8 +43,13 @@ function stripEmojis(str: string): string {
     .trim();
 }
 
-export function generateWeeklyReportPdf(data: WeeklyPdfData) {
-  const doc = new jsPDF({
+export async function generateWeeklyReportPdf(data: WeeklyPdfData) {
+  const [{ default: jsPDFClass }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+  ]);
+
+  const doc = new jsPDFClass({
     orientation: 'portrait',
     unit: 'mm',
     format: 'a4',

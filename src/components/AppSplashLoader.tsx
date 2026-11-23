@@ -143,8 +143,8 @@ export default function AppSplashLoader() {
         try {
           sessionStorage.setItem('evolve_intro_shown', 'true');
         } catch {}
-        setTimeout(() => setMounted(false), 300);
-      }, 900);
+        setTimeout(() => setMounted(false), 200);
+      }, 400);
       return () => {
         isSubscribed = false;
         clearTimeout(timer);
@@ -161,23 +161,23 @@ export default function AppSplashLoader() {
       }
     });
 
-    // ── Animation Timeline Timers ──────────────────────────────────────────
-    // Stage 1 -> 2: 400ms
+    // ── Rapid Animation Timeline Timers (Optimized for instant-feeling load) ─────
+    // Stage 1 -> 2: 120ms
     const tStage2 = setTimeout(() => {
       if (isSubscribed) setStage(2);
-    }, 400);
+    }, 120);
 
-    // Stage 2 -> 3: 1200ms
+    // Stage 2 -> 3: 320ms
     const tStage3 = setTimeout(() => {
       if (isSubscribed) setStage(3);
-    }, 1200);
+    }, 320);
 
-    // Stage 3 -> 4: 1800ms
+    // Stage 3 -> 4: 550ms
     const tStage4 = setTimeout(() => {
       if (isSubscribed) setStage(4);
-    }, 1800);
+    }, 550);
 
-    // Stage 4 -> Transition check: 2300ms
+    // Stage 4 -> Transition check: 750ms
     const tTransition = setTimeout(() => {
       if (!isSubscribed) return;
 
@@ -188,7 +188,7 @@ export default function AppSplashLoader() {
         } catch {}
         setTimeout(() => {
           if (isSubscribed) setMounted(false);
-        }, 500);
+        }, 350);
       };
 
       // If DB session is ready (or completes quickly), transition immediately
@@ -206,13 +206,13 @@ export default function AppSplashLoader() {
       // Maximum safety fallback: never leave user trapped on splash
       const maxSafety = setTimeout(() => {
         if (isSubscribed) finishSplash();
-      }, 3500);
+      }, 1500);
 
       return () => {
         clearTimeout(extendedTimer);
         clearTimeout(maxSafety);
       };
-    }, 2300);
+    }, 750);
 
     return () => {
       isSubscribed = false;
