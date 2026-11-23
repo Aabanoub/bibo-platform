@@ -130,6 +130,7 @@ export default function DailyPlannerView({
   const [timeEditingSession, setTimeEditingSession] = useState<DailyScheduleItem | null>(null);
   const [customStartTime, setCustomStartTime] = useState<string>('');
   const [customDuration, setCustomDuration] = useState<number>(30);
+  const [isSavingTimeSlot, setIsSavingTimeSlot] = useState(false);
 
   // Ambient Noise Detection State (10-minute check during active study timer)
   const [isCheckingNoise, setIsCheckingNoise] = useState(false);
@@ -447,6 +448,7 @@ export default function DailyPlannerView({
 
   // Generate / Regenerate AI Plan for this day
   const handleGeneratePlan = async () => {
+    if (isSaving) return;
     setIsSaving(true);
     try {
       const plan = generateDeterministicDailyPlan({
@@ -864,30 +866,35 @@ export default function DailyPlannerView({
   };
 
   const handleSaveCustomTime = async () => {
-    if (!timeEditingSession || !customStartTime) return;
+    if (!timeEditingSession || !customStartTime || isSavingTimeSlot) return;
+    setIsSavingTimeSlot(true);
 
-    const newStartMin = timeToMinutes(customStartTime);
-    const newEndMin = newStartMin + customDuration;
+    try {
+      const newStartMin = timeToMinutes(customStartTime);
+      const newEndMin = newStartMin + customDuration;
 
-    const updated = currentDaySessions.map((s) => {
-      if (s.id === timeEditingSession.id) {
-        return {
-          ...s,
-          start_time: minutesToTime(newStartMin),
-          end_time: minutesToTime(newEndMin),
-          duration_minutes: customDuration,
-          is_locked: true,
-        };
-      }
-      return s;
-    });
+      const updated = currentDaySessions.map((s) => {
+        if (s.id === timeEditingSession.id) {
+          return {
+            ...s,
+            start_time: minutesToTime(newStartMin),
+            end_time: minutesToTime(newEndMin),
+            duration_minutes: customDuration,
+            is_locked: true,
+          };
+        }
+        return s;
+      });
 
-    // Re-sort by start time
-    updated.sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time));
-    const finalSessions = updated.map((s, idx) => ({ ...s, sort_order: idx }));
+      // Re-sort by start time
+      updated.sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time));
+      const finalSessions = updated.map((s, idx) => ({ ...s, sort_order: idx }));
 
-    await onSaveSchedule(finalSessions);
-    setTimeEditingSession(null);
+      await onSaveSchedule(finalSessions);
+      setTimeEditingSession(null);
+    } finally {
+      setIsSavingTimeSlot(false);
+    }
   };
 
   const sessionIdSafe = (id: string) => id;
@@ -976,7 +983,7 @@ export default function DailyPlannerView({
             type="button"
             onClick={handleGeneratePlan}
             disabled={isSaving}
-            className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white text-xs font-bold shadow-md shadow-blue-500/20 hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5"
+            className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white text-xs font-bold shadow-md shadow-blue-500/20 hover:brightness-110 active:scale-95 disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
           >
             {isSaving ? (
               <>
@@ -1462,9 +1469,16 @@ export default function DailyPlannerView({
               type="button"
               onClick={handleGeneratePlan}
               disabled={isSaving}
-              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-500/20 transition-all"
+              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed text-white text-xs font-bold shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-2 mx-auto"
             >
-              ✨ Generate AI Daily Plan
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Generating AI Daily Plan...</span>
+                </>
+              ) : (
+                <span>✨ Generate AI Daily Plan</span>
+              )}
             </button>
           </div>
         ) : (
@@ -1845,21 +1859,25 @@ export default function DailyPlannerView({
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
               <button
                 type="button"
+                disabled={isSaving}
                 onClick={() => setIsPreferencesOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300"
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 disabled:opacity-40 disabled:pointer-events-none"
               >
                 Close
               </button>
               <button
                 type="button"
+                disabled={isSaving}
                 onClick={async () => {
+                  if (isSaving) return;
                   if (onSavePreferences) await onSavePreferences(preferences);
                   setIsPreferencesOpen(false);
                   await handleGeneratePlan();
                 }}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white"
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:pointer-events-none text-white flex items-center gap-1.5"
               >
-                Save & Re-Plan
+                {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{isSaving ? 'Saving & Planning...' : 'Save & Re-Plan'}</span>
               </button>
             </div>
           </div>
@@ -1921,17 +1939,20 @@ export default function DailyPlannerView({
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
               <button
                 type="button"
+                disabled={isSavingTimeSlot}
                 onClick={() => setTimeEditingSession(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700"
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-40 disabled:pointer-events-none"
               >
                 Cancel
               </button>
               <button
                 type="button"
+                disabled={isSavingTimeSlot}
                 onClick={handleSaveCustomTime}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white"
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:pointer-events-none text-white flex items-center gap-1.5"
               >
-                Save Time Slot
+                {isSavingTimeSlot && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{isSavingTimeSlot ? 'Saving Slot...' : 'Save Time Slot'}</span>
               </button>
             </div>
           </div>
@@ -1974,20 +1995,26 @@ export default function DailyPlannerView({
             <div className="space-y-2 pt-2">
               <button
                 type="button"
+                disabled={isSaving}
                 onClick={() => {
                   setIsNoScheduleAlertOpen(false);
                   handleGeneratePlan();
                 }}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:brightness-110 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-purple-500/25 active:scale-[0.98] transition-all"
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:brightness-110 disabled:opacity-50 disabled:pointer-events-none text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-purple-500/25 active:scale-[0.98] transition-all"
               >
-                <Sparkles className="w-4 h-4 text-purple-200" />
-                <span>Generate Plan for This Day Now</span>
+                {isSaving ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-purple-200" />
+                ) : (
+                  <Sparkles className="w-4 h-4 text-purple-200" />
+                )}
+                <span>{isSaving ? 'Generating Schedule...' : 'Generate Plan for This Day Now'}</span>
               </button>
 
               <button
                 type="button"
+                disabled={isSaving}
                 onClick={() => setIsNoScheduleAlertOpen(false)}
-                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-xs font-semibold transition-colors"
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:pointer-events-none text-slate-400 hover:text-slate-200 text-xs font-semibold transition-colors"
               >
                 Close
               </button>

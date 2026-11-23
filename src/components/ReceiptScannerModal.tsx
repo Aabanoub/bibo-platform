@@ -380,14 +380,14 @@ export default function ReceiptScannerModal({
                 type="button"
                 onClick={handleSave}
                 disabled={isSaving}
-                className="w-full mt-2 flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
+                className="w-full mt-2 flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed"
               >
                 {isSaving ? (
                   <Loader2 size={16} className="animate-spin" />
                 ) : (
                   <Check size={16} />
                 )}
-                <span>Confirm & Log Expense</span>
+                <span>{isSaving ? 'Logging Expense...' : 'Confirm & Log Expense'}</span>
               </button>
             </div>
           )}

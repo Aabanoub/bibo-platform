@@ -236,7 +236,7 @@ export default function HabitsPage() {
 
   // ---- create habit -------------------------------------------------------
   const createHabit = async () => {
-    if (!formName.trim()) return;
+    if (!formName.trim() || submitting) return;
     setSubmitting(true);
     try {
       setError(null);
@@ -570,18 +570,21 @@ export default function HabitsPage() {
 
             <div className="flex justify-end gap-2 mt-4">
               <button
+                type="button"
+                disabled={submitting}
                 onClick={() => setShowForm(false)}
-                className="px-4 py-2 rounded-lg text-sm bg-slate-800 hover:bg-slate-700 transition-colors"
+                className="px-4 py-2 rounded-lg text-sm bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:pointer-events-none transition-colors"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={createHabit}
                 disabled={!formName.trim() || submitting}
-                className="px-4 py-2 rounded-lg text-sm bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
+                className="px-4 py-2 rounded-lg text-sm bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none transition-colors flex items-center gap-1.5"
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                Create
+                <span>{submitting ? 'Creating Habit...' : 'Create'}</span>
               </button>
             </div>
           </div>

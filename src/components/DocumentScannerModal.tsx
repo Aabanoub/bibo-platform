@@ -263,14 +263,14 @@ export default function DocumentScannerModal({
                 type="button"
                 onClick={handleSave}
                 disabled={isSaving}
-                className="w-full mt-2 flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-50"
+                className="w-full mt-2 flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed"
               >
                 {isSaving ? (
                   <Loader2 size={16} className="animate-spin" />
                 ) : (
                   <Check size={16} />
                 )}
-                <span>Save to Notes</span>
+                <span>{isSaving ? 'Saving to Notes...' : 'Save to Notes'}</span>
               </button>
             </div>
           )}

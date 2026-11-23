@@ -51,6 +51,7 @@ export default function NotesPage() {
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [isCreatingNote, setIsCreatingNote] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
@@ -248,6 +249,8 @@ export default function NotesPage() {
 
   // ---- create note --------------------------------------------------------
   const createNote = async () => {
+    if (isCreatingNote) return;
+    setIsCreatingNote(true);
     try {
       setError(null);
       const {
@@ -290,6 +293,8 @@ export default function NotesPage() {
       console.error('createNote error:', e);
       const msg = e?.message || e?.error_description || (e instanceof Error ? e.message : 'Failed to create note');
       setError(msg);
+    } finally {
+      setIsCreatingNote(false);
     }
   };
 
@@ -401,11 +406,12 @@ export default function NotesPage() {
               </button>
               <button
                 onClick={createNote}
-                className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors active:scale-95 flex items-center gap-1"
+                disabled={isCreatingNote}
+                className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:pointer-events-none text-white transition-colors active:scale-95 flex items-center gap-1"
                 title="New Note"
               >
-                <Plus className="w-4 h-4" />
-                <span className="text-xs font-medium md:hidden pr-1">New</span>
+                {isCreatingNote ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                <span className="text-xs font-medium md:hidden pr-1">{isCreatingNote ? 'Creating...' : 'New'}</span>
               </button>
             </div>
           </div>
@@ -474,9 +480,11 @@ export default function NotesPage() {
               {!searchQuery && !filterTag && (
                 <button
                   onClick={createNote}
-                  className="mt-4 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition inline-flex items-center gap-1.5"
+                  disabled={isCreatingNote}
+                  className="mt-4 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:pointer-events-none text-xs font-medium text-white transition inline-flex items-center gap-1.5"
                 >
-                  <Plus className="w-3.5 h-3.5" /> Create Note
+                  {isCreatingNote ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                  <span>{isCreatingNote ? 'Creating Note...' : 'Create Note'}</span>
                 </button>
               )}
             </div>
@@ -704,9 +712,11 @@ export default function NotesPage() {
               </button>
               <button
                 onClick={createNote}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-medium transition flex items-center gap-1.5 shadow-md shadow-indigo-600/20"
+                disabled={isCreatingNote}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:pointer-events-none text-white text-xs sm:text-sm font-medium transition flex items-center gap-1.5 shadow-md shadow-indigo-600/20"
               >
-                <Plus className="w-4 h-4" /> New Note
+                {isCreatingNote ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                <span>{isCreatingNote ? 'Creating Note...' : 'New Note'}</span>
               </button>
             </div>
           </div>

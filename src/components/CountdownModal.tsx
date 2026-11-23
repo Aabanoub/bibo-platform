@@ -12,6 +12,7 @@ import {
   Tag,
   Palette,
   AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { requestNotificationPermission } from '@/lib/notifications';
 import type { CountdownEvent, ReminderIntervalId } from '@/types';
@@ -71,6 +72,7 @@ export default function CountdownModal({
   const [emoji, setEmoji] = useState('🎯');
   const [color, setColor] = useState<CountdownEvent['color']>('blue');
   const [isPinned, setIsPinned] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [selectedReminders, setSelectedReminders] = useState<ReminderIntervalId[]>([
     'at_time',
     '1h',
@@ -160,28 +162,35 @@ export default function CountdownModal({
     setEmoji('🎉');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !targetDate) return;
+    if (!title.trim() || !targetDate || saving) return;
+    setSaving(true);
 
-    // Convert local targetDate string into full ISO string
-    const targetISO = new Date(targetDate).toISOString();
+    try {
+      // Convert local targetDate string into full ISO string
+      const targetISO = new Date(targetDate).toISOString();
 
-    onSave(
-      {
-        title: title.trim(),
-        description: description.trim() || null,
-        target_date: targetISO,
-        category,
-        emoji,
-        color,
-        is_pinned: isPinned,
-        reminder_intervals: selectedReminders,
-        triggered_reminders: initialEvent?.triggered_reminders || [],
-      },
-      initialEvent?.id
-    );
-    onClose();
+      await Promise.resolve(
+        onSave(
+          {
+            title: title.trim(),
+            description: description.trim() || null,
+            target_date: targetISO,
+            category,
+            emoji,
+            color,
+            is_pinned: isPinned,
+            reminder_intervals: selectedReminders,
+            triggered_reminders: initialEvent?.triggered_reminders || [],
+          },
+          initialEvent?.id
+        )
+      );
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -204,7 +213,8 @@ export default function CountdownModal({
           </div>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition"
+            disabled={saving}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-40 disabled:pointer-events-none transition"
           >
             <X size={18} />
           </button>
@@ -449,13 +459,14 @@ export default function CountdownModal({
             {initialEvent && onDelete ? (
               <button
                 type="button"
+                disabled={saving}
                 onClick={() => {
                   if (confirm('Are you sure you want to delete this countdown event?')) {
                     onDelete(initialEvent.id);
                     onClose();
                   }
                 }}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 hover:bg-rose-500/10 transition"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 hover:bg-rose-500/10 disabled:opacity-40 disabled:pointer-events-none transition"
               >
                 <Trash2 size={15} />
                 <span>Delete</span>
@@ -467,17 +478,23 @@ export default function CountdownModal({
             <div className="flex items-center gap-2.5">
               <button
                 type="button"
+                disabled={saving}
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl border border-slate-700 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition"
+                className="px-4 py-2 rounded-xl border border-slate-700 text-xs font-semibold text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:pointer-events-none transition"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-xs font-semibold text-white shadow-lg shadow-blue-500/25 transition active:scale-95"
+                disabled={!title.trim() || !targetDate || saving}
+                className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-xs font-semibold text-white shadow-lg shadow-blue-500/25 disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed transition active:scale-95"
               >
-                <Sparkles size={14} />
-                <span>{initialEvent ? 'Save Changes' : 'Start Countdown'}</span>
+                {saving ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Sparkles size={14} />
+                )}
+                <span>{saving ? 'Saving...' : initialEvent ? 'Save Changes' : 'Start Countdown'}</span>
               </button>
             </div>
           </div>

@@ -360,6 +360,8 @@ export default function TasksPage() {
   const [taskModalReminderAt, setTaskModalReminderAt] = useState('');
   const [taskModalStatus, setTaskModalStatus] = useState<TaskStatus>('todo');
   const [savingTaskModal, setSavingTaskModal] = useState(false);
+  const [isClearingCompleted, setIsClearingCompleted] = useState(false);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   // Folder expansion state (collapsed by default until expanded by the user)
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
 
@@ -1623,6 +1625,8 @@ export default function TasksPage() {
    */
   const deleteTask = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (deletingTaskId === id) return;
+    setDeletingTaskId(id);
     try {
       setTasks((prev) => prev.filter((t) => t.id !== id));
       setScheduleItems((prev) => prev.filter((s) => s.task_id !== id));
@@ -1640,6 +1644,8 @@ export default function TasksPage() {
     } catch (e: unknown) {
       fetchTasks();
       setError(e instanceof Error ? e.message : 'Failed to delete task');
+    } finally {
+      setDeletingTaskId(null);
     }
   };
 
@@ -1647,11 +1653,13 @@ export default function TasksPage() {
    * Delete all completed tasks
    */
   const clearCompletedTasks = async () => {
+    if (isClearingCompleted) return;
     const doneIds = tasks.filter((t) => t.status === 'done').map((t) => t.id);
     if (doneIds.length === 0) return;
 
     if (!confirm(`Are you sure you want to clear ${doneIds.length} completed task(s)?`)) return;
 
+    setIsClearingCompleted(true);
     try {
       setTasks((prev) => prev.filter((t) => t.status !== 'done'));
       const { error: err } = await supabase.from('tasks').delete().in('id', doneIds);
@@ -1659,6 +1667,8 @@ export default function TasksPage() {
     } catch (e: unknown) {
       fetchTasks();
       setError(e instanceof Error ? e.message : 'Failed to clear completed tasks');
+    } finally {
+      setIsClearingCompleted(false);
     }
   };
 
@@ -2271,6 +2281,7 @@ export default function TasksPage() {
                           key={task.id}
                           task={task}
                           folder={folder}
+                          isDeleting={deletingTaskId === task.id}
                           onToggleDone={toggleTaskDone}
                           onToggleInProgress={toggleInProgress}
                           onEdit={openEditModal}
@@ -2354,6 +2365,7 @@ export default function TasksPage() {
                         <TaskItem
                           key={task.id}
                           task={task}
+                          isDeleting={deletingTaskId === task.id}
                           onToggleDone={toggleTaskDone}
                           onToggleInProgress={toggleInProgress}
                           onEdit={openEditModal}
@@ -2514,23 +2526,29 @@ export default function TasksPage() {
             <input
               ref={quickInputRef}
               type="text"
+              disabled={submittingQuick}
               value={quickTitle}
               onChange={(e) => setQuickTitle(e.target.value)}
               onFocus={() => setShowQuickOptions(true)}
               placeholder={
-                activeFolder
+                submittingQuick
+                  ? 'Adding task...'
+                  : activeFolder
                   ? `Add lesson or topic to "${activeFolder.name}"... (press Enter)`
                   : 'What needs to be done? Type and press Enter...'
               }
-              className="w-full bg-transparent text-sm sm:text-base text-white placeholder-slate-500 outline-none"
+              className="w-full bg-transparent text-sm sm:text-base text-white placeholder-slate-500 outline-none disabled:opacity-50"
             />
             <button
               type="submit"
               disabled={!quickTitle.trim() || submittingQuick}
-              className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-blue-600/30 shrink-0"
+              className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-blue-600/30 shrink-0"
             >
               {submittingQuick ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span className="hidden sm:inline">Adding...</span>
+                </>
               ) : (
                 <>
                   <Plus className="w-3.5 h-3.5" />
@@ -2782,9 +2800,15 @@ export default function TasksPage() {
           {taskStats.done > 0 && activeTab === 'done' && (
             <button
               onClick={clearCompletedTasks}
-              className="px-2.5 py-1.5 rounded-xl bg-red-950/40 border border-red-800/60 hover:bg-red-900/60 text-red-300 text-xs font-medium flex items-center gap-1 transition-colors"
+              disabled={isClearingCompleted}
+              className="px-2.5 py-1.5 rounded-xl bg-red-950/40 border border-red-800/60 hover:bg-red-900/60 disabled:opacity-50 disabled:pointer-events-none text-red-300 text-xs font-medium flex items-center gap-1.5 transition-colors"
             >
-              <Trash2 className="w-3.5 h-3.5" /> Clear Done
+              {isClearingCompleted ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="w-3.5 h-3.5" />
+              )}
+              <span>{isClearingCompleted ? 'Clearing...' : 'Clear Done'}</span>
             </button>
           )}
         </div>
@@ -2831,6 +2855,7 @@ export default function TasksPage() {
                     key={task.id}
                     task={task}
                     folder={task.folder_id ? foldersMap.get(task.folder_id) : undefined}
+                    isDeleting={deletingTaskId === task.id}
                     onToggleDone={toggleTaskDone}
                     onToggleInProgress={toggleInProgress}
                     onEdit={openEditModal}
@@ -2857,6 +2882,7 @@ export default function TasksPage() {
                     key={task.id}
                     task={task}
                     folder={task.folder_id ? foldersMap.get(task.folder_id) : undefined}
+                    isDeleting={deletingTaskId === task.id}
                     onToggleDone={toggleTaskDone}
                     onToggleInProgress={toggleInProgress}
                     onEdit={openEditModal}
@@ -2873,6 +2899,7 @@ export default function TasksPage() {
                   key={task.id}
                   task={task}
                   folder={task.folder_id ? foldersMap.get(task.folder_id) : undefined}
+                  isDeleting={deletingTaskId === task.id}
                   onToggleDone={toggleTaskDone}
                   onToggleInProgress={toggleInProgress}
                   onEdit={openEditModal}
@@ -2909,6 +2936,7 @@ export default function TasksPage() {
                       key={task.id}
                       task={task}
                       folder={task.folder_id ? foldersMap.get(task.folder_id) : undefined}
+                      isDeleting={deletingTaskId === task.id}
                       onToggleDone={toggleTaskDone}
                       onToggleInProgress={toggleInProgress}
                       onEdit={openEditModal}
@@ -3140,15 +3168,16 @@ export default function TasksPage() {
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
                 <button
                   type="button"
+                  disabled={savingTaskModal}
                   onClick={() => setIsTaskModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                  className="px-4 py-2 rounded-xl text-xs bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:pointer-events-none text-slate-300 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={!taskModalTitle.trim() || savingTaskModal}
-                  className="px-4 py-2 rounded-xl text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium flex items-center gap-1.5 transition-colors shadow-md shadow-blue-500/20"
+                  className="px-4 py-2 rounded-xl text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed text-white font-medium flex items-center gap-1.5 transition-colors shadow-md shadow-blue-500/20"
                 >
                   {savingTaskModal ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -3157,7 +3186,11 @@ export default function TasksPage() {
                   ) : (
                     <Check className="w-3.5 h-3.5" />
                   )}
-                  <span>{taskModalMode === 'create' ? 'Add Task' : 'Save Changes'}</span>
+                  <span>
+                    {savingTaskModal
+                      ? (taskModalMode === 'create' ? 'Adding Task...' : 'Saving Changes...')
+                      : (taskModalMode === 'create' ? 'Add Task' : 'Save Changes')}
+                  </span>
                 </button>
               </div>
             </form>
@@ -3252,6 +3285,7 @@ export default function TasksPage() {
 interface TaskItemProps {
   task: Task;
   folder?: TaskFolder;
+  isDeleting?: boolean;
   onToggleDone: (task: Task) => void;
   onToggleInProgress: (task: Task, e: React.MouseEvent) => void;
   onEdit: (task: Task, e: React.MouseEvent) => void;
@@ -3262,6 +3296,7 @@ interface TaskItemProps {
 function TaskItem({
   task,
   folder,
+  isDeleting,
   onToggleDone,
   onToggleInProgress,
   onEdit,
@@ -3458,11 +3493,16 @@ function TaskItem({
         {/* Delete Button */}
         <button
           type="button"
+          disabled={isDeleting}
           onClick={(e) => onDelete(task.id, e)}
-          className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+          className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-50 disabled:pointer-events-none transition-colors"
           title="Delete task"
         >
-          <Trash2 className="w-3.5 h-3.5" />
+          {isDeleting ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-red-400" />
+          ) : (
+            <Trash2 className="w-3.5 h-3.5" />
+          )}
         </button>
       </div>
     </div>

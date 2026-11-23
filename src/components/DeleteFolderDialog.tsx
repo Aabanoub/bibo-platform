@@ -25,6 +25,7 @@ export default function DeleteFolderDialog({
   if (!isOpen || !folder) return null;
 
   const handleConfirm = async () => {
+    if (loading) return;
     setLoading(true);
     try {
       await onConfirm(deleteTasksToo);
@@ -50,7 +51,7 @@ export default function DeleteFolderDialog({
           <button
             onClick={onClose}
             disabled={loading}
-            className="p-1 rounded-lg text-slate-400 hover:text-white"
+            className="p-1 rounded-lg text-slate-400 hover:text-white disabled:opacity-40 disabled:pointer-events-none"
           >
             <X className="w-5 h-5" />
           </button>
@@ -114,7 +115,7 @@ export default function DeleteFolderDialog({
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+            className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:pointer-events-none text-slate-300 transition-colors"
           >
             Cancel
           </button>
@@ -122,10 +123,10 @@ export default function DeleteFolderDialog({
             type="button"
             onClick={handleConfirm}
             disabled={loading}
-            className="px-4 py-2 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition-colors flex items-center gap-1.5 shadow-lg shadow-red-600/30"
+            className="px-4 py-2 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed text-white transition-colors flex items-center gap-1.5 shadow-lg shadow-red-600/30"
           >
             {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-            Confirm Delete
+            <span>{loading ? 'Deleting Folder...' : 'Confirm Delete'}</span>
           </button>
         </div>
       </div>

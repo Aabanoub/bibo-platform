@@ -209,7 +209,8 @@ export default function TaskFolderModal({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            disabled={saving}
+            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-40 disabled:pointer-events-none transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -389,18 +390,22 @@ export default function TaskFolderModal({
           <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
             <button
               type="button"
+              disabled={saving}
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+              className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:pointer-events-none text-slate-300 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!name.trim() || saving}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold text-white transition-all flex items-center gap-2 shadow-lg disabled:opacity-40 disabled:cursor-not-allowed bg-gradient-to-r ${FOLDER_COLORS[color]?.gradient || 'from-blue-600 to-cyan-500'} shadow-blue-500/25`}
+              className={`px-5 py-2.5 rounded-xl text-xs font-bold text-white transition-all flex items-center gap-2 shadow-lg disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none bg-gradient-to-r ${FOLDER_COLORS[color]?.gradient || 'from-blue-600 to-cyan-500'} shadow-blue-500/25`}
             >
               {saving ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>{isEditing ? 'Saving Changes...' : 'Creating Folder...'}</span>
+                </>
               ) : isEditing ? (
                 <>
                   <Check className="w-4 h-4" />
