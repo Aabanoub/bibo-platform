@@ -115,6 +115,7 @@ export default function DailyPlannerView({
   const [timerTotalDuration, setTimerTotalDuration] = useState<number>(0);
   const [isFreezeMinimized, setIsFreezeMinimized] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCompletingSession, setIsCompletingSession] = useState(false);
   const [overloadNotice, setOverloadNotice] = useState<string | null>(null);
   const [deferredList, setDeferredList] = useState<{ task: Task; reason: string }[]>([]);
   const [isNoScheduleAlertOpen, setIsNoScheduleAlertOpen] = useState(false);
@@ -620,47 +621,61 @@ export default function DailyPlannerView({
   // Finish study timer early or on time and log actual duration
   const handleFinishTimer = useCallback(
     async (session: DailyScheduleItem) => {
-      const secondsSpent = timerTotalDuration - timerSecondsLeft;
-      const actualMinutes = Math.max(1, Math.round(secondsSpent / 60));
+      if (isCompletingSession) return;
+      setIsCompletingSession(true);
 
-      setTimerRunning(false);
-      setActiveTimerSessionId(null);
-      lockScreenTimerWidget.stop();
+      try {
+        const secondsSpent = timerTotalDuration - timerSecondsLeft;
+        const actualMinutes = Math.max(1, Math.round(secondsSpent / 60));
 
-      // Clear from database across all devices
-      if (userId) {
-        await clearActiveTimerFromDb(supabase, userId);
-      }
+        setTimerRunning(false);
+        lockScreenTimerWidget.stop();
 
-      // If session overran, adapt subsequent unlocked sessions
-      if (actualMinutes > session.duration_minutes) {
-        const adapted = adaptWhenSessionOverruns(
-          currentDaySessions,
-          session.id,
-          actualMinutes,
-          preferences.endTime
-        );
-        await onSaveSchedule(adapted.updatedSessions);
-      } else {
-        const updated = currentDaySessions.map((s) =>
-          s.id === session.id
-            ? {
-                ...s,
-                is_completed: true,
-                actual_duration_minutes: actualMinutes,
-              }
-            : s
-        );
-        await onSaveSchedule(updated);
-      }
+        // Clear from database across all devices
+        if (userId) {
+          await clearActiveTimerFromDb(supabase, userId);
+        }
 
-      if (session.task_id) {
-        await onCompleteTask(session.task_id, true);
+        // If session overran, adapt subsequent unlocked sessions
+        if (actualMinutes > session.duration_minutes) {
+          const adapted = adaptWhenSessionOverruns(
+            currentDaySessions,
+            session.id,
+            actualMinutes,
+            preferences.endTime
+          );
+          await onSaveSchedule(adapted.updatedSessions);
+        } else {
+          const updated = currentDaySessions.map((s) =>
+            s.id === session.id
+              ? {
+                  ...s,
+                  is_completed: true,
+                  actual_duration_minutes: actualMinutes,
+                }
+              : s
+          );
+          await onSaveSchedule(updated);
+        }
+
+        if (session.task_id) {
+          await onCompleteTask(session.task_id, true);
+        }
+
+        // Deactivate active session after database operations finish
+        setActiveTimerSessionId(null);
+      } catch (err) {
+        console.error('Failed to complete session:', err);
+      } finally {
+        setIsCompletingSession(false);
       }
     },
     [
+      isCompletingSession,
       timerTotalDuration,
       timerSecondsLeft,
+      userId,
+      supabase,
       currentDaySessions,
       preferences.endTime,
       onSaveSchedule,
@@ -1210,7 +1225,9 @@ export default function DailyPlannerView({
                 {/* Button 1: Pause / Resume Button */}
                 <button
                   type="button"
+                  disabled={isCompletingSession}
                   onClick={() => {
+                    if (isCompletingSession) return;
                     const nextRunning = !timerRunning;
                     setTimerRunning(nextRunning);
                     lockScreenTimerWidget.update(timerSecondsLeft, nextRunning);
@@ -1229,7 +1246,11 @@ export default function DailyPlannerView({
                       });
                     }
                   }}
-                  className={`w-full sm:w-1/2 py-4 px-6 rounded-2xl font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all shadow-xl active:scale-95 ${
+                  className={`w-full sm:w-1/2 py-4 px-6 rounded-2xl font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all shadow-xl ${
+                    isCompletingSession
+                      ? 'opacity-50 cursor-not-allowed pointer-events-none'
+                      : 'active:scale-95'
+                  } ${
                     timerRunning
                       ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700'
                       : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/30 ring-2 ring-blue-400 animate-pulse'
@@ -1252,18 +1273,31 @@ export default function DailyPlannerView({
                 {/* Button 2: Complete Session Button */}
                 <button
                   type="button"
+                  disabled={isCompletingSession}
                   onClick={() => {
-                    if (activeSession) handleFinishTimer(activeSession);
+                    if (activeSession && !isCompletingSession) handleFinishTimer(activeSession);
                   }}
-                  className={`w-full sm:w-1/2 py-4 px-6 rounded-2xl font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 text-white transition-all shadow-xl active:scale-95 ${
+                  className={`w-full sm:w-1/2 py-4 px-6 rounded-2xl font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 text-white transition-all shadow-xl ${
+                    isCompletingSession
+                      ? 'opacity-60 cursor-not-allowed pointer-events-none'
+                      : 'active:scale-95'
+                  } ${
                     isBreakSession
                       ? 'bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 shadow-amber-500/25 border border-amber-400/30'
                       : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-500/25 border border-emerald-400/30'
                   }`}
-                  title="Complete Session"
+                  title={isCompletingSession ? 'Saving...' : 'Complete Session'}
                 >
-                  <CheckCircle2 className="w-5 h-5 stroke-[2.5]" />
-                  <span>{isBreakSession ? 'End Break' : 'Complete Session'}</span>
+                  {isCompletingSession ? (
+                    <Loader2 className="w-5 h-5 animate-spin stroke-[2.5]" />
+                  ) : (
+                    <CheckCircle2 className="w-5 h-5 stroke-[2.5]" />
+                  )}
+                  <span>
+                    {isCompletingSession
+                      ? (isBreakSession ? 'Ending Break...' : 'Completing...')
+                      : (isBreakSession ? 'End Break' : 'Complete Session')}
+                  </span>
                 </button>
               </div>
 
@@ -1340,7 +1374,9 @@ export default function DailyPlannerView({
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                disabled={isCompletingSession}
                 onClick={() => {
+                  if (isCompletingSession) return;
                   setTimerRunning(true);
                   setIsFreezeMinimized(false);
                   lockScreenTimerWidget.update(timerSecondsLeft, true);
@@ -1356,7 +1392,11 @@ export default function DailyPlannerView({
                     });
                   }
                 }}
-                className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-blue-500/20 transition-all ring-2 ring-blue-400/50 animate-pulse"
+                className={`px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-blue-500/20 transition-all ${
+                  isCompletingSession
+                    ? 'opacity-50 cursor-not-allowed pointer-events-none'
+                    : 'ring-2 ring-blue-400/50 animate-pulse'
+                }`}
                 title="Resume Study Focus Lockdown"
               >
                 <Play className="w-4 h-4 fill-white" />
@@ -1365,17 +1405,30 @@ export default function DailyPlannerView({
 
               <button
                 type="button"
+                disabled={isCompletingSession}
                 onClick={() => {
-                  if (activeSession) handleFinishTimer(activeSession);
+                  if (activeSession && !isCompletingSession) handleFinishTimer(activeSession);
                 }}
                 className={`px-3.5 py-2.5 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-all ${
+                  isCompletingSession
+                    ? 'opacity-60 cursor-not-allowed pointer-events-none'
+                    : ''
+                } ${
                   isBreakSession
                     ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-500/20'
                     : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20'
                 }`}
               >
-                <Check className="w-4 h-4 stroke-[2.5]" />
-                <span>{isBreakSession ? 'End Break' : 'Complete Session'}</span>
+                {isCompletingSession ? (
+                  <Loader2 className="w-4 h-4 animate-spin stroke-[2.5]" />
+                ) : (
+                  <Check className="w-4 h-4 stroke-[2.5]" />
+                )}
+                <span>
+                  {isCompletingSession
+                    ? (isBreakSession ? 'Ending Break...' : 'Completing...')
+                    : (isBreakSession ? 'End Break' : 'Complete Session')}
+                </span>
               </button>
             </div>
           </div>
