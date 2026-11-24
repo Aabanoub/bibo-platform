@@ -9,7 +9,7 @@ import TaskFolderCard, { getFolderCountdown } from '@/components/TaskFolderCard'
 import DailyPlannerView from '@/components/DailyPlannerView';
 import WeeklyForecastView from '@/components/WeeklyForecastView';
 import { toLocalDateStr } from '@/lib/weekly-forecast';
-import type { SchedulingPreferences } from '@/lib/daily-planner';
+import { timeToMinutes, type SchedulingPreferences } from '@/lib/daily-planner';
 import { extractLessonSequence } from '@/lib/lesson-sequencing';
 import {
   Plus,
@@ -258,12 +258,15 @@ export default function TasksPage() {
       return;
     }
 
+    const rawStart = userProfile?.daily_start_time ? timeToMinutes(userProfile.daily_start_time) : 0;
     const sortedItems = [...resolvedItems].sort((a, b) => {
       const partsA = (a.start_time || '00:00').split(':').map(Number);
       const partsB = (b.start_time || '00:00').split(':').map(Number);
       const minA = (partsA[0] || 0) * 60 + (partsA[1] || 0);
       const minB = (partsB[0] || 0) * 60 + (partsB[1] || 0);
-      if (minA !== minB) return minA - minB;
+      const relA = (minA - rawStart + 1440) % 1440;
+      const relB = (minB - rawStart + 1440) % 1440;
+      if (relA !== relB) return relA - relB;
       return (a.sort_order ?? 0) - (b.sort_order ?? 0);
     });
 

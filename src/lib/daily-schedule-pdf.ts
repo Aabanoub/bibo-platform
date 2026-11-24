@@ -171,12 +171,13 @@ export async function generateDailySchedulePdf(data: DailySchedulePdfData): Prom
     return parts[0] * 60 + parts[1];
   };
 
-  // Sort sessions strictly chronologically by start_time, then sort_order
+  // Sort sessions strictly chronologically by relative start_time from preferences.startTime, then sort_order
+  const rawStart = data.preferences?.startTime ? timeToMinutes(data.preferences.startTime) : 0;
   const sortedSessions = [...data.sessions].sort((a, b) => {
-    const minA = timeToMinutes(a.start_time);
-    const minB = timeToMinutes(b.start_time);
-    if (minA !== minB) {
-      return minA - minB;
+    const relA = (timeToMinutes(a.start_time) - rawStart + 1440) % 1440;
+    const relB = (timeToMinutes(b.start_time) - rawStart + 1440) % 1440;
+    if (relA !== relB) {
+      return relA - relB;
     }
     return (a.sort_order ?? 0) - (b.sort_order ?? 0);
   });

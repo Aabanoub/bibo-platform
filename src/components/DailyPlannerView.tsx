@@ -119,6 +119,7 @@ export default function DailyPlannerView({
   const [overloadNotice, setOverloadNotice] = useState<string | null>(null);
   const [deferredList, setDeferredList] = useState<{ task: Task; reason: string }[]>([]);
   const [isNoScheduleAlertOpen, setIsNoScheduleAlertOpen] = useState(false);
+  const [isNoTasksAlertOpen, setIsNoTasksAlertOpen] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -414,11 +415,13 @@ export default function DailyPlannerView({
     }
 
     return deduped.sort((a, b) => {
-      const timeDiff = timeToMinutes(a.start_time) - timeToMinutes(b.start_time);
-      if (timeDiff !== 0) return timeDiff;
+      const rawStart = timeToMinutes(preferences.startTime);
+      const relA = (timeToMinutes(a.start_time) - rawStart + 1440) % 1440;
+      const relB = (timeToMinutes(b.start_time) - rawStart + 1440) % 1440;
+      if (relA !== relB) return relA - relB;
       return (a.sort_order ?? 0) - (b.sort_order ?? 0);
     });
-  }, [scheduleItems, currentDate, optimisticOverrides]);
+  }, [scheduleItems, currentDate, optimisticOverrides, preferences.startTime]);
 
   const taskSessions = currentDaySessions.filter((s) => s.session_type === 'task');
   const totalTasks = taskSessions.length;
@@ -426,13 +429,13 @@ export default function DailyPlannerView({
   const remainingTasks = totalTasks - completedTasks;
   const totalPlannedMinutes = taskSessions.reduce((sum, s) => sum + s.duration_minutes, 0);
 
-  const windowMinutes = Math.max(
-    60,
-    timeToMinutes(preferences.endTime) - timeToMinutes(preferences.startTime)
-  );
+  const rawStart = timeToMinutes(preferences.startTime);
+  const rawEnd = timeToMinutes(preferences.endTime);
+  const windowSpan = rawEnd <= rawStart ? rawEnd + 1440 - rawStart : rawEnd - rawStart;
+  const windowMinutes = Math.max(60, windowSpan);
 
   let workloadStatus: 'light' | 'balanced' | 'heavy' | 'overloaded' = 'balanced';
-  if (totalPlannedMinutes > windowMinutes * 0.95 || deferredList.length > 0) {
+  if (totalPlannedMinutes > windowMinutes * 0.95) {
     workloadStatus = 'overloaded';
   } else if (totalPlannedMinutes > windowMinutes * 0.75) {
     workloadStatus = 'heavy';
@@ -449,6 +452,14 @@ export default function DailyPlannerView({
   // Generate / Regenerate AI Plan for this day
   const handleGeneratePlan = async () => {
     if (isSaving) return;
+
+    // Check if there are active tasks
+    const activeTasks = tasks.filter((t) => t.status !== 'done');
+    if (activeTasks.length === 0 && currentDaySessions.length === 0) {
+      setIsNoTasksAlertOpen(true);
+      return;
+    }
+
     setIsSaving(true);
     try {
       const plan = generateDeterministicDailyPlan({
@@ -463,6 +474,8 @@ export default function DailyPlannerView({
       setDeferredList(plan.overview.deferredTasks);
 
       await onSaveSchedule(plan.sessions);
+    } catch (err: any) {
+      console.error('Failed to generate daily plan:', err);
     } finally {
       setIsSaving(false);
     }
@@ -817,18 +830,20 @@ export default function DailyPlannerView({
     list.splice(toIndex, 0, moved);
 
     // Recalculate start and end times sequentially
-    let cursor = timeToMinutes(preferences.startTime);
+    const rawStart = timeToMinutes(preferences.startTime);
+    let cursor = 0;
     const updated: DailyScheduleItem[] = list.map((item, idx) => {
-      let startMin = cursor;
+      let startOffset = cursor;
       if (item.is_locked) {
-        startMin = Math.max(cursor, timeToMinutes(item.start_time));
+        const itemRel = (timeToMinutes(item.start_time) - rawStart + 1440) % 1440;
+        startOffset = Math.max(cursor, itemRel);
       }
-      const endMin = startMin + item.duration_minutes;
-      cursor = endMin;
+      const endOffset = startOffset + item.duration_minutes;
+      cursor = endOffset;
       return {
         ...item,
-        start_time: minutesToTime(startMin),
-        end_time: minutesToTime(endMin),
+        start_time: minutesToTime(rawStart + startOffset),
+        end_time: minutesToTime(rawStart + endOffset),
         sort_order: idx,
       };
     });
@@ -886,8 +901,14 @@ export default function DailyPlannerView({
         return s;
       });
 
-      // Re-sort by start time
-      updated.sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time));
+      // Re-sort by relative start time
+      const rawStart = timeToMinutes(preferences.startTime);
+      updated.sort((a, b) => {
+        const relA = (timeToMinutes(a.start_time) - rawStart + 1440) % 1440;
+        const relB = (timeToMinutes(b.start_time) - rawStart + 1440) % 1440;
+        if (relA !== relB) return relA - relB;
+        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+      });
       const finalSessions = updated.map((s, idx) => ({ ...s, sort_order: idx }));
 
       await onSaveSchedule(finalSessions);
@@ -2019,6 +2040,39 @@ export default function DailyPlannerView({
                 Close
               </button>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ── NO PENDING TASKS ALERT MODAL ── */}
+      {isNoTasksAlertOpen && isMounted && createPortal(
+        <div
+          data-timer-control="true"
+          className="fixed inset-0 z-[1000000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
+        >
+          <div className="bg-slate-900 border border-blue-500/50 rounded-3xl w-full max-w-md p-6 shadow-2xl shadow-blue-500/10 space-y-5 animate-in zoom-in-95 text-center">
+            <div className="relative mx-auto w-16 h-16 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-2xl bg-blue-500/20 animate-ping opacity-40" />
+              <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/30 to-indigo-500/20 border border-blue-500/40 flex items-center justify-center text-blue-300 shadow-lg">
+                <Sparkles className="w-8 h-8" />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-lg font-bold text-white tracking-tight">No Active Tasks to Schedule</h3>
+              <p className="text-xs text-slate-300 leading-relaxed max-w-xs mx-auto">
+                You don't have any pending tasks right now. Create a new task in <strong className="text-white">Tasks & Folders</strong> to let the AI build your daily schedule!
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsNoTasksAlertOpen(false)}
+              className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-colors"
+            >
+              Got it
+            </button>
           </div>
         </div>,
         document.body

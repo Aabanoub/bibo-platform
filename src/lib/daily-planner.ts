@@ -63,7 +63,7 @@ export function timeToMinutes(timeStr: string): number {
 }
 
 export function minutesToTime(totalMinutes: number): string {
-  const normalized = Math.max(0, Math.min(24 * 60 - 1, totalMinutes));
+  const normalized = ((Math.round(totalMinutes) % 1440) + 1440) % 1440;
   const h = Math.floor(normalized / 60);
   const m = normalized % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
@@ -81,6 +81,13 @@ export function getDefaultDurationForDifficulty(difficulty?: TaskDifficulty | nu
   }
 }
 
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 // ---------------------------------------------------------------------------
 // Free Time Slot Finder (respects locked & completed sessions)
 // ---------------------------------------------------------------------------
@@ -93,14 +100,21 @@ interface TimeSlot {
 function findFreeSlots(
   startMin: number,
   endMin: number,
-  busySessions: DailyScheduleItem[]
+  busySessions: DailyScheduleItem[],
+  isOvernight: boolean = false,
+  rawStartMin: number = 0
 ): TimeSlot[] {
-  // Sort busy intervals
+  // Sort busy intervals, normalizing overnight timestamps to linear minutes from day start
   const busyIntervals: TimeSlot[] = busySessions
-    .map((s) => ({
-      start: timeToMinutes(s.start_time),
-      end: timeToMinutes(s.end_time),
-    }))
+    .map((s) => {
+      let bStart = timeToMinutes(s.start_time);
+      let bEnd = timeToMinutes(s.end_time);
+      if (isOvernight) {
+        if (bStart < rawStartMin) bStart += 1440;
+        if (bEnd < rawStartMin) bEnd += 1440;
+      }
+      return { start: bStart, end: bEnd };
+    })
     .filter((slot) => slot.end > startMin && slot.start < endMin)
     .sort((a, b) => a.start - b.start);
 
@@ -127,7 +141,7 @@ function findFreeSlots(
 // ---------------------------------------------------------------------------
 
 export function generateDeterministicDailyPlan(input: DailyPlannerInput): GeneratedDailyPlan {
-  const targetDate = input.targetDate || new Date().toISOString().split('T')[0];
+  const targetDate = input.targetDate || toLocalDateStr(new Date());
   const prefs: SchedulingPreferences = {
     ...DEFAULT_PREFERENCES,
     ...input.preferences,
@@ -227,25 +241,37 @@ export function generateDeterministicDailyPlan(input: DailyPlannerInput): Genera
   scoredTasks.sort((a, b) => b.urgencyScore - a.urgencyScore);
 
   // Compute available time window
-  const windowStartMin = timeToMinutes(prefs.startTime);
-  const windowEndMin = timeToMinutes(prefs.endTime);
+  const rawStartMin = timeToMinutes(prefs.startTime);
+  const rawEndMin = timeToMinutes(prefs.endTime);
+  const isOvernight = rawEndMin <= rawStartMin;
+  const windowStartMin = rawStartMin;
+  const windowEndMin = isOvernight ? rawEndMin + 1440 : rawEndMin;
 
-  // If planning for today and current time is already later than windowStartMin,
-  // snap start time to next 15-min mark so we don't schedule tasks in the past
+  // If planning for today, adjust start time appropriately
   const now = new Date();
-  const isToday = targetDate === now.toISOString().split('T')[0];
+  const todayStr = toLocalDateStr(now);
+  const isToday = targetDate === todayStr;
   let effectiveStartMin = windowStartMin;
 
   if (isToday) {
     const currentMin = now.getHours() * 60 + now.getMinutes();
-    if (currentMin > windowStartMin && currentMin < windowEndMin - 30) {
+    let currentLinearMin = currentMin;
+    if (isOvernight && currentMin < rawEndMin) {
+      currentLinearMin = 1440 + currentMin;
+    }
+
+    if (currentLinearMin > windowStartMin && currentLinearMin < windowEndMin - 45) {
       // Snap to next 15-minute boundary
-      effectiveStartMin = Math.ceil(currentMin / 15) * 15;
+      effectiveStartMin = Math.ceil(currentLinearMin / 15) * 15;
+    } else {
+      // Session has not started yet, or user is generating after hours / next day:
+      // Start from windowStartMin to provide a complete, scheduled daily plan template
+      effectiveStartMin = windowStartMin;
     }
   }
 
   // Find free time slots between busy locked/done sessions
-  let freeSlots = findFreeSlots(effectiveStartMin, windowEndMin, lockedOrDoneSessions);
+  let freeSlots = findFreeSlots(effectiveStartMin, windowEndMin, lockedOrDoneSessions, isOvernight, rawStartMin);
 
   const newScheduledSessions: DailyScheduleItem[] = [];
   const deferredTasks: { task: Task; reason: string }[] = [];
@@ -417,8 +443,14 @@ export function generateDeterministicDailyPlan(input: DailyPlannerInput): Genera
     }
   }
 
-  combinedSessions.sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time));
-  const allSessions = combinedSessions;
+  // Sort sessions strictly by relative time from window start
+  combinedSessions.sort((a, b) => {
+    const relA = (timeToMinutes(a.start_time) - rawStartMin + 1440) % 1440;
+    const relB = (timeToMinutes(b.start_time) - rawStartMin + 1440) % 1440;
+    if (relA !== relB) return relA - relB;
+    return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+  });
+  const allSessions = combinedSessions.map((s, idx) => ({ ...s, sort_order: idx }));
 
   // Compute workload overview
   const totalTasks = allSessions.filter((s) => s.session_type === 'task').length;
@@ -434,7 +466,7 @@ export function generateDeterministicDailyPlan(input: DailyPlannerInput): Genera
   const availableMinutes = windowEndMin - effectiveStartMin;
 
   let workloadStatus: 'light' | 'balanced' | 'heavy' | 'overloaded' = 'balanced';
-  if (totalPlannedMinutes > availableMinutes * 0.95 || deferredTasks.length > 0) {
+  if (totalPlannedMinutes > availableMinutes * 0.95) {
     workloadStatus = 'overloaded';
   } else if (totalPlannedMinutes > availableMinutes * 0.75) {
     workloadStatus = 'heavy';
